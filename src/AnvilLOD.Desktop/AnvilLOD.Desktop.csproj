@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <AssemblyName>AnvilLOD.Desktop</AssemblyName>
+    <AssemblyName>PenguLOD.Desktop</AssemblyName>
+    <RootNamespace>AnvilLOD.Desktop</RootNamespace>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
-    <ApplicationIcon>../../assets/anvillod.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
@@ -13,7 +13,7 @@
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="Avalonia.Controls.DataGrid" />
     <ProjectReference Include="../AnvilLOD.Plugins/AnvilLOD.Plugins.csproj" />
-    <AvaloniaResource Include="../../assets/anvillod-256.png" Link="Assets/anvillod.png" />
+    <AvaloniaResource Include="../../assets/pengulod-256.png" Link="Assets/pengulod.png" />
     <InternalsVisibleTo Include="AnvilLOD.Desktop.Tests" />
   </ItemGroup>
   <ItemGroup Condition="Exists('../../.tools/fasterngio-runtime/FasterNGIO')">

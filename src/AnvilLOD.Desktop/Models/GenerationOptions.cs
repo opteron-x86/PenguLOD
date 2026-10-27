@@ -82,9 +82,9 @@ public static class GenerationOptions
         new("occParent", "Occlusion", "Parent clearance", "Clearance for 8- and 16-cell quads.", 3072m, 0, 16384),
         new("occSamples", "Occlusion", "Samples per cell side", "Higher values increase work and precision.", 2m, 1, 4),
         new("occEye", "Occlusion", "Observer height offset", "Additional eye height above the terrain.", 0m, 0, 4096),
-        new("occParentTargets", "Occlusion", "Parent target points", "Number of high sample points tried for parent quads.", 16m, 1, 64),
-        new("occBlockTargets", "Occlusion", "Block target points", "0 tries every sample point.", 8m, 0, 64),
-        new("occEyes", "Occlusion", "Observer sample points", "0 tries every observer sample.", 2m, 0, 16)
+        new("occParentTargets", "Occlusion", "Parent target points", "Number of high sample points tried for parent quads.", 32m, 1, 64),
+        new("occBlockTargets", "Occlusion", "Block target points", "0 tries every sample point.", 32m, 0, 64),
+        new("occEyes", "Occlusion", "Observer sample points", "0 tries every observer sample.", 0m, 0, 16)
     ];
 
     public static T Get<T>(DesktopSettings settings, string key)

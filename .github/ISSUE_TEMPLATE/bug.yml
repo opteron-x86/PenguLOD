@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible PenguLOD problem.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: PenguLOD version
+      description: From Preferences or PenguLOD --version.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Linux distribution and desktop session
+      placeholder: Ubuntu 24.04, KDE Wayland
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps, expected result and actual result
+      description: Include the pipeline stage and relevant settings/source mode.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpt
+      description: Use Open run folder to locate logs. Remove private paths or information before sharing.
+      render: text

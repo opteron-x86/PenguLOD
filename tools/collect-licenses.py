@@ -21,7 +21,7 @@ if sdk_notices.exists():
     shutil.copyfile(sdk_notices, out / 'ThirdPartyNotices.txt')
 shutil.copyfile(root / 'assets/water/README.txt', licenses / 'Water-textures.txt')
 lines = ['Third-party package inventory', '=============================', '',
-         'AnvilLOD is GPL-3.0-only. Dependencies retain their own licenses.',
+         'PenguLOD is GPL-3.0-only; based on AnvilLOD by CageTV. Dependencies retain their own licenses.',
          'Exact runtime package versions are also recorded in the .deps.json files.',
          'Bundled .NET runtime notices are in ThirdPartyNotices.txt.', '']
 assets = json.loads((root / 'src/AnvilLOD.Desktop/obj/project.assets.json').read_text())

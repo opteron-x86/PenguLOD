@@ -12,7 +12,7 @@ public sealed class App : Application
     {
         RequestedThemeVariant = ThemeVariant.Dark;
         Styles.Add(new FluentTheme());
-        Styles.Add(new StyleInclude(new Uri("avares://AnvilLOD.Desktop/")) { Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml") });
+        Styles.Add(new StyleInclude(new Uri("avares://PenguLOD.Desktop/")) { Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml") });
     }
     public override void OnFrameworkInitializationCompleted()
     {

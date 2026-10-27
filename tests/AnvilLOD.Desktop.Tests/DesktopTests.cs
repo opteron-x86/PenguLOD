@@ -25,7 +25,13 @@ public static class TestApp
 public sealed class DesktopTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "AnvilLOD-desktop-tests-" + Guid.NewGuid().ToString("N"));
-    public DesktopTests() => Directory.CreateDirectory(_root);
+    public DesktopTests()
+    {
+        Directory.CreateDirectory(_root);
+        // Each screenshot-producing test must work on a fresh checkout, in any order.
+        if (Environment.GetEnvironmentVariable("ANVILLOD_SCREENSHOTS") is { } screenshots)
+            Directory.CreateDirectory(screenshots);
+    }
     public void Dispose() => Directory.Delete(_root, true);
     private MainWindow Window() => new(new SettingsStore(Path.Combine(_root, "settings.json")));
     private static Button FindButton(MainWindow w, string text) => w.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == text);

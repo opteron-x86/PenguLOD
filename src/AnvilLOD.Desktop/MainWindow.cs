@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text.Json;
+using AnvilLOD.Core;
 using AnvilLOD.Core.Lod;
 using AnvilLOD.Core.Paths;
 using AnvilLOD.Core.Textures;
@@ -72,12 +73,12 @@ public sealed partial class MainWindow : Window
             catch { loadIssue = $"Could not load settings: {e.Message} Automatic saving is disabled until you import a valid preset."; _saveAllowed = false; }
             _settings = new();
         }
-        Title = "AnvilLOD · Linux";
+        Title = $"{ProductInfo.Name} · Linux";
         Width = 1240; Height = 900; MinWidth = 960; MinHeight = 680;
         Background = Brush.Parse("#121720");
         FontFamily = new FontFamily("avares://Avalonia.Fonts.Inter/Assets#Inter");
         FontSize = 14;
-        try { Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://AnvilLOD.Desktop/Assets/anvillod.png"))); } catch (FileNotFoundException) { }
+        try { Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://PenguLOD.Desktop/Assets/pengulod.png"))); } catch (FileNotFoundException) { }
         _cancel.Click += (_, _) => { _runner.Cancel(); _status.Text = "Cancelling… waiting for active workers"; _cancel.IsEnabled = false; };
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); Save(); };
         _logTimer.Tick += (_, _) => DrainLog();
@@ -95,6 +96,7 @@ public sealed partial class MainWindow : Window
         AttachSettings();
         BuildShell();
         if (loadIssue is not null) Notice(loadIssue);
+        else if (_store.MigratedFrom is { } source) Notice($"Imported settings from {source}. The original settings and output paths are preserved.");
     }
 
     private bool _saveAllowed = true;
@@ -138,7 +140,7 @@ public sealed partial class MainWindow : Window
         _pages["Custom rules"] = RulesPage();
         _pages["Preferences"] = Preferences();
         var nav = Stack(6);
-        nav.Children.Add(new TextBlock { Text = "ANVILLOD", FontSize = 24, FontWeight = FontWeight.Bold, Foreground = Accent, Margin = new Thickness(10, 8, 0, 0) });
+        nav.Children.Add(new TextBlock { Text = "PENGULOD", FontSize = 24, FontWeight = FontWeight.Bold, Foreground = Accent, Margin = new Thickness(10, 8, 0, 0) });
         nav.Children.Add(new TextBlock { Text = "NATIVE LINUX", FontSize = 10, LetterSpacing = 2, Foreground = Muted, Margin = new Thickness(12, 0, 0, 32) });
         foreach (var title in _pages.Keys)
         {
@@ -146,7 +148,7 @@ public sealed partial class MainWindow : Window
             button.Click += (_, _) => SelectPage(title); _navigation[title] = button; nav.Children.Add(button);
         }
         var side = new DockPanel();
-        var version = Text($"v{typeof(ScanPipeline).Assembly.GetName().Version?.ToString(3)}\nSkyrim SE / AE / VR", true); version.Margin = new Thickness(12, 0, 0, 10);
+        var version = Text($"v{ProductInfo.Version}\nSkyrim SE / AE / VR", true); version.Margin = new Thickness(12, 0, 0, 10);
         DockPanel.SetDock(version, Dock.Bottom); side.Children.Add(version); side.Children.Add(nav);
         var sidebar = new Border { Background = Surface, Padding = new Thickness(12, 16), Child = side };
         var main = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto"), Margin = new Thickness(28, 20, 28, 16), RowSpacing = 12 };
@@ -302,9 +304,11 @@ public sealed partial class MainWindow : Window
         Card("SETTINGS & PRESETS", Stack(12, Text("Settings file\n" + _store.FilePath, true),
             Row(Button("Import settings…", ImportSettings), Button("Export settings…", ExportSettings)),
             Text("Presets include source paths and generation choices. Importing replaces the current settings; your existing settings are backed up first.", true))),
-        Card("ABOUT THIS PORT", Stack(10, Text("Native Avalonia desktop • managed .NET engine • GPL-3.0-only"),
-            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. The Windows SKSE DLLs are not bundled in this local build. Terrain LOD generation and the upstream GPU atlas backend are not implemented.", true),
-            Button("Open project on GitHub", () => Open("https://github.com/CageTV/AnvilLOD"))))));
+        Card("ABOUT PENGULOD", Stack(10, Text(ProductInfo.Description),
+            Text("Native Avalonia desktop • managed .NET engine • GPL-3.0-only"),
+            Text("Built on CageTV’s AnvilLOD. Maintained by opteron-x86 and PenguLOD contributors.", true),
+            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. The Windows SKSE DLLs are not bundled in the Linux package. Terrain LOD generation and the upstream GPU atlas backend are not implemented.", true),
+            Button("Open project on GitHub", () => Open(ProductInfo.Repository))))));
 
     private Border ToolResults(string page)
     {

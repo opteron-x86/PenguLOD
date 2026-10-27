@@ -12,8 +12,8 @@ param([switch]$SkipBuild)
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-$version = (Get-Content (Join-Path $PSScriptRoot "VERSION") -Raw).Trim()
-if (-not $version) { throw "The VERSION file is empty" }
+$version = (Get-Content (Join-Path $PSScriptRoot "UPSTREAM_VERSION") -Raw).Trim()
+if (-not $version) { throw "The UPSTREAM_VERSION file is empty" }
 Write-Host "AnvilLOD $version" -ForegroundColor Cyan
 
 $toolDist = Join-Path $PSScriptRoot "dist\tool"

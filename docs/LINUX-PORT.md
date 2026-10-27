@@ -1,30 +1,29 @@
-# AnvilLOD for Linux
+# PenguLOD for Linux
 
-This branch adds a native **Avalonia desktop application** and a native CLI to
-AnvilLOD 0.2.68, based on upstream commit
-[`84531ba`](https://github.com/CageTV/AnvilLOD/commit/84531ba648ed588835776786c3fe528457861e37).
-Both applications call the existing C# engine directly. Wine is not required to
-run either generator. The Windows WPF application remains in `src/AnvilLOD.App`.
+PenguLOD builds on AnvilLOD 0.2.70 with a native **Avalonia desktop application**,
+a native CLI, texture generation and offline grass caching. See [provenance](PROVENANCE.md)
+for upstream revisions. Wine is not required to run the generator. Skyrim and its
+game-runtime plugins still run under Proton/Wine.
 
 ## Run the desktop application
 
 From this checkout, after building:
 
 ```bash
-./dist/linux-x64/run-anvillod.sh
+./dist/linux-x64/run-pengulod.sh
 ```
 
-The portable package is `dist/AnvilLOD-linux-x64.tar.gz`. Extract it anywhere,
-keep the entire `linux-x64` folder together, and run `run-anvillod.sh` inside it.
+The portable package is `dist/PenguLOD-<version>-linux-x64.tar.gz`. Extract it anywhere,
+keep the entire `linux-x64` folder together, and run `run-pengulod.sh` inside it.
 The .NET runtime is included. Once the folder is in its permanent location,
 `./install-desktop.sh` optionally adds a per-user application-menu entry; it
 requires Python 3. No system installation or root access is needed.
 
 The desktop uses Avalonia's Linux X11 backend. On Wayland desktops it runs through
 XWayland. Standard Linux desktop libraries (X11, ICE/SM, fontconfig and ICU) must
-be installed. It has been built and exercised on Linux x64/CachyOS. The visible desktop could not be reached from the agent session; rendering and
-job execution were verified with the headless platform. Other Linux distributions
-have not been manually checked. See Avalonia's
+be installed. Release packages are built and tested on Ubuntu 24.04. Local development and
+generation have also been exercised on Linux x64/CachyOS. Other distributions
+have not been manually checked; the native backend needs a compatible glibc. See Avalonia's
 [platform documentation](https://docs.avaloniaui.net/docs/supported-platforms).
 
 ## First build
@@ -113,14 +112,19 @@ Skyrim through the mod manager and check the new PGLite log after repairing.
   JSON settings import/export. Import backs up existing settings. Corrupt settings
   are preserved before defaults are saved.
 
-Settings normally live at `$XDG_CONFIG_HOME/AnvilLOD/settings.json` (default
-`~/.config/AnvilLOD/settings.json`). Cache and timestamped run folders use
-`$XDG_CACHE_HOME/AnvilLOD` (default `~/.cache/AnvilLOD`), or the preference override.
+Settings normally live at `$XDG_CONFIG_HOME/PenguLOD/settings.json` (default
+`~/.config/PenguLOD/settings.json`). Cache and timestamped run folders use
+`$XDG_CACHE_HOME/PenguLOD` (default `~/.cache/PenguLOD`), or the preference override.
+On first launch, an existing AnvilLOD configuration is imported once, preserving
+all paths and the original file. A previously implicit AnvilLOD cache location becomes
+an explicit preference so existing run history remains accessible. Existing PenguLOD
+settings take precedence; an explicit `--settings` path disables automatic migration.
+Saved custom generation choices are preserved, including any older occlusion settings.
 Each run stores its full log, settings snapshot and result report. The visible log
 is bounded to 2,500 lines. Worker count 0 leaves one logical processor available.
 Cancel is cooperative; closing during a job cancels and waits for the worker.
 
-Use `AnvilLOD.Desktop --settings /path/to/settings.json` for a separate configuration.
+Use `PenguLOD.Desktop --settings /path/to/settings.json` for a separate configuration.
 `--smoke-test` opens a native window and exits after two seconds, for installation checks.
 
 ## Native grass caching
@@ -141,14 +145,14 @@ are not needed for generation. NGIO is still needed to load the cache in game.
    terminates the backend process and removes its staging files.
 5. Install the completed folder as its own mod and disable the previous grass cache mod.
    Replace caches instead of merging them. Keep the old mod available until you have inspected
-   the result in game. AnvilLOD does not change NGIO or Community/Bottled Shaders settings.
+   the result in game. PenguLOD does not change NGIO or Community/Bottled Shaders settings.
 
 For a preview, select exactly one worldspace (for example `Tamriel`), tick **Small-area preview**,
 and enter cell coordinates and a radius. Radius 0 selects one cell, radius 1 a 3×3 square.
 Use a separate preview output. Previews cannot replace a full generated cache or feed a full
 LOD run; they are only for inspecting the selected area.
 
-AnvilLOD constructs a temporary Data view from winning files in game Data, enabled mods and
+PenguLOD constructs a temporary Data view from winning files in game Data, enabled mods and
 Overwrite. File symlinks avoid copying archives or meshes. Plugin enablement/order, profile
 INIs, plugin INIs, `GrassControl.ini`, `*_NGIO.ini` and Seasons configuration are retained.
 Source files are not modified. Missing enabled plugins/mod folders abort preparation.
@@ -214,7 +218,7 @@ On **Texture generation**, choose your installed **DynDOLOD installation / resou
 folder and a separate **Texture output mod folder**. For the Amaranth installation,
 the resource folder is `/mnt/mods/Amaranth/tools/DynDOLOD`. This reads recipes and
 render models from the installation; it does not launch TexGen or Wine. Resources
-are supplied by the user and are not bundled in AnvilLOD.
+are supplied by the user and are not bundled in PenguLOD.
 
 - **Generate textures** prepares textures independently and enables their use in
   subsequent LOD jobs after a successful full run.
@@ -369,8 +373,8 @@ the preset**. Use a dedicated test output; do not select a live output mod.
 ## CLI
 
 ```bash
-./dist/linux-x64/AnvilLOD --help
-./dist/linux-x64/AnvilLOD scan \
+./dist/linux-x64/PenguLOD --help
+./dist/linux-x64/PenguLOD scan \
   --mo2 /path/to/MO2 --profile Default \
   --wine-prefix /path/to/compatdata/489830/pfx \
   --worldspace Tamriel --threads 4 --report reports/scan.json

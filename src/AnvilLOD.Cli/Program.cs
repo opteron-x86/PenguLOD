@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AnvilLOD.Core;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.World;
 using AnvilLOD.Plugins;
@@ -9,12 +10,12 @@ public static class Program
 {
     private static CancellationToken Cancellation;
     private const string Usage = """
-        AnvilLOD — fast object LOD generator for Skyrim SE/AE
+        PenguLOD — native Linux LOD generator for Skyrim SE/AE
 
         Usage:
-          AnvilLOD scan [options]        analyse the load order and show what would be built
-          AnvilLOD generate [options]    scan, then write the changed LOD blocks (.bto) to --output
-          AnvilLOD author --plugin <file> --author-out <folder> [options]
+          PenguLOD scan [options]        analyse the load order and show what would be built
+          PenguLOD generate [options]    scan, then write the changed LOD blocks (.bto) to --output
+          PenguLOD author --plugin <file> --author-out <folder> [options]
                                          Mod author tools: report the plugin's objects and trees that have no
                                          LOD, and generate LOD meshes, tree billboards and a rule file for them
                                          into their own folder. Options: --no-meshes --no-billboards --no-rules
@@ -23,7 +24,7 @@ public static class Program
                                          --budget recommended|off|<LOD0,LOD1,LOD2> triangle budget for the LOD meshes (default
                                          recommended, by model size; see lodmaker)
 
-          AnvilLOD fix-textures (--input <folder> [--input ...] | --mo2 <instance> [--profile <name>]) [options]
+          PenguLOD fix-textures (--input <folder> [--input ...] | --mo2 <instance> [--profile <name>]) [options]
                                          Finds textures Skyrim SE cannot load (BC6H, a format that crashes the game when a shader
                                          samples it) and converts them to BC7. Without --apply it only lists them. Options:
                                          --apply  --output <folder> (put the fixed files there, same relative paths: a new mod that
@@ -32,12 +33,12 @@ public static class Program
                                          --texconv <executable> optionally uses an external converter instead
                                          --mo2 scans every enabled mod of the profile and Overwrite.
 
-          AnvilLOD convert-lod --source <mod folder> --output <folder> [--all-meshes] [--overwrite]
+          PenguLOD convert-lod --source <mod folder> --output <folder> [--all-meshes] [--overwrite]
                                          Skyrim LE (Oldrim) -> SE: converts the static LOD meshes of a mod folder (loose files and its BSAs)
                                          to Skyrim SE meshes under the same paths in --output. Collision is dropped; animated, skinned and
                                          particle meshes are left alone. --all-meshes converts every mesh, not just LOD ones.
 
-          AnvilLOD lodmaker --input <file|folder> [--input ...] (--output <folder> | --mo2 <instance> --new-mod <name>) [options]
+          PenguLOD lodmaker --input <file|folder> [--input ...] (--output <folder> | --mo2 <instance> --new-mod <name>) [options]
                                          LOD Mesh Maker: make LOD meshes (name_lod_0/1/2.nif, simplified, no collision, the
                                          model's own textures) from full models, plus a DynDOLOD-format rule file.
                                          --input is a .nif, a mod folder, its meshes folder or any folder of models.
@@ -52,6 +53,7 @@ public static class Program
                                          "off" has none; three numbers set the maximums (0 = no limit), e.g. 800,500,300
 
         Options:
+          --version             Show PenguLOD and upstream engine versions
           --mo2 <path>           MO2 instance folder (with ModOrganizer.ini) — reads mods directly, no need to launch from MO2
           --wine-prefix <path>   Wine/Proton pfx folder used to resolve Windows drive paths
           --game-ini <path>      Override Skyrim archive settings explicitly
@@ -209,6 +211,7 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        if (args is ["--version"]) { Console.WriteLine(ProductInfo.Description); return 0; }
         if (args.Length == 0 || args[0] is "-h" or "--help" or "help")
         {
             Console.WriteLine(Usage);

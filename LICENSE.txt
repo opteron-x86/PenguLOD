@@ -1,3 +1,11 @@
+PenguLOD
+Copyright (c) 2026 opteron-x86 and PenguLOD contributors
+Source code: https://github.com/opteron-x86/PenguLOD
+
+PenguLOD is a fork of AnvilLOD, distributed under GPL-3.0-only.
+The original notices and license follow. Bundled dependency notices and exact
+versions are included in THIRD-PARTY-PACKAGES.txt and licenses/ in Linux releases.
+
 AnvilLOD
 Copyright (c) 2026 CageTV
 

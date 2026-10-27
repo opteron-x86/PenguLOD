@@ -10,9 +10,9 @@ applications.mkdir(parents=True, exist_ok=True)
 def quoted(value):
     # Desktop Entry Exec escaping, including its separate percent-field expansion.
     return '"' + str(value).replace('\\', '\\\\\\\\').replace('"', '\\\\"').replace('`', '\\\\`').replace('$', '\\\\$').replace('%', '%%') + '"'
-entry = applications / 'anvillod.desktop'
-entry.write_text('[Desktop Entry]\nType=Application\nName=AnvilLOD\nComment=Native Skyrim LOD generator\n'
-                 + 'Exec=' + quoted(app / 'AnvilLOD.Desktop') + '\n'
-                 + 'Icon=' + str(app / 'anvillod.png') + '\nTerminal=false\nCategories=Utility;\nStartupWMClass=AnvilLOD.Desktop\n')
+entry = applications / 'pengulod.desktop'
+entry.write_text('[Desktop Entry]\nType=Application\nName=PenguLOD\nComment=Native Skyrim LOD generator\n'
+                 + 'Exec=' + quoted(app / 'PenguLOD.Desktop') + '\n'
+                 + 'Icon=' + str(app / 'pengulod.png') + '\nTerminal=false\nCategories=Utility;\nStartupWMClass=PenguLOD.Desktop\n')
 print(f'Installed application-menu entry: {entry}')
 PY

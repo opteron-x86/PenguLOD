@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>AnvilLOD.Cli</RootNamespace>
-    <AssemblyName>AnvilLOD</AssemblyName>
+    <AssemblyName>PenguLOD</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\AnvilLOD.Core\AnvilLOD.Core.csproj" />
