@@ -1,3 +1,6 @@
+using AnvilLOD.Core.Paths;
+using AnvilLOD.Core.World;
+
 namespace AnvilLOD.Plugins.Mo2;
 
 /// <summary>
@@ -21,7 +24,7 @@ public sealed class Mo2Profile
     /// <summary>The folders of the enabled mods that exist on disk, plus Overwrite (lowest priority first, Overwrite last).</summary>
     public IReadOnlyList<string> EnabledModFolders()
     {
-        var folders = EnabledModsLowToHigh.Select(m => Path.Combine(Instance.ModsFolder, m)).Where(Directory.Exists).ToList();
+        var folders = EnabledModsLowToHigh.Select(m => GamePath.ResolveExisting(Instance.ModsFolder, m)).OfType<string>().Where(Directory.Exists).ToList();
         if (Directory.Exists(Instance.OverwriteFolder)) folders.Add(Instance.OverwriteFolder);
         return folders;
     }
@@ -136,7 +139,7 @@ public sealed class Mo2Profile
     /// sResourceArchiveList + sResourceArchiveList2 from the profile's skyrim.ini (when the profile
     /// uses local INIs) or the user's Documents INI; falls back to the SSE defaults.
     /// </summary>
-    public IReadOnlyList<string> IniArchives()
+    public IReadOnlyList<string> IniArchives(string? overrideIni = null, bool vr = false)
     {
         var candidates = new List<string>();
         if (UsesLocalInis)
@@ -144,28 +147,13 @@ public sealed class Mo2Profile
             candidates.Add(Path.Combine(Folder, "skyrimcustom.ini"));
             candidates.Add(Path.Combine(Folder, "skyrim.ini"));
         }
-        var docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "Skyrim Special Edition");
-        candidates.Add(Path.Combine(docs, "SkyrimCustom.ini"));
-        candidates.Add(Path.Combine(docs, "Skyrim.ini"));
-
-        foreach (var ini in candidates.Where(File.Exists))
+        foreach (var docs in HostPath.GameDocuments(Instance.WinePrefix, vr))
         {
-            var parsed = Mo2Instance.ReadIni(ini);
-            if (!parsed.TryGetValue("Archive", out var a)) continue;
-            var list = new List<string>();
-            foreach (var key in new[] { "sResourceArchiveList", "sResourceArchiveList2" })
-                if (a.TryGetValue(key, out var v))
-                    list.AddRange(v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-            if (list.Count > 0) return list;
+            candidates.Add(Path.Combine(docs, "SkyrimCustom.ini"));
+            candidates.Add(Path.Combine(docs, "Skyrim.ini"));
         }
-
-        return
-        [
-            "Skyrim - Misc.bsa", "Skyrim - Shaders.bsa", "Skyrim - Interface.bsa", "Skyrim - Animations.bsa",
-            "Skyrim - Meshes0.bsa", "Skyrim - Meshes1.bsa", "Skyrim - Sounds.bsa",
-            "Skyrim - Voices_en0.bsa", "Skyrim - Textures0.bsa", "Skyrim - Textures1.bsa", "Skyrim - Textures2.bsa",
-            "Skyrim - Textures3.bsa", "Skyrim - Textures4.bsa", "Skyrim - Textures5.bsa", "Skyrim - Textures6.bsa",
-            "Skyrim - Textures7.bsa", "Skyrim - Textures8.bsa", "Skyrim - Patch.bsa",
-        ];
+        candidates.Add(Path.Combine(Instance.GamePath, "Skyrim_Default.ini"));
+        if (overrideIni is not null) candidates.Insert(0, overrideIni);
+        return SkyrimArchives.ReadIniLists(candidates);
     }
 }

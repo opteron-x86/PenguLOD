@@ -1,3 +1,6 @@
+using AnvilLOD.Core.Pipeline;
+using AnvilLOD.Core.World;
+using AnvilLOD.Core.Paths;
 using AnvilLOD.Plugins.Mo2;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Archives;
@@ -31,7 +34,9 @@ public sealed record GameContextOptions(
     string? Mo2Profile = null,      // null = the instance's selected profile
     string? ExcludeFolder = null,   // MO2 mode: never read this folder (AnvilLOD's own output) as a mod
     IReadOnlyList<string>? ExtraLooseRoots = null, // MO2 mode: more loose folders to index (e.g. "textures" for the author tools)
-    Mo2Locations? Mo2Locations = null);             // MO2 mode: folders typed in, which win over ModOrganizer.ini (empty = auto-detect)
+    Mo2Locations? Mo2Locations = null,             // MO2 mode: folders typed in, which win over ModOrganizer.ini (empty = auto-detect)
+    string? GameIniPath = null,
+    string? WinePrefix = null);
 
 /// <summary>
 /// Load order + link cache + asset access, regardless of where they come from.
@@ -93,8 +98,16 @@ public sealed class GameContext : IDisposable
     /// <summary>Indexes BSAs (+ loose files) as the game would see them for this source.</summary>
     public AssetIndex BuildAssets(Func<string, bool>? pathFilter = null) => _assetFactory(pathFilter);
 
-    public static GameContext Open(GameContextOptions o, IProgress<string>? progress = null) =>
-        o.Mode == GameSourceMode.Mo2Instance ? OpenMo2(o, progress) : OpenDataFolder(o);
+    public static GameContext Open(GameContextOptions o, IProgress<string>? progress = null)
+    {
+        string? Resolve(string? value) => string.IsNullOrWhiteSpace(value) ? null : HostPath.Resolve(value, winePrefix: o.WinePrefix);
+        o = o with { DataFolder = Resolve(o.DataFolder), PluginsTxt = Resolve(o.PluginsTxt), GameIniPath = Resolve(o.GameIniPath),
+            Mo2InstanceFolder = Resolve(o.Mo2InstanceFolder) };
+        if (o.Mode == GameSourceMode.Mo2Instance && !string.IsNullOrWhiteSpace(o.WinePrefix))
+            o = o with { Mo2Locations = (o.Mo2Locations ?? new Mo2Locations()) with { WinePrefix = o.WinePrefix } };
+        if (o.GameIniPath is not null && !File.Exists(o.GameIniPath)) throw new FileNotFoundException("Skyrim INI not found: " + o.GameIniPath);
+        return o.Mode == GameSourceMode.Mo2Instance ? OpenMo2(o, progress) : OpenDataFolder(o);
+    }
 
     // ---------- Data folder mode ----------
 
@@ -126,12 +139,12 @@ public sealed class GameContext : IDisposable
             }
 
             foreach (var key in Implicits.Get(o.Release).Listings)
-                if (File.Exists(Path.Combine(dataFolder, key.ToString())))
+                if (GamePath.ResolveExisting(dataFolder, key.ToString()) is { } implicitPath && File.Exists(implicitPath))
                     Add(new LoadOrderListing(key, enabled: true));
             try
             {
                 foreach (var cc in CreationClubListings.GetLoadOrderListings(GameCategory.Skyrim, dataFolder))
-                    if (File.Exists(Path.Combine(dataFolder, cc.ModKey.ToString()))) Add(cc);
+                    if (GamePath.ResolveExisting(dataFolder, cc.ModKey.ToString()) is { } ccPath && File.Exists(ccPath)) Add(cc);
             }
             catch (Exception ex)
             {
@@ -140,14 +153,25 @@ public sealed class GameContext : IDisposable
             foreach (var l in PluginListings.LoadOrderListingsFromPath(o.PluginsTxt, o.Release, dataFolder, throwOnMissingMods: false))
                 Add(l);
 
-            builder = builder.WithLoadOrder(listings.ToArray());
+            // Resolve each plugin by its on-disk casing, without Windows registry/path assumptions.
+            var resolved = listings.Where(l => l.Enabled).Select(l => (Key: l.ModKey, Path: GamePath.ResolveExisting(dataFolder, l.ModKey.FileName.String))).ToList();
+            var order = OpenResolvedPlugins(resolved, o.Release);
+            try
+            {
+                var links = order.ToImmutableLinkCache<ISkyrimMod, ISkyrimModGetter>();
+                var context = new GameContext(o.Release, order, links, dataFolder, $"Data folder {dataFolder}",
+                    filter => AssetIndex.Build(o.Release, dataFolder, filter, resolved.Where(r => r.Path is not null).Select(r => r.Key.FileName.String).ToArray(), IniPaths(o, dataFolder)), warnings, order);
+                context._rootFiles = () => Directory.EnumerateFiles(dataFolder).Select(f => (Path.GetFileName(f), f));
+                return context;
+            }
+            catch { order.Dispose(); throw; }
         }
 
         var env = builder.Build();
         var data = env.DataFolderPath.Path;
         var ctx = new GameContext(
             o.Release, env.LoadOrder, env.LinkCache, data, $"Data folder {data}",
-            filter => AssetIndex.Build(o.Release, data, filter, env.LoadOrder.ListedOrder.Select(l => l.ModKey.FileName.String).ToList()),
+            filter => AssetIndex.Build(o.Release, data, filter, env.LoadOrder.ListedOrder.Where(l => l.Enabled && l.Mod is not null).Select(l => l.ModKey.FileName.String).ToList(), IniPaths(o, data)),
             warnings, env);
         ctx._rootFiles = () => Directory.EnumerateFiles(data).Select(f => (Path.GetFileName(f), f));
 
@@ -156,13 +180,32 @@ public sealed class GameContext : IDisposable
         return ctx;
     }
 
+    private static IReadOnlyList<string> IniPaths(GameContextOptions o, string data)
+    {
+        var paths = new List<string>();
+        if (o.GameIniPath is not null) paths.Add(o.GameIniPath);
+        if (o.PluginsTxt is { } plugins)
+        {
+            var folder = Path.GetDirectoryName(Path.GetFullPath(plugins))!;
+            paths.Add(Path.Combine(folder, "SkyrimCustom.ini"));
+            paths.Add(Path.Combine(folder, "Skyrim.ini"));
+        }
+        foreach (var docs in HostPath.GameDocuments(o.WinePrefix, o.Release == GameRelease.SkyrimVR))
+        {
+            paths.Add(Path.Combine(docs, "SkyrimCustom.ini"));
+            paths.Add(Path.Combine(docs, "Skyrim.ini"));
+        }
+        paths.Add(Path.Combine(Path.GetDirectoryName(data)!, "Skyrim_Default.ini"));
+        return paths;
+    }
+
     /// <summary>Accepts the Data folder or the game folder above it; fails clearly if Skyrim.esm isn't there.</summary>
     internal static string ResolveDataFolder(string path, List<string> warnings)
     {
-        static bool HasMaster(string dir) => File.Exists(Path.Combine(dir, "Skyrim.esm"));
+        static bool HasMaster(string dir) => GamePath.ResolveExisting(dir, "Skyrim.esm") is { } file && File.Exists(file);
 
         if (HasMaster(path)) return path;
-        var sub = Path.Combine(path, "Data");
+        var sub = GamePath.ResolveExisting(path, "Data") ?? Path.Combine(path, "Data");
         if (HasMaster(sub))
         {
             warnings.Add($"Using {sub} (the folder you picked is the game folder; LOD needs its Data subfolder).");
@@ -188,7 +231,7 @@ public sealed class GameContext : IDisposable
         progress?.Report($"MO2 instance {instance.InstanceFolder}, profile \"{profile.Name}\": " +
                          $"{profile.EnabledModsLowToHigh.Count:N0} enabled mods, {profile.EnabledPlugins.Count:N0} enabled plugins");
 
-        if (!File.Exists(Path.Combine(instance.GameDataFolder, "Skyrim.esm")))
+        if (GamePath.ResolveExisting(instance.GameDataFolder, "Skyrim.esm") is not { } master || !File.Exists(master))
             throw new DirectoryNotFoundException($"Skyrim.esm not found in the instance's game Data folder: {instance.GameDataFolder}");
 
         progress?.Report("Building virtual Data folder from mods (plugins, BSAs, meshes, LOD settings)...");
@@ -210,23 +253,8 @@ public sealed class GameContext : IDisposable
             .Select(r => (r.Key, r.Path))
             .ToList();
 
-        var masterStyles = new LoadOrder<IModMasterStyledGetter>(resolved
-            .Where(r => r.Path is not null)
-            .Select(r => (IModMasterStyledGetter)KeyedMasterStyle.FromPath(new ModPath(r.Key, r.Path!), release)));
-        var param = BinaryReadParameters.Default with { MasterFlagsLookup = masterStyles };
-        var skyrimRelease = release.ToSkyrimRelease();
-
         progress?.Report($"Opening {resolved.Count(r => r.Path is not null):N0} plugins...");
-        var listings = new IModListing<ISkyrimModGetter>[resolved.Count];
-        Parallel.For(0, resolved.Count, i =>
-        {
-            var (key, path) = resolved[i];
-            listings[i] = path is null
-                ? ModListing<ISkyrimModGetter>.CreateUnloaded(key, enabled: true)
-                : new ModListing<ISkyrimModGetter>(SkyrimMod.CreateFromBinaryOverlay(new ModPath(key, path), skyrimRelease, param), enabled: true);
-        });
-
-        var loadOrder = new LoadOrder<IModListing<ISkyrimModGetter>>(listings);
+        var loadOrder = OpenResolvedPlugins(resolved, release);
         var linkCache = loadOrder.ToImmutableLinkCache<ISkyrimMod, ISkyrimModGetter>();
 
         // Archives the game would load: INI list first, then each plugin's own BSAs in load order.
@@ -239,7 +267,7 @@ public sealed class GameContext : IDisposable
                 if (fullPath is not null && added.Add(fullPath)) archives.Add(fullPath);
             }
 
-            foreach (var a in profile.IniArchives()) Add(vdi.ResolveRootFile(a));
+            foreach (var a in profile.IniArchives(o.GameIniPath, o.Release == GameRelease.SkyrimVR)) Add(vdi.ResolveRootFile(a));
 
             var bsaNames = vdi.RootFileNames.Where(n => n.EndsWith(".bsa", StringComparison.Ordinal)).ToList();
             foreach (var (key, path) in resolved)
@@ -263,6 +291,29 @@ public sealed class GameContext : IDisposable
         {
             _rootFiles = () => vdi.RootFileNames.Select(n => (n, vdi.ResolveRootFile(n)!)),
         };
+    }
+
+    private static LoadOrder<IModListing<ISkyrimModGetter>> OpenResolvedPlugins(List<(ModKey Key, string? Path)> resolved, GameRelease release)
+    {
+        var masterStyles = new LoadOrder<IModMasterStyledGetter>(resolved.Where(r => r.Path is not null)
+            .Select(r => (IModMasterStyledGetter)KeyedMasterStyle.FromPath(new ModPath(r.Key, r.Path!), release)));
+        var parameters = BinaryReadParameters.Default with { MasterFlagsLookup = masterStyles };
+        var listings = new IModListing<ISkyrimModGetter>[resolved.Count];
+        try
+        {
+            Parallel.For(0, resolved.Count, RunLimits.Parallel(), i =>
+            {
+                var (key, path) = resolved[i];
+                listings[i] = path is null ? ModListing<ISkyrimModGetter>.CreateUnloaded(key, enabled: true)
+                    : new ModListing<ISkyrimModGetter>(SkyrimMod.CreateFromBinaryOverlay(new ModPath(key, path), release.ToSkyrimRelease(), parameters), enabled: true);
+            });
+            return new LoadOrder<IModListing<ISkyrimModGetter>>(listings);
+        }
+        catch
+        {
+            foreach (var listing in listings) (listing?.Mod as IDisposable)?.Dispose();
+            throw;
+        }
     }
 
     public void Dispose()

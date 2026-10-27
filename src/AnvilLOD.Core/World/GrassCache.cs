@@ -38,8 +38,7 @@ public static partial class GrassCache
         var m = FileNameRegex().Match(fileName);
         if (!m.Success) return false;
         worldspace = m.Groups["ws"].Value;
-        x = int.Parse(m.Groups["x"].Value);
-        y = int.Parse(m.Groups["y"].Value);
+        if (!int.TryParse(m.Groups["x"].Value, out x) || !int.TryParse(m.Groups["y"].Value, out y)) return false;
         season = m.Groups["season"].Success ? m.Groups["season"].Value.ToUpperInvariant() : null;
         return true;
     }

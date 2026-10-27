@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>AnvilLOD.Desktop</AssemblyName>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>../../assets/anvillod.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" />
+    <ProjectReference Include="../AnvilLOD.Plugins/AnvilLOD.Plugins.csproj" />
+    <AvaloniaResource Include="../../assets/anvillod-256.png" Link="Assets/anvillod.png" />
+    <InternalsVisibleTo Include="AnvilLOD.Desktop.Tests" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('../../.tools/fasterngio-runtime/FasterNGIO')">
+    <Content Include="../../.tools/fasterngio-runtime/**/*" Link="backends/fasterngio/%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+--- a/src/GameData/StaticWorld.cpp
++++ b/src/GameData/StaticWorld.cpp
+@@ -77,7 +77,7 @@
+ 														.parentUseFlags = r.parentUseFlags,
+ 														.defaultLandHeight = r.defaultLandHeight.value_or(-2048.0f),
+ 														.defaultWaterHeight = r.defaultWaterHeight.value_or(0.0f),
+-														.noGrass = r.HasNoGrass()});
++														.noGrass = ((r.dataFlags & 0x80u) != 0)});
+ 		for (auto& [id, r] : world.cellsByFormID)
+ 			result.cellsByFormID.emplace(id, CellInfo{.formID = id,
+ 													  .worldFormID = r.worldFormID,

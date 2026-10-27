@@ -200,7 +200,7 @@ public static class ModAuthorTool
                     items.Add(new AuthorItem("Tree", fk.ToString(), rec.EditorID, full, count, 0, "Model file missing, stand-in unusable: " + sProblem, ""));
                     continue;
                 }
-                var target = Path.Combine(req.OutputFolder, full);
+                var target = GamePath.ToFileSystemPath(req.OutputFolder, full);
                 if (req.Overwrite || !File.Exists(target))
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -296,7 +296,7 @@ public static class ModAuthorTool
 
         string WriteLodMeshes(string full, LodMesh mesh, float size)
         {
-            var stem = Path.GetFileNameWithoutExtension(full);
+            var stem = GamePath.GetFileNameWithoutExtension(full);
             var levels = LodMeshAuthor.Build(mesh, LodMeshAuthor.DefaultLevels
                 .Select(l => l with { MaxTriangles = LodBudgets.For(req.Budget, req.CustomBudget, l.Level, size) }).ToList());
             if (levels.Count == 0) return "Nothing usable to simplify (only blended/effect shapes)";
@@ -305,7 +305,7 @@ public static class ModAuthorTool
             foreach (var lv in levels)
             {
                 var rel = GamePath.Join("meshes", "lod", pluginKey, $"{stem}_lod_{lv.Level}.nif");
-                var path = Path.Combine(req.OutputFolder, rel);
+                var path = GamePath.ToFileSystemPath(req.OutputFolder, rel);
                 if (!req.Overwrite && File.Exists(path)) { written.Add($"L{lv.Level} kept"); continue; }
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.WriteAllBytes(path, LodNifWriter.Write($"{stem}_lod_{lv.Level}", lv.Parts));
@@ -324,7 +324,7 @@ public static class ModAuthorTool
             var (min, max) = LodMeshAuthor.Bounds(mesh);
             float height = max.Z - min.Z;
             var folder = GamePath.Join("textures", "terrain", "lodgen", fk.ModKey.FileName.String.ToLowerInvariant());
-            var stem = Path.GetFileNameWithoutExtension(full).ToLowerInvariant();
+            var stem = GamePath.GetFileNameWithoutExtension(full).ToLowerInvariant();
             var name = $"{stem}_{fk.ID:x8}";
             // Same places the scanner looks: the folder of every plugin in the record's override chain (TexGen files a billboard under the winner), then the original's.
             var folders = new List<string> { folder };
@@ -347,7 +347,7 @@ public static class ModAuthorTool
 
         string WriteBillboard(string folder, string name, string full, LodMesh mesh)
         {
-            var dir = Path.Combine(req.OutputFolder, folder);
+            var dir = GamePath.ToFileSystemPath(req.OutputFolder, folder);
             var main = Path.Combine(dir, name + ".dds");
             if (!req.Overwrite && File.Exists(main)) return "Kept existing billboard";
             var img = BillboardRenderer.Render(mesh, LoadTexture);

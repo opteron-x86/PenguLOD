@@ -1,0 +1,39 @@
+name: Linux desktop and CLI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install native UI test libraries
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1 libx11-6 libice6 libsm6 libicu-dev xvfb
+      - name: Install native grass backend build dependencies
+        run: sudo apt-get install -y g++-14 cmake ninja-build zlib1g-dev liblz4-dev libtbb-dev libspdlog-dev libgtest-dev
+      - name: Engine and rendered UI tests
+        run: bash tools/test.sh
+      - name: Publish portable Linux applications
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: bash tools/build.sh
+      - name: Native X11 startup
+        run: xvfb-run -a bash tools/native-smoke.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnvilLOD-linux-x64
+          path: dist/AnvilLOD-linux-x64.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Linux-test-results
+          path: |
+            .artifacts/test-results
+            .artifacts/screenshots

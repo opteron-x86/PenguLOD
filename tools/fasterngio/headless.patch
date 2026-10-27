@@ -1,0 +1,50 @@
+--- a/apps/FasterNGIO/CMakeLists.txt
++++ b/apps/FasterNGIO/CMakeLists.txt
+@@ -19,6 +19,10 @@
+ target_include_directories(FasterNGIOApp PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+ target_link_libraries(FasterNGIOApp PUBLIC FasterNGIOCore FasterNGIOPipeline)
+ 
++option(FASTERNGIO_HEADLESS "CLI backend for an external launcher" OFF)
++if(FASTERNGIO_HEADLESS)
++add_executable(FasterNGIO Main.cpp)
++else()
+ add_executable(FasterNGIO
+ 	Main.cpp
+ 	# The embedded manifest makes the ANSI code page UTF-8 (Windows 10 1903+), so the narrow CRT
+@@ -41,8 +45,11 @@
+ 	target_sources(FasterNGIO PRIVATE Gui/WindowGlfw.cpp)
+ endif()
+ find_package(imgui CONFIG REQUIRED)
++target_link_libraries(FasterNGIO PRIVATE imgui::imgui)
++endif()
+ fasterngio_configure_target(FasterNGIO)
+-target_link_libraries(FasterNGIO PRIVATE FasterNGIOApp imgui::imgui)
++target_link_libraries(FasterNGIO PRIVATE FasterNGIOApp)
++target_compile_definitions(FasterNGIO PRIVATE $<$<BOOL:${FASTERNGIO_HEADLESS}>:FASTERNGIO_HEADLESS=1>)
+ if(FASTERNGIO_ENABLE_GPU)
+ 	if(WIN32)
+ 		fasterngio_enable_agility(FasterNGIO)
+--- a/apps/FasterNGIO/Main.cpp
++++ b/apps/FasterNGIO/Main.cpp
+@@ -1,6 +1,8 @@
+ #include "CommandLine.h"
+ #include "Generate.h"
++#ifndef FASTERNGIO_HEADLESS
+ #include "Gui/Launcher.h"
++#endif
+ 
+ #include <oneapi/tbb/global_control.h>
+ #include <spdlog/spdlog.h>
+@@ -26,7 +28,12 @@
+ 		// No arguments (a double-click) or --gui: the launcher window. Any other arguments, as Mod
+ 		// Organizer 2 passes them, run the command line unchanged.
+ 		if (a_args.empty() || (a_args.size() == 1 && a_args.front() == "--gui")) {
++#ifdef FASTERNGIO_HEADLESS
++			App::PrintUsage();
++			return a_args.empty() ? 0 : 1;
++#else
+ 			return Gui::RunLauncher();
++#endif
+ 		}
+ 		try {
+ 			const auto options = App::ParseCommandLine(a_args);

@@ -11,7 +11,7 @@ public class Mo2LocationsTests : IDisposable
 
     private string Dir(string name)
     {
-        var p = Path.Combine(_root, name);
+        var p = Path.Combine(_root, name.Replace('\\', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(p);
         return p;
     }

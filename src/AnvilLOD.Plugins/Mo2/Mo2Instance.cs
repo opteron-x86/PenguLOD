@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using AnvilLOD.Core.Paths;
+using AssetPath = AnvilLOD.Core.World.GamePath;
 
 namespace AnvilLOD.Plugins.Mo2;
 
@@ -7,10 +9,10 @@ namespace AnvilLOD.Plugins.Mo2;
 /// "use the ini" (the auto-detect). Typing is for lists whose game, mods or profiles live on another drive, or whose
 /// ini paths are stale. With the game, mods and profiles folders typed, <c>ModOrganizer.ini</c> isn't needed at all.
 /// </summary>
-public sealed record Mo2Locations(string? GamePath = null, string? ModsFolder = null, string? ProfilesFolder = null, string? OverwriteFolder = null)
+public sealed record Mo2Locations(string? GamePath = null, string? ModsFolder = null, string? ProfilesFolder = null, string? OverwriteFolder = null, string? WinePrefix = null)
 {
     public bool IsEmpty => string.IsNullOrWhiteSpace(GamePath) && string.IsNullOrWhiteSpace(ModsFolder)
-                           && string.IsNullOrWhiteSpace(ProfilesFolder) && string.IsNullOrWhiteSpace(OverwriteFolder);
+                           && string.IsNullOrWhiteSpace(ProfilesFolder) && string.IsNullOrWhiteSpace(OverwriteFolder) && string.IsNullOrWhiteSpace(WinePrefix);
 
     /// <summary>Enough to open an instance without a ModOrganizer.ini.</summary>
     public bool CanStandAlone => !string.IsNullOrWhiteSpace(GamePath) && !string.IsNullOrWhiteSpace(ModsFolder) && !string.IsNullOrWhiteSpace(ProfilesFolder);
@@ -25,12 +27,13 @@ public sealed class Mo2Instance
 {
     public string InstanceFolder { get; }
     public string GamePath { get; }
-    public string GameDataFolder => Path.Combine(GamePath, "Data");
+    public string GameDataFolder => AssetPath.ResolveExisting(GamePath, "Data") ?? Path.Combine(GamePath, "Data");
     public string ModsFolder { get; }
     public string ProfilesFolder { get; }
     public string OverwriteFolder { get; }
     public string? SelectedProfile { get; }
     public string? GameName { get; }
+    public string? WinePrefix { get; }
 
     /// <summary>Directory names MO2 is told to ignore inside mods (Settings/skip_directories).</summary>
     public IReadOnlySet<string> SkipDirectories { get; }
@@ -38,30 +41,31 @@ public sealed class Mo2Instance
     private Mo2Instance(string folder, Dictionary<string, Dictionary<string, string>> ini, Mo2Locations? typed = null)
     {
         InstanceFolder = folder;
+        WinePrefix = HostPath.PrefixRoot(typed?.WinePrefix);
+        string? TypedPath(string? value) => string.IsNullOrWhiteSpace(value) ? null : HostPath.Resolve(value, folder, WinePrefix);
 
         string? Get(string section, string key) =>
             ini.TryGetValue(section, out var s) && s.TryGetValue(key, out var v) && v.Length > 0 ? v : null;
 
         GameName = Get("General", "gameName");
         SelectedProfile = Get("General", "selected_profile");
-        GamePath = Typed(typed?.GamePath) is { } typedGame
+        GamePath = TypedPath(typed?.GamePath) is { } typedGame
                        ? GameFolderOf(typedGame)
-                       : Get("General", "gamePath")
-                         ?? throw new InvalidDataException("ModOrganizer.ini has no gamePath. Type the game folder under Locations.");
+                       : GameFolderOf(HostPath.Resolve(Get("General", "gamePath")
+                         ?? throw new InvalidDataException("ModOrganizer.ini has no gamePath. Type the game folder under Locations."), folder, WinePrefix));
 
-        var baseDir = ExpandPath(Get("Settings", "base_directory") ?? folder, folder, folder);
-        ModsFolder = Typed(typed?.ModsFolder) ?? ExpandPath(Get("Settings", "mod_directory") ?? "%BASE_DIR%/mods", baseDir, folder);
-        ProfilesFolder = Typed(typed?.ProfilesFolder) ?? ExpandPath(Get("Settings", "profiles_directory") ?? "%BASE_DIR%/profiles", baseDir, folder);
-        OverwriteFolder = Typed(typed?.OverwriteFolder) ?? ExpandPath(Get("Settings", "overwrite_directory") ?? "%BASE_DIR%/overwrite", baseDir, folder);
+        string BaseDir() => HostPath.Resolve((Get("Settings", "base_directory") ?? folder)
+            .Replace("%BASE_DIR%", folder, StringComparison.OrdinalIgnoreCase), folder, WinePrefix);
+        string ConfigPath(string key, string fallback) => HostPath.Resolve((Get("Settings", key) ?? fallback)
+            .Replace("%BASE_DIR%", BaseDir(), StringComparison.OrdinalIgnoreCase), folder, WinePrefix);
+        ModsFolder = TypedPath(typed?.ModsFolder) ?? ConfigPath("mod_directory", "%BASE_DIR%/mods");
+        ProfilesFolder = TypedPath(typed?.ProfilesFolder) ?? ConfigPath("profiles_directory", "%BASE_DIR%/profiles");
+        OverwriteFolder = TypedPath(typed?.OverwriteFolder) ?? ConfigPath("overwrite_directory", "%BASE_DIR%/overwrite");
 
         SkipDirectories = (Get("Settings", "skip_directories") ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
-
-    /// <summary>A typed folder as a full path, or null when it was left empty (= use the ini).</summary>
-    private static string? Typed(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : Path.GetFullPath(Environment.ExpandEnvironmentVariables(value.Trim().Trim('"')));
 
     /// <summary>Accepts the game folder or its Data folder.</summary>
     private static string GameFolderOf(string typed)
@@ -78,7 +82,7 @@ public sealed class Mo2Instance
     /// </summary>
     public static Mo2Instance Open(string instanceFolder, Mo2Locations? typed = null)
     {
-        var iniPath = Path.Combine(instanceFolder, "ModOrganizer.ini");
+        var iniPath = AssetPath.ResolveExisting(instanceFolder, "ModOrganizer.ini") ?? Path.Combine(instanceFolder, "ModOrganizer.ini");
         Dictionary<string, Dictionary<string, string>> ini;
         if (File.Exists(iniPath)) ini = ReadIni(iniPath);
         else if (typed is { CanStandAlone: true }) ini = new(StringComparer.OrdinalIgnoreCase);
@@ -144,7 +148,7 @@ public sealed class Mo2Instance
     internal static string ExpandPath(string value, string baseDir, string instanceFolder)
     {
         var v = value.Replace("%BASE_DIR%", baseDir, StringComparison.OrdinalIgnoreCase)
-                     .Replace('/', Path.DirectorySeparatorChar);
+                     .Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
         return Path.GetFullPath(Path.IsPathRooted(v) ? v : Path.Combine(instanceFolder, v));
     }
 }

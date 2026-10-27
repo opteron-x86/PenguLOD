@@ -27,7 +27,9 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
     public const float MinHeight = 256f;
     public const string TooSmall = "too small for a billboard";
 
-    public static string CacheRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AnvilLOD", "TreeBillboards");
+    public static string CacheRoot => Path.Combine(RunLimits.CacheDirectory ?? (OperatingSystem.IsWindows()
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AnvilLOD")
+        : Path.Combine(Environment.GetEnvironmentVariable("XDG_CACHE_HOME") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache"), "AnvilLOD")), "TreeBillboards");
 
     private readonly ConcurrentDictionary<string, (byte[], int, int)?> _textures = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _write = new();

@@ -64,7 +64,7 @@ public static class TreeLodGenerator
                 {
                     var vanillaBlocks = assets.EnumeratePaths(GamePath.Join("meshes", "terrain", ws, "trees") + "\\")
                         .Where(p => p.EndsWith(".btt", StringComparison.Ordinal))
-                        .Select(p => Path.GetFileName(p))
+                        .Select(p => GamePath.GetFileName(p))
                         .ToList();
                     var emptyHash = "empty v" + Version + "|" + string.Join("|", vanillaBlocks.Order(StringComparer.OrdinalIgnoreCase));
                     if (!manifest.Trees.TryGetValue(ws, out var prev) || prev != emptyHash
@@ -99,7 +99,7 @@ public static class TreeLodGenerator
             // Vanilla / other mods' .btt files for this worldspace (our own output folder is not an input).
             var foreignBlocks = assets.EnumeratePaths(GamePath.Join("meshes", "terrain", ws, "trees") + "\\")
                 .Where(p => p.EndsWith(".btt", StringComparison.Ordinal))
-                .Select(p => Path.GetFileName(p))
+                .Select(p => GamePath.GetFileName(p))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var hash = Hash(list, foreignBlocks, assets, brightness);
@@ -174,7 +174,7 @@ public static class TreeLodGenerator
             {
                 var rel = TreeLodFiles.BlockPath(ws, x, y);
                 Write(BuildManifest.FullPath(outputFolder, rel), TreeLodFiles.WriteBlock(inst));
-                keep.Add(Path.GetFileName(rel));
+                keep.Add(GamePath.GetFileName(rel));
                 blocks++;
             }
             int emptyHere = 0;

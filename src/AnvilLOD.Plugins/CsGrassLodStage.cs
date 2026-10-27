@@ -45,7 +45,7 @@ public static class CsGrassLodStage
     {
         try
         {
-            var dir = Path.Combine(output, Folder);
+            var dir = GamePath.ToFileSystemPath(output, Folder);
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         }
         catch (IOException) { }
@@ -78,9 +78,9 @@ public static class CsGrassLodStage
         int middle = 0, far = 0, authored = 0, tooSmall = 0, otherLayout = 0, legacy = 0, multi = 0, failed = 0;
         long trisFull = 0, trisMiddle = 0, trisFar = 0;
         var errors = new ConcurrentBag<string>();
-        var dir = Path.Combine(output, Folder);
+        var dir = GamePath.ToFileSystemPath(output, Folder);
 
-        Parallel.ForEach(byStem, new ParallelOptions { CancellationToken = ct }, kv =>
+        Parallel.ForEach(byStem, RunLimits.Parallel(ct), kv =>
         {
             var (stem, model) = (kv.Key, kv.Value);
             try

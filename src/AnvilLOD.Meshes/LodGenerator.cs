@@ -302,7 +302,7 @@ public sealed class LodGenerator
     private string? ExistingTexture(string? texture)
     {
         if (string.IsNullOrWhiteSpace(texture)) return null;
-        var t = texture.Replace('/', '\\').Trim();
+        var t = GamePath.NormalizeTexture(texture);
         if (_assets.Exists(t)) return t;
         const string pbr = "textures\\pbr\\";
         if (t.StartsWith(pbr, StringComparison.OrdinalIgnoreCase))
@@ -336,7 +336,7 @@ public sealed class LodGenerator
         if (string.IsNullOrWhiteSpace(texture)) return false;
         var t = texture.Replace('/', '\\').ToLowerInvariant();
         if (t.Contains("\\lod\\", StringComparison.Ordinal) || t.StartsWith("lod\\", StringComparison.Ordinal)) return true;
-        var name = Path.GetFileNameWithoutExtension(t);
+        var name = GamePath.GetFileNameWithoutExtension(t);
         if (name.EndsWith("_n", StringComparison.Ordinal)) name = name[..^2];
         return name.EndsWith("lod", StringComparison.Ordinal) || name.Contains("_lod", StringComparison.Ordinal);
     }
@@ -463,7 +463,7 @@ public sealed class LodGenerator
     /// </summary>
     public IReadOnlyDictionary<string, (string FirstMesh, int Meshes)> AuditTextures(string outputFolder) =>
         FindMissingTextures(_meshes.Values.Where(l => l.IsValueCreated && l.Value is not null).Select(l => l.Value!),
-            tex => _assets.Exists(tex) || File.Exists(Path.Combine(outputFolder, tex)));
+            tex => _assets.Exists(tex) || File.Exists(GamePath.ToFileSystemPath(outputFolder, tex)));
 
     /// <summary>
     /// Opens every texture the loaded LOD meshes name (all nine slots) and checks its DDS header. A texture the engine can't create is
@@ -480,18 +480,17 @@ public sealed class LodGenerator
                 foreach (var raw in part.Material.Textures)
                 {
                     if (string.IsNullOrWhiteSpace(raw)) continue;
-                    var tex = raw.Replace('/', '\\').TrimStart('\\');
-                    if (!tex.StartsWith("textures\\", StringComparison.OrdinalIgnoreCase)) tex = "textures\\" + tex;
+                    var tex = GamePath.NormalizeTexture(raw);
                     used.TryAdd(tex, mesh.Path);
                 }
         }
         var bad = new System.Collections.Concurrent.ConcurrentDictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase);
-        Parallel.ForEach(used, kv =>
+        Parallel.ForEach(used, RunLimits.Parallel(), kv =>
         {
             try
             {
                 Stream? stream = null;
-                var local = Path.Combine(outputFolder, kv.Key);
+                var local = GamePath.ToFileSystemPath(outputFolder, kv.Key);
                 if (File.Exists(local)) stream = File.OpenRead(local);
                 else if (_assets.TryOpen(kv.Key, out var s)) stream = s;
                 if (stream is null) return;   // missing textures are AuditTextures' business
@@ -525,8 +524,7 @@ public sealed class LodGenerator
                 foreach (var raw in part.Material.Textures.Take(2))
                 {
                     if (string.IsNullOrWhiteSpace(raw)) continue;
-                    var tex = raw.Replace('/', '\\').TrimStart('\\');
-                    if (!tex.StartsWith("textures\\", StringComparison.OrdinalIgnoreCase)) tex = "textures\\" + tex;
+                    var tex = GamePath.NormalizeTexture(raw);
                     if (!seenPerMesh.Add(tex) || exists(tex)) continue;
                     missing[tex] = missing.TryGetValue(tex, out var m) ? (m.Item1, m.Item2 + 1) : (mesh.Path, 1);
                 }
@@ -553,7 +551,7 @@ public sealed class LodGenerator
 
         Parallel.ForEach(
             toBuild.OrderByDescending(q => quads[q].Count), // big blocks first for better load balance
-            new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = Environment.ProcessorCount },
+            RunLimits.Parallel(ct),
             quad =>
             {
                 try

@@ -538,7 +538,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
                     if (bb is null)
                     {
                         var key = linkCache.TryResolve<ITreeGetter>(baseKey.Value, out var tg) && tg.Model?.File is { IsNull: false } mf
-                            ? $"{baseKey.Value.ModKey.FileName}\\{Path.GetFileNameWithoutExtension(mf.DataRelativePath.Path)}_{baseKey.Value.ID:x8}"
+                            ? $"{baseKey.Value.ModKey.FileName}\\{GamePath.GetFileNameWithoutExtension(mf.DataRelativePath.Path)}_{baseKey.Value.ID:x8}"
                             : baseKey.Value.ToString();
                         missingBillboards.AddOrUpdate(key, 1, (_, n) => n + 1);
                         missingByWorld.AddOrUpdate(wsId, 1, (_, n) => n + 1);

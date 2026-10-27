@@ -81,7 +81,7 @@ public static class TextureFixer
             var root = Path.GetFullPath(folder).TrimEnd('\\', '/');
             var mod = Path.GetFileName(root);
             mods++;
-            foreach (var path in Directory.EnumerateFiles(root, "*.dds", SearchOption.AllDirectories))
+            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).Where(p => p.EndsWith(".dds", StringComparison.OrdinalIgnoreCase)))
             {
                 ct.ThrowIfCancellationRequested();
                 files++;
@@ -143,7 +143,7 @@ public static class TextureFixer
     /// first copied to <paramref name="backupFolder"/>. Nothing is written when <paramref name="dryRun"/> is set.
     /// </summary>
     public static IReadOnlyList<FixedTexture> Fix(IEnumerable<BadTexture> items, string texconv, string? outputFolder, string? backupFolder,
-        bool dryRun, IProgress<string>? progress = null, CancellationToken ct = default)
+        bool dryRun, IProgress<string>? progress = null, CancellationToken ct = default, Func<byte[], byte[]>? nativeConverter = null)
     {
         if (outputFolder is null && backupFolder is null && !dryRun)
             throw new ArgumentException("Converting in place needs a backup folder.");
@@ -169,15 +169,17 @@ public static class TextureFixer
                 Directory.CreateDirectory(temp);
                 try
                 {
-                    var error = RunTexconv(texconv, item.FullPath, temp, ct);
                     var made = Path.Combine(temp, Path.GetFileNameWithoutExtension(item.FullPath) + ".dds");
+                    string? error = null;
+                    if (nativeConverter is not null) File.WriteAllBytes(made, nativeConverter(File.ReadAllBytes(item.FullPath)));
+                    else error = RunTexconv(texconv, item.FullPath, temp, ct);
                     if (error is not null || !File.Exists(made)) { results.Add(new FixedTexture(item, target, backup, "Failed: " + (error ?? "texconv wrote nothing"))); continue; }
                     var check = new byte[148];
                     using (var fs = File.OpenRead(made)) fs.ReadExactly(check, 0, 148);
                     var after = Inspect(item.Root, item.Relative, item.Mod, check);
                     int dxgi = BinaryPrimitives.ReadInt32LittleEndian(check.AsSpan(128));
                     int w = BinaryPrimitives.ReadInt32LittleEndian(check.AsSpan(16)), h = BinaryPrimitives.ReadInt32LittleEndian(check.AsSpan(12)), m = BinaryPrimitives.ReadInt32LittleEndian(check.AsSpan(28));
-                    if (after is not null || w != item.Width || h != item.Height || m != item.Mips)
+                    if (after is not null || dxgi is not (98 or 99) || w != item.Width || h != item.Height || m != item.Mips)
                     { results.Add(new FixedTexture(item, target, backup, $"Failed: result is {w}x{h}, {m} mips, DXGI {dxgi}; the original was left alone")); continue; }
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                     File.Copy(made, target, overwrite: true);
@@ -185,7 +187,7 @@ public static class TextureFixer
                 }
                 finally { try { Directory.Delete(temp, true); } catch (IOException) { } }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
             {
                 results.Add(new FixedTexture(item, target, backup, "Failed: " + ex.Message));
             }

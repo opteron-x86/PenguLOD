@@ -53,6 +53,8 @@ public sealed class LodMeshPart
 {
     /// <summary>The shape's name in the source mesh. LODGen reads instructions from it (crown, trunk, flattrunk, spherenormals…).</summary>
     public string? Name { get; init; }
+    /// <summary>Original shape scale, used by TexGen viewport planes to select texture resolution.</summary>
+    public float TexGenScale { get; init; } = 1;
     public required LodMaterial Material { get; init; }
     public required Vector3[] Positions { get; init; }
     public required Vector2[] UVs { get; init; }

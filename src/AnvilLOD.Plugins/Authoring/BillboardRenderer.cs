@@ -1,4 +1,5 @@
 using System.Numerics;
+using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Meshes;
 using AnvilLOD.Textures;
 using AnvilLOD.Textures.Bc;
@@ -22,15 +23,22 @@ public static class BillboardRenderer
     /// <param name="vertexColors">Multiply by the model's vertex colours (trees: baked shading). Grass uses them for wind, so off there.</param>
     /// <param name="minCoverage">Thicken the cut-out until at least this share of the image is opaque (sparse grass blades
     /// otherwise vanish at a distance; 0 = leave as rendered).</param>
-    public static BillboardImage? Render(LodMesh model, TextureLoader loadTexture, int maxPixels = 512, bool vertexColors = true, float minCoverage = 0f)
+    public static BillboardImage? Render(LodMesh model, TextureLoader loadTexture, int maxPixels = 512, bool vertexColors = true, float minCoverage = 0f, float unitsPerPixel = 0, (Vector3 Min, Vector3 Max)? viewport = null, float brightness = 1, bool shaded = true, (int W, int H)? pixelSize = null)
     {
-        var (min, max) = Meshes.Authoring.LodMeshAuthor.Bounds(model);
+        var (min, max) = viewport ?? Meshes.Authoring.LodMeshAuthor.Bounds(model);
         float worldW = max.X - min.X, worldH = max.Z - min.Z;
         if (!(worldW > 1f) || !(worldH > 1f)) return null;
 
         float scale = maxPixels / MathF.Max(worldW, worldH);
         int outW = Math.Max(16, Align4((int)MathF.Ceiling(worldW * scale)));
         int outH = Math.Max(16, Align4((int)MathF.Ceiling(worldH * scale)));
+        if (unitsPerPixel > 0)
+        {
+            outW = PowerOfTwo(worldW / unitsPerPixel, maxPixels);
+            outH = PowerOfTwo(worldH / unitsPerPixel, maxPixels);
+        }
+        if (pixelSize is { } size) { outW = size.W; outH = size.H; }
+        if (outW is < 4 or > 4096 || outH is < 4 or > 4096) throw new ArgumentOutOfRangeException(nameof(pixelSize));
         int ss = 2, w = outW * ss, h = outH * ss;
         float sx = w / worldW, sz = h / worldH;
 
@@ -42,11 +50,13 @@ public static class BillboardRenderer
 
         foreach (var part in model.Parts)
         {
+            RunLimits.Check();
             var tex = loadTexture(part.Material.Textures[0]);
             byte threshold = part.Material.HasAlpha ? (part.Material.AlphaThreshold == 0 ? (byte)128 : part.Material.AlphaThreshold) : (byte)0;
             var p = part.Positions;
             for (int t = 0; t < part.TriangleCount; t++)
             {
+                RunLimits.Check();
                 int i0 = part.Triangles[t * 3], i1 = part.Triangles[t * 3 + 1], i2 = part.Triangles[t * 3 + 2];
                 var a = Screen(p[i0]); var b = Screen(p[i1]); var c = Screen(p[i2]);
                 float area = Edge(a, b, c.X, c.Y);
@@ -58,6 +68,7 @@ public static class BillboardRenderer
                 for (int y = y0; y <= y1; y++)
                 for (int x = x0; x <= x1; x++)
                 {
+                    if (x == x0) RunLimits.Check();
                     float px = x + 0.5f, py = y + 0.5f;
                     float w0 = Edge(b, c, px, py) / area, w1 = Edge(c, a, px, py) / area, w2 = 1f - w0 - w1;
                     if (w0 < 0 || w1 < 0 || w2 < 0) continue;
@@ -74,7 +85,7 @@ public static class BillboardRenderer
                         r *= vc.X; g *= vc.Y; bl *= vc.Z;
                     }
                     var n = Vector3.Normalize(part.Normals[i0] * w0 + part.Normals[i1] * w1 + part.Normals[i2] * w2);
-                    float shade = 0.7f + 0.3f * MathF.Abs(Vector3.Dot(float.IsFinite(n.X) ? n : -Vector3.UnitY, light));
+                    float shade = brightness * (shaded ? 0.7f + 0.3f * MathF.Abs(Vector3.Dot(float.IsFinite(n.X) ? n : -Vector3.UnitY, light)) : 1);
                     depth[idx] = z;
                     int o = idx * 4;
                     // The card faces the viewer (looking along +Y): a back-facing normal is turned round, as both sides are drawn.
@@ -120,7 +131,7 @@ public static class BillboardRenderer
         float coverage = Coverage(rgba, 1f);
         var mips = new List<byte[]> { Bc7Encoder.EncodeImage(rgba, width, height) };
         var (cur, w, h) = (rgba, width, height);
-        while (w > 4 && h > 4)
+        while (w > 4 || h > 4)
         {
             (cur, w, h) = TreeAtlasBuilder.Downsample(cur, w, h);
             float lo = 0.5f, hi = 4f;
@@ -141,7 +152,7 @@ public static class BillboardRenderer
     {
         var mips = new List<byte[]> { Bc7Encoder.EncodeImage(rgba, width, height) };
         var (cur, w, h) = (rgba, width, height);
-        while (w > 4 && h > 4)
+        while (w > 4 || h > 4)
         {
             (cur, w, h) = TreeAtlasBuilder.Downsample(cur, w, h);
             for (int i = 0; i < cur.Length; i += 4) { Renormalize(cur, i); cur[i + 3] = 255; }
@@ -171,7 +182,7 @@ public static class BillboardRenderer
         var mips = new List<byte[]>();
         var (cur, w, h) = (px, width, height);
         mips.Add(Bc7Encoder.EncodeImage(cur, w, h));
-        while (w > 4 && h > 4)
+        while (w > 4 || h > 4)
         {
             (cur, w, h) = TreeAtlasBuilder.Downsample(cur, w, h);
             mips.Add(Bc7Encoder.EncodeImage(cur, w, h));
@@ -260,6 +271,13 @@ public static class BillboardRenderer
             r += t.Rgba[i] * wgt; g += t.Rgba[i + 1] * wgt; b += t.Rgba[i + 2] * wgt; a += t.Rgba[i + 3] * wgt;
         }
         return (r, g, b, a);
+    }
+
+    private static int PowerOfTwo(float value, int max)
+    {
+        int size = 16;
+        while (size < value && size < max) size *= 2;
+        return Math.Min(size, max);
     }
 
     private static int Align4(int v) => (v + 3) & ~3;

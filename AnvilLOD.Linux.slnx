@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AnvilLOD.Core/AnvilLOD.Core.csproj" />
+    <Project Path="src/AnvilLOD.Meshes/AnvilLOD.Meshes.csproj" />
+    <Project Path="src/AnvilLOD.Textures/AnvilLOD.Textures.csproj" />
+    <Project Path="src/AnvilLOD.Plugins/AnvilLOD.Plugins.csproj" />
+    <Project Path="src/AnvilLOD.Cli/AnvilLOD.Cli.csproj" />
+    <Project Path="src/AnvilLOD.Desktop/AnvilLOD.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AnvilLOD.Core.Tests/AnvilLOD.Core.Tests.csproj" />
+    <Project Path="tests/AnvilLOD.Desktop.Tests/AnvilLOD.Desktop.Tests.csproj" />
+  </Folder>
+</Solution>

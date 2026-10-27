@@ -57,7 +57,7 @@ public static class WaterStandIns
             if (!mesh.Warnings.Any(w => w.StartsWith(NifGeometryReader.WaterPlaneWarning, StringComparison.Ordinal))) { noWater++; continue; }
             if (mesh.Parts.Count == 0) { unreadable++; continue; }
 
-            var stem = Path.GetFileNameWithoutExtension(rel.Replace('/', '\\'));
+            var stem = GamePath.GetFileNameWithoutExtension(rel);
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rel.ToLowerInvariant())), 0, 3).ToLowerInvariant();
             var standIn = GamePath.Join(Folder, $"{stem}_{hash}.nif");
             var full = Path.Combine(outputFolder, "meshes", standIn.Replace('\\', Path.DirectorySeparatorChar));

@@ -26,7 +26,7 @@ public static class SeasonalLod
     {
         var messages = new List<string>();
         var files = enumerate("seasons\\")
-            .Where(p => p.EndsWith(".ini", StringComparison.Ordinal) && SeasonSwaps.SeasonOf(Path.GetFileName(p)) is not null)
+            .Where(p => p.EndsWith(".ini", StringComparison.Ordinal) && SeasonSwaps.SeasonOf(GamePath.GetFileName(p)) is not null)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase) // Seasons of Skyrim reads the folder in name order; later wins
             .ToList();
         var scopes = Scopes(quads.Keys);
@@ -36,7 +36,7 @@ public static class SeasonalLod
         {
             ct.ThrowIfCancellationRequested();
             RemoveSeasonFiles(outputFolder, scopes, suffix);
-            var seasonFiles = files.Where(f => SeasonSwaps.SeasonOf(Path.GetFileName(f)) == suffix).ToList();
+            var seasonFiles = files.Where(f => SeasonSwaps.SeasonOf(GamePath.GetFileName(f)) == suffix).ToList();
             bool seasonalGrass = grass?.HasSeason(suffix) == true; // grass\<ws>x..y...<SUF>.cgid from Grass Cache Helper
             if (seasonFiles.Count == 0 && !seasonalGrass) continue;
 

@@ -23,6 +23,31 @@ public sealed class AssetIndex : IAssetSource
     private readonly Func<string, IEnumerable<string>> _looseEnumerator;
     private readonly Dictionary<string, ArchiveEntry> _archived;
     private readonly ConcurrentDictionary<string, FileInfo?> _looseCache = new(StringComparer.Ordinal);
+    private Dictionary<string, FileInfo> _overrides = new(StringComparer.Ordinal);
+    private readonly List<string> _replacedPrefixes = [];
+    private bool Replaced(string key) => _replacedPrefixes.Any(p => key.StartsWith(p, StringComparison.Ordinal));
+
+    /// <summary>Attach a verified generated-asset manifest before starting readers.</summary>
+    public void SetOverrides(string root, IEnumerable<string> paths, string? replacePrefix = null, CancellationToken ct = default)
+    {
+        var files = new Dictionary<string, FileInfo>(StringComparer.Ordinal);
+        var lookup = new GamePathLookup(root);
+        foreach (var path in paths)
+        {
+            ct.ThrowIfCancellationRequested(); RunLimits.Check();
+            var key = GamePath.Normalize(path);
+            var file = new FileInfo(lookup.ResolveExisting(key, ct) ?? GamePath.ToFileSystemPath(root, key));
+            if (!file.Exists) throw new FileNotFoundException("Generated asset is missing; regenerate its output.", file.FullName);
+            files.Add(key, file);
+        }
+        if (replacePrefix is not null)
+        {
+            replacePrefix = GamePath.Normalize(replacePrefix);
+            foreach (var key in _overrides.Keys.Where(k => k.StartsWith(replacePrefix, StringComparison.Ordinal)).ToArray()) _overrides.Remove(key);
+            _replacedPrefixes.Add(replacePrefix);
+        }
+        foreach (var (key, file) in files) _overrides[key] = file;
+    }
 
     /// <summary>Archives that were read.</summary>
     public int ArchiveCount { get; }
@@ -45,27 +70,18 @@ public sealed class AssetIndex : IAssetSource
         IndexTime = time;
     }
 
-    /// <summary>Plain Data folder (or MO2 VFS): Mutagen decides which BSAs load; loose files are checked on demand.</summary>
+    /// <summary>Plain Data folder (or MO2 VFS): explicit INI and enabled-plugin archive ordering; loose files are checked on demand.</summary>
     /// <param name="pathFilter">Optional filter on normalized paths (e.g. "meshes\\") to keep the index small.</param>
-    /// <param name="pluginOrder">Plugin file names in load order; only used to order the archives if Mutagen can't.</param>
+    /// <param name="pluginOrder">Plugin file names in load order; only enabled plugins should be supplied.</param>
     public static AssetIndex Build(GameRelease release, string dataFolder, Func<string, bool>? pathFilter = null,
-        IReadOnlyList<string>? pluginOrder = null)
+        IReadOnlyList<string>? pluginOrder = null, IReadOnlyList<string>? iniPaths = null)
     {
-        List<string> archives;
-        try
-        {
-            archives = Archive.GetApplicableArchivePaths(release, dataFolder).Select(p => p.Path).ToList();
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NotImplementedException)
-        {
-            // Mutagen's archive ordering throws for some archive names (seen on a 3,600-plugin Steam install).
-            // Order them ourselves: base game first, then each plugin's archives in load order.
-            archives = ArchiveOrder.LowToHigh(Directory.EnumerateFiles(dataFolder, "*.bsa"), pluginOrder ?? []);
-        }
+        var archives = SkyrimArchives.Select(release, Directory.EnumerateFiles(dataFolder), pluginOrder ?? [],
+            SkyrimArchives.ReadIniLists(iniPaths ?? []));
         IEnumerable<string> EnumerateLoose(string prefix)
         {
-            var dir = Path.Combine(dataFolder, prefix.TrimEnd('\\').Replace('\\', Path.DirectorySeparatorChar));
-            if (!Directory.Exists(dir)) yield break;
+            var dir = GamePath.ResolveExisting(dataFolder, prefix.TrimEnd('\\'));
+            if (dir is null || !Directory.Exists(dir)) yield break;
             var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
             foreach (var f in Directory.EnumerateFiles(dir, "*", opts))
                 yield return GamePath.Normalize(Path.GetRelativePath(dataFolder, f));
@@ -73,7 +89,9 @@ public sealed class AssetIndex : IAssetSource
 
         return Create(release, archives, EnumerateLoose, key =>
         {
-            var fi = new FileInfo(Path.Combine(dataFolder, key.Replace('\\', Path.DirectorySeparatorChar)));
+            var full = GamePath.ResolveExisting(dataFolder, key);
+            if (full is null) return null;
+            var fi = new FileInfo(full);
             return fi.Exists ? fi : null;
         }, pathFilter);
     }
@@ -92,6 +110,7 @@ public sealed class AssetIndex : IAssetSource
 
         foreach (var archivePath in archivesLowToHigh)
         {
+            RunLimits.Check();
             var name = Path.GetFileName(archivePath);
             // The name table is read lazily, so a bad archive (e.g. "Strings section was not able to be read: did not end all
             // of its strings in null bytes", seen with a mod whose BSA holds non-ASCII file names) throws while the files are
@@ -102,6 +121,7 @@ public sealed class AssetIndex : IAssetSource
                 var reader = Archive.CreateReader(release, archivePath);
                 foreach (var f in reader.Files)
                 {
+                    RunLimits.Check();
                     var key = GamePath.Normalize(f.Path);
                     if (pathFilter is not null && !pathFilter(key)) continue;
                     entries.Add((key, f));
@@ -123,10 +143,12 @@ public sealed class AssetIndex : IAssetSource
     {
         prefix = GamePath.Normalize(prefix);
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var k in _overrides.Keys)
+            if (k.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(k)) yield return k;
         foreach (var k in _looseEnumerator(prefix))
-            if (k.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(k)) yield return k;
+            if (!Replaced(k) && k.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(k)) yield return k;
         foreach (var k in _archived.Keys)
-            if (k.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(k)) yield return k;
+            if (!Replaced(k) && k.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(k)) yield return k;
     }
 
     private FileInfo? Loose(string key) => _looseCache.GetOrAdd(key, _looseResolver);
@@ -140,20 +162,23 @@ public sealed class AssetIndex : IAssetSource
     private FileInfo? Fallback(string key)
     {
         if (FallbackRoot is not { } root) return null;
-        var fi = new FileInfo(Path.Combine(root, key.Replace('\\', Path.DirectorySeparatorChar)));
+        var full = GamePath.ResolveExisting(root, key);
+        if (full is null) return null;
+        var fi = new FileInfo(full);
         return fi.Exists ? fi : null;
     }
 
     public bool Exists(string dataRelativePath)
     {
         var key = GamePath.Normalize(dataRelativePath);
-        return Loose(key) is not null || _archived.ContainsKey(key) || Fallback(key) is not null;
+        return _overrides.ContainsKey(key) || !Replaced(key) && (Loose(key) is not null || _archived.ContainsKey(key) || Fallback(key) is not null);
     }
 
     public bool TryOpen(string dataRelativePath, out Stream stream)
     {
         var key = GamePath.Normalize(dataRelativePath);
-        if (Loose(key) is { } fi)
+        if (Replaced(key) && !_overrides.ContainsKey(key)) { stream = Stream.Null; return false; }
+        if ((_overrides.GetValueOrDefault(key) ?? Loose(key)) is { } fi)
         {
             stream = fi.OpenRead();
             return true;
@@ -175,6 +200,8 @@ public sealed class AssetIndex : IAssetSource
     public string? Fingerprint(string dataRelativePath)
     {
         var key = GamePath.Normalize(dataRelativePath);
+        if (_overrides.TryGetValue(key, out var generated)) return $"G:{generated.Length}:{generated.LastWriteTimeUtc.Ticks}";
+        if (Replaced(key)) return null;
         if (Loose(key) is { } fi) return $"L:{fi.Length}:{fi.LastWriteTimeUtc.Ticks}";
         if (_archived.TryGetValue(key, out var e)) return $"A:{e.ArchiveName}:{e.File.Size}";
         if (Fallback(key) is { } fb) return $"F:{fb.Length}:{fb.LastWriteTimeUtc.Ticks}";
@@ -185,6 +212,8 @@ public sealed class AssetIndex : IAssetSource
     public string? SourceOf(string dataRelativePath)
     {
         var key = GamePath.Normalize(dataRelativePath);
+        if (_overrides.ContainsKey(key)) return key.StartsWith("grass\\", StringComparison.Ordinal) ? "AnvilLOD grass caching" : "AnvilLOD texture generation";
+        if (Replaced(key)) return null;
         if (Loose(key) is not null) return "loose";
         if (_archived.TryGetValue(key, out var e)) return e.ArchiveName;
         return Fallback(key) is not null ? "AnvilLOD cache" : null;

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AnvilLOD.Core.Incremental;
 using AnvilLOD.Core.Lod;
+using AnvilLOD.Core.Paths;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.World;
 using AnvilLOD.Meshes;
@@ -55,7 +56,9 @@ public sealed record ScanRequest(
     bool CsGrassLod = true,
     int MapObjectLevel = -2,
     AnvilLOD.Core.Occlusion.OcclusionSettings? Occlusion = null,   // work out the occlusion data (Occlusion.esp) ourselves, with these settings (null = off)
-    string? OcclusionFolder = null);                              // where Occlusion.esp goes (null = the output folder)                      // LOD32 objects for the world map: -1 none unless a rule names LOD32 (DynDOLOD's default), 0..2 = that level's LOD mesh, -2 auto (level 0 when A Clear Map of Skyrim is in the load order, else -1)                       // with Community Shaders' Grass Optimizations installed: _LOD0/_LOD1 meshes for its grass LOD system (meshes\LOD\Grass)
+    string? OcclusionFolder = null,
+    string? GeneratedTextureFolder = null,
+    string? GeneratedGrassFolder = null);
 
 public sealed record ScanSummary(
     ScanStats Stats,
@@ -111,8 +114,37 @@ public static class ScanPipeline
 
     public static ScanSummary Run(ScanRequest req, IProgress<string>? progress = null, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         if (req.Generate && string.IsNullOrWhiteSpace(req.OutputFolder))
             throw new ArgumentException("Choose an output folder before generating LOD.");
+        if (req.Generate) GenerationDestination.Validate(req.Game, req.OutputFolder!);
+        if (req.OutputFolder is { } output && File.Exists(Path.Combine(output, TextureGenerationManifest.FileName)))
+            throw new ArgumentException("LOD output must be separate from texture generation output.");
+        if (req.OutputFolder is { } grassOutput && File.Exists(Path.Combine(grassOutput, GrassGenerationManifest.FileName)))
+            throw new ArgumentException("LOD output must be separate from grass cache output.");
+        if (req.GeneratedGrassFolder is { } grassFolder)
+        {
+            if (req.OutputFolder is { } lod && (HostPath.IsWithin(lod, grassFolder) || HostPath.IsWithin(grassFolder, lod)))
+                throw new ArgumentException("LOD and grass output folders must be separate and cannot contain each other.");
+            progress?.Report("Reading generated grass cache manifest...");
+            var manifest = GrassGenerationManifest.Read(grassFolder, requireFull: true)!;
+            // Reject stale runtime FormIDs before expensive file reads or any output cleanup.
+            progress?.Report("Checking the grass cache against the selected load order...");
+            using var grassGame = GameContext.Open(req.Game with { ExcludeFolder = req.OutputFolder }, progress);
+            manifest.ValidateLoadOrder(grassGame);
+            manifest.Verify(grassFolder, progress, ct);
+            req = req with { SettingsFingerprint = req.SettingsFingerprint + "|grass:" + manifest.Fingerprint };
+        }
+        if (req.GeneratedTextureFolder is { } textures)
+        {
+            if (req.OutputFolder is { } lod && (HostPath.IsWithin(lod, textures) || HostPath.IsWithin(textures, lod)))
+                throw new ArgumentException("LOD and texture output folders must be separate and cannot contain each other.");
+            progress?.Report("Reading generated texture manifest...");
+            var manifest = TextureGenerationManifest.Read(textures, requireComplete: true)!;
+            manifest.Verify(textures, progress, ct);
+            req = req with { SettingsFingerprint = req.SettingsFingerprint + "|textures:" + manifest.Fingerprint };
+        }
+
 
         // The output folder is made and, unless told not to, emptied before the log is opened in it.
         var prepared = req.Generate ? OutputFolder.Prepare(req.OutputFolder!, req.CleanOutput) : null;
@@ -170,6 +202,18 @@ public static class ScanPipeline
                  || p.StartsWith("grass\\", StringComparison.Ordinal) || p.StartsWith("seasons\\", StringComparison.Ordinal)
                  || p.StartsWith("textures\\", StringComparison.Ordinal)); // grass model textures (rendered grass billboards), the textures 3D tree LOD models need, and so the texture audit can tell a BSA texture from a missing one
         progress?.Report($"Indexed {assets.ArchivedFileCount:N0} files from {assets.ArchiveCount} archives in {assets.IndexTime.TotalSeconds:F1}s");
+        if (req.GeneratedTextureFolder is { } textures)
+        {
+            progress?.Report("Indexing generated textures...");
+            TextureGenerationManifest.Read(textures, requireComplete: true)!.Attach(assets, textures, ct);
+            progress?.Report("Using generated textures from " + textures);
+        }
+        if (req.GeneratedGrassFolder is { } grassFolder)
+        {
+            progress?.Report("Indexing generated grass cache files...");
+            GrassGenerationManifest.Read(grassFolder, requireFull: true)!.Attach(assets, grassFolder, game, ct);
+            progress?.Report("Using generated grass cache from " + grassFolder);
+        }
         if (req.Scan.TreeLod && req.Scan.RenderTreeBillboards) assets.FallbackRoot = TreeBillboardSynth.CacheRoot;   // tree billboards AnvilLOD draws itself: read last, so a real TexGen one wins
         foreach (var skipped in assets.SkippedArchives)
             Warn($"An archive could not be read and was skipped; its files are not used, everything else is ({skipped}).");
@@ -377,7 +421,7 @@ public static class ScanPipeline
                 tree3d = new Tree3DSource(assets, req.TreeBrightness);
                 var withModel = allTrees.Where(t => t.Model3D is not null).ToList();
                 var reasons = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-                Parallel.ForEach(withModel.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase), new ParallelOptions { CancellationToken = ct },
+                Parallel.ForEach(withModel.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase), RunLimits.Parallel(ct),
                     m => reasons[m] = tree3d.Validate(m));
                 var t3Warnings = new List<string>();
                 var skippedTypes = reasons.Where(kv => kv.Value is not null).OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase).ToList();
@@ -443,13 +487,13 @@ public static class ScanPipeline
 
         var sw = Stopwatch.StartNew();
         var bucketer = new QuadBucketer(scan.Grids);
-        Parallel.ForEach(allRefs, new ParallelOptions { CancellationToken = ct }, bucketer.Add);
+        Parallel.ForEach(allRefs, RunLimits.Parallel(ct), bucketer.Add);
         var quads = bucketer.Build();
         if (req.Levels is { Count: > 0 } levels)
             quads = quads.Where(kv => levels.Contains(kv.Key.Level)).ToDictionary(kv => kv.Key, kv => kv.Value);
 
         var hashes = new System.Collections.Concurrent.ConcurrentDictionary<QuadKey, string>();
-        Parallel.ForEach(quads, new ParallelOptions { CancellationToken = ct }, kv =>
+        Parallel.ForEach(quads, RunLimits.Parallel(ct), kv =>
             hashes[kv.Key] = QuadHasher.Hash(kv.Key, kv.Value, Fingerprint,
                 req.SettingsFingerprint + (mapObjectLevel >= 0 ? $"|map32:{mapObjectLevel}" : "") + (MathF.Abs(req.ObjectBrightness - 1f) > 0.001f ? $"|bright:{req.ObjectBrightness:F2}" : "") + (req.PbrLod ? FormattableString.Invariant($"|pbr:{req.PbrLodBrightness:F2}:{req.PbrLodSize}") : "") + (ruleOptions.Candles ? "|candles" : "") + (ruleOptions.FxGlow ? "|fxglow" : "") + (ruleOptions.CustomFile is { } cf ? $"|rules:{new FileInfo(cf).Length}:{new FileInfo(cf).LastWriteTimeUtc.Ticks}" : "") + (req.SnowShaderMode != 0 ? $"|snowmode:{req.SnowShaderMode}" : "") + (req.SnowCover != 0 ? $"|snowcover:{req.SnowCover}" : "") + (req.MountainFit && req.MountainInset > 0f ? "|mtnfit1" : "") + (req.OpaqueAlpha ? "|opaque1" : "") + (req.DetailedShips ? FormattableString.Invariant($"|ships2:{LodInset.DefaultShip:F1}") : "") + (req.IceInset > 0f ? FormattableString.Invariant($"|iceinset:{req.IceInset:F1}") : "") + (req.MountainInset > 0f ? FormattableString.Invariant($"|mtninset:{req.MountainInset:F1}") : "") + (req.ObjectInset > 0f ? FormattableString.Invariant($"|objinset:{req.ObjectInset:F1}") : "") + (cullTerrain is null ? "|keep-buried"
                     : "|terrain:" + (cullTerrain.Fingerprints.TryGetValue(kv.Key.Worldspace, out var tf) ? tf : "none") + (req.RemoveUnderwater ? "|water:" + cullTerrain.Heights.WaterFingerprint(kv.Key.Worldspace) : "")),
@@ -853,7 +897,7 @@ public static class ScanPipeline
             var suffix = "_" + missingKey[(us + 1)..].ToLowerInvariant() + ".dds";
             foreach (var path in assets.EnumeratePaths("textures\\terrain\\lodgen\\" + plugin + "\\"))
             {
-                var name = Path.GetFileName(path).ToLowerInvariant();
+                var name = GamePath.GetFileName(path).ToLowerInvariant();
                 if (name.EndsWith(suffix, StringComparison.Ordinal) && name.Length > suffix.Length && name[..^suffix.Length] != stem)
                     return $"{missingKey[..slash]} {missingKey[(us + 1)..]}: TexGen's billboard is for the model '{name[..^suffix.Length]}', the tree now uses '{stem}'";
             }

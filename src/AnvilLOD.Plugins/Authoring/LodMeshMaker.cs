@@ -1,3 +1,4 @@
+using AnvilLOD.Core.Pipeline;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
@@ -69,7 +70,7 @@ public static class LodMeshMaker
     public static List<Source> Collect(IEnumerable<string> inputs, string? outputFolder, IList<string>? notes = null)
     {
         var found = new Dictionary<string, Source>(StringComparer.OrdinalIgnoreCase);
-        var outFull = outputFolder is null ? null : Path.GetFullPath(outputFolder).TrimEnd('\\') + "\\";
+        var outFull = outputFolder is null ? null : Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputFolder)) + Path.DirectorySeparatorChar;
         foreach (var raw in inputs.Where(i => !string.IsNullOrWhiteSpace(i)))
         {
             var input = Path.GetFullPath(raw.Trim().Trim('"'));
@@ -79,11 +80,12 @@ public static class LodMeshMaker
             }
             else if (Directory.Exists(input))
             {
-                var meshesRoot = Directory.Exists(Path.Combine(input, "meshes")) ? Path.Combine(input, "meshes")
+                var meshesRoot = GamePath.ResolveExisting(input, "meshes") is { } sub && Directory.Exists(sub) ? sub
                     : Path.GetFileName(input).Equals("meshes", StringComparison.OrdinalIgnoreCase) ? input
                     : null;
                 var root = meshesRoot ?? input;
-                foreach (var file in Directory.EnumerateFiles(root, "*.nif", SearchOption.AllDirectories))
+                foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                             .Where(f => f.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)))
                     Add(file, GamePath.Join("meshes", Path.GetRelativePath(root, file)));
             }
             else notes?.Add($"Not found: {raw}");
@@ -105,7 +107,7 @@ public static class LodMeshMaker
         for (int i = parts.Length - 2; i >= 0; i--)
             if (parts[i].Equals("meshes", StringComparison.OrdinalIgnoreCase))
                 return string.Join('\\', parts[i..]);
-        return GamePath.Join("meshes", Path.GetFileName(file));
+        return GamePath.Join("meshes", GamePath.GetFileName(file));
     }
 
     public static List<AuthorLevel> LevelsFor(IReadOnlyList<int>? wanted, float detail)
@@ -170,7 +172,7 @@ public static class LodMeshMaker
             owner.TryAdd(Path.GetFileNameWithoutExtension(s.File), s.Relative);
         int meshesWritten = 0, done = 0, processed = 0;
 
-        Parallel.For(0, sources.Count, new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) }, index =>
+        Parallel.For(0, sources.Count, RunLimits.Parallel(ct), index =>
         {
             var src = sources[index];
             var stem = Path.GetFileNameWithoutExtension(src.File);
@@ -213,7 +215,7 @@ public static class LodMeshMaker
             var action = new List<string>();
             foreach (var lv in built)
             {
-                var path = Path.Combine(req.OutputFolder, GamePath.Join("meshes", "lod", group, $"{stem}_lod_{lv.Level}.nif"));
+                var path = Path.Combine(req.OutputFolder, "meshes", "lod", group, $"{stem}_lod_{lv.Level}.nif");
                 if (!req.Overwrite && File.Exists(path)) { action.Add($"L{lv.Level} kept"); continue; }
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.WriteAllBytes(path, LodNifWriter.Write($"{stem}_lod_{lv.Level}", lv.Parts, "AnvilLOD LOD Maker"));

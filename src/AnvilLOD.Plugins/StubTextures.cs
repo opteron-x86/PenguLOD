@@ -1,3 +1,5 @@
+using AnvilLOD.Core.World;
+
 namespace AnvilLOD.Plugins;
 
 /// <summary>
@@ -11,8 +13,8 @@ public static class StubTextures
     /// <summary>Writes the stand-in; returns the colour used (RGB), or null for a normal map.</summary>
     public static (byte R, byte G, byte B)? Write(string outputFolder, string texturePath)
     {
-        var rel = texturePath.Replace('/', '\\').TrimStart('\\');
-        var full = Path.Combine(outputFolder, rel.Replace('\\', Path.DirectorySeparatorChar));
+        var rel = GamePath.NormalizeTexture(texturePath);
+        var full = GamePath.ToFileSystemPath(outputFolder, rel);
         bool normal = rel.EndsWith("_n.dds", StringComparison.OrdinalIgnoreCase);
         var color = normal ? (R: (byte)128, G: (byte)128, B: (byte)255) : ColorFor(rel);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);

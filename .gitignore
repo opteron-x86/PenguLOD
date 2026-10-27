@@ -5,6 +5,8 @@ obj/
 *.suo
 TestResults/
 reports/
+.tools/
+.artifacts/
 *.scan.json
 dist/
 skse/build/
@@ -16,3 +18,5 @@ skse/vcpkg_installed-vr/
 skse/dist/
 release/
 CLAUDE.md
+
+__pycache__/

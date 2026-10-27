@@ -12,7 +12,7 @@ public static class TexGenLists
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in assets.EnumeratePaths("textures\\terrain\\lodgen\\"))
         {
-            var name = Path.GetFileName(path);
+            var name = GamePath.GetFileName(path);
             if (!name.StartsWith("texgen_", StringComparison.Ordinal) || !name.EndsWith("_billboards.txt", StringComparison.Ordinal)) continue;
             if (!assets.TryOpen(path, out var st)) continue;
             using var reader = new StreamReader(st);

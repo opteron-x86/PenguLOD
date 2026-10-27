@@ -1,3 +1,4 @@
+using AnvilLOD.Core.Pipeline;
 namespace AnvilLOD.Textures.Bc;
 
 /// <summary>
@@ -15,7 +16,7 @@ public static class Bc7Encoder
     {
         int bw = (width + 3) / 4, bh = (height + 3) / 4;
         var output = new byte[bw * bh * 16];
-        Parallel.For(0, bh, by =>
+        Parallel.For(0, bh, RunLimits.Parallel(), by =>
         {
             Span<byte> block = stackalloc byte[64];
             for (int bx = 0; bx < bw; bx++)

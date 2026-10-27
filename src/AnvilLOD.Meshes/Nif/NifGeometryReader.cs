@@ -55,7 +55,7 @@ public static class NifGeometryReader
     /// <param name="passthru">Keep every shape's own shader settings (LODGen's "passthru" LOD models) instead of
     /// reducing them to the standard LOD shader.</param>
     /// <param name="waterAsLit">Read BSWaterShaderProperty shapes as lit fake water (<see cref="FakeWaterMaterial"/>) instead of skipping them.</param>
-    public static LodMesh Read(string path, byte[] data, bool passthru = false, bool waterAsLit = false)
+    public static LodMesh Read(string path, byte[] data, bool passthru = false, bool waterAsLit = false, bool includeTexGenPlane = false)
     {
         var nif = NifFile.Read(data);
         var parts = new List<LodMeshPart>();
@@ -63,7 +63,7 @@ public static class NifGeometryReader
         var visited = new HashSet<int>();
 
         foreach (var root in nif.Roots)
-            Walk(nif, root, Matrix4x4.Identity, parts, warnings, visited, passthru, waterAsLit);
+            Walk(nif, root, Matrix4x4.Identity, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane);
 
         bool anyShape = nif.Blocks.Any(b => ShapeTypes.Contains(b.Type) || b.Type is "NiTriShape" or "BSLODTriShape" or "NiTriStrips");
         return new LodMesh { Path = path, Parts = parts, Warnings = warnings, NoShapesInFile = !anyShape };
@@ -94,6 +94,7 @@ public static class NifGeometryReader
     {
         public string? Name;
         public uint Flags;
+        public float Scale;
         public Matrix4x4 Local;
     }
 
@@ -110,13 +111,13 @@ public static class NifGeometryReader
         float m11 = r.F32(), m12 = r.F32(), m13 = r.F32();
         float m21 = r.F32(), m22 = r.F32(), m23 = r.F32();
         float m31 = r.F32(), m32 = r.F32(), m33 = r.F32();
-        float s = r.F32();
+        float s = r.F32(); o.Scale = s;
         r.I32(); // collision object
         o.Local = Transforms.Compose(m11, m12, m13, m21, m22, m23, m31, m32, m33, s, t);
         return o;
     }
 
-    private static void Walk(NifFile nif, int index, Matrix4x4 parent, List<LodMeshPart> parts, List<string> warnings, HashSet<int> visited, bool passthru, bool waterAsLit)
+    private static void Walk(NifFile nif, int index, Matrix4x4 parent, List<LodMeshPart> parts, List<string> warnings, HashSet<int> visited, bool passthru, bool waterAsLit, bool includeTexGenPlane)
     {
         if (index < 0 || index >= nif.Blocks.Count || !visited.Add(index)) return;
         var block = nif.Blocks[index];
@@ -130,13 +131,13 @@ public static class NifGeometryReader
             uint numChildren = r.U32();
             var children = new int[numChildren];
             for (int i = 0; i < numChildren; i++) children[i] = r.I32();
-            foreach (var c in children) Walk(nif, c, world, parts, warnings, visited, passthru, waterAsLit);
+            foreach (var c in children) Walk(nif, c, world, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane);
         }
         else if (ShapeTypes.Contains(block.Type))
         {
             try
             {
-                var part = ReadShape(nif, block, parent, warnings, passthru, waterAsLit);
+                var part = ReadShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane);
                 if (part is not null) parts.Add(part);
             }
             catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or InvalidDataException)
@@ -149,7 +150,7 @@ public static class NifGeometryReader
             // Skyrim LE (Oldrim) geometry: the same shader and alpha blocks, but the vertices live in a NiTriShapeData block.
             try
             {
-                var part = ReadLeShape(nif, block, parent, warnings, passthru, waterAsLit);
+                var part = ReadLeShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane);
                 if (part is not null) parts.Add(part);
             }
             catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or InvalidDataException)
@@ -165,11 +166,11 @@ public static class NifGeometryReader
 
     // ---------- shapes ----------
 
-    private static LodMeshPart? ReadShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit)
+    private static LodMeshPart? ReadShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane)
     {
         var r = nif.ReaderFor(block);
         var av = ReadAvObject(nif, ref r);
-        if ((av.Flags & 1) != 0) return null;
+        if ((av.Flags & 1) != 0 && !(includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true)) return null;
 
         r.Skip(16); // bounding sphere
         int skin = r.I32();
@@ -184,6 +185,8 @@ public static class NifGeometryReader
         if (dataSize == 0 || numVerts == 0 || numTris == 0) return null;
 
         var material = ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit);
+        if (material is null && includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true)
+            material = new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0);
         if (material is null) { warnings.Add($"Shape '{av.Name}' has no lighting shader; skipped."); return null; }
         bool water = waterAsLit && ReferenceEquals(material, FakeWaterMaterial);
         if (water) warnings.Add(WaterPlaneWarning + av.Name);
@@ -248,7 +251,7 @@ public static class NifGeometryReader
 
         return new LodMeshPart
         {
-            Name = av.Name,
+            Name = av.Name, TexGenScale = av.Scale,
             Material = material,
             Positions = pos, UVs = uv, Normals = nrm, Tangents = tan, Bitangents = bit,
             Colors = col, Triangles = tris,
@@ -259,11 +262,11 @@ public static class NifGeometryReader
     /// A Skyrim LE (Oldrim) shape: NiTriShape (or BSLODTriShape) with a NiTriShapeData block. Tangents come from the data block when it has
     /// them, otherwise they are worked out from the UVs (LE keeps them in an extra data block we don't read).
     /// </summary>
-    private static LodMeshPart? ReadLeShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit)
+    private static LodMeshPart? ReadLeShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane)
     {
         var r = nif.ReaderFor(block);
         var av = ReadAvObject(nif, ref r);
-        if ((av.Flags & 1) != 0) return null;
+        if ((av.Flags & 1) != 0 && !(includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true)) return null;
 
         int dataRef = r.I32();
         int skin = r.I32();
@@ -278,6 +281,8 @@ public static class NifGeometryReader
         if (dataRef < 0 || dataRef >= nif.Blocks.Count || nif.Blocks[dataRef].Type != "NiTriShapeData") return null;
 
         var material = ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit);
+        if (material is null && includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true)
+            material = new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0);
         if (material is null) { warnings.Add($"Shape '{av.Name}' has no lighting shader; skipped."); return null; }
         bool water = waterAsLit && ReferenceEquals(material, FakeWaterMaterial);
         if (water) warnings.Add(WaterPlaneWarning + av.Name);
@@ -367,7 +372,7 @@ public static class NifGeometryReader
 
         return new LodMeshPart
         {
-            Name = av.Name,
+            Name = av.Name, TexGenScale = av.Scale,
             Material = material,
             Positions = pos, UVs = uv, Normals = nrm, Tangents = tan, Bitangents = bit,
             Colors = col, Triangles = tris,
@@ -452,7 +457,7 @@ public static class NifGeometryReader
         {
             var tr = nif.ReaderFor(nif.Blocks[texSetRef]);
             uint n = tr.U32();
-            for (int i = 0; i < n; i++) textures.Add(tr.SizedString());
+            for (int i = 0; i < n; i++) textures.Add(AnvilLOD.Core.World.GamePath.NormalizeTexture(tr.SizedString()));
         }
         if (textures.Count == 0 || string.IsNullOrWhiteSpace(textures[0])) return null;
         while (textures.Count < 9) textures.Add("");

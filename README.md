@@ -2,6 +2,17 @@
 
 # AnvilLOD
 
+**Native Linux desktop and CLI:** this branch adds an Avalonia application with MO2/Data-folder
+setup, generation settings, progress/cancellation, mesh and texture tools, rule editing and presets.
+Run `bash tools/build.sh`, then `./dist/linux-x64/run-anvillod.sh`.
+The desktop now includes native texture stitching, basic tree/grass billboards, hybrid tree trunk textures,
+experimental object rendering, texture previews and a combined **Textures, then LOD** job.
+See the [texture-generation workflow and current limits](docs/LINUX-PORT.md#native-texture-generation).
+The **Grass cache** page now includes a bundled native FasterNGIO CPU backend, direct Fluorine/MO2
+profile support, small-area previews, validated output with backups, and **Grass, textures, then LOD**.
+No Skyrim or Wine process is needed. See [grass caching](docs/LINUX-PORT.md#native-grass-caching).
+See [Linux setup, testing and limitations](docs/LINUX-PORT.md). The upstream Windows WPF app remains available.
+
 A fast, incremental object-LOD generator for Skyrim SE/AE, built as a modern replacement for DynDOLOD.
 
 Its goals:
@@ -175,7 +186,7 @@ Tick **3D tree LOD** (`--tree-3d`) to put real 3D trees into object LOD, the way
 - Trees with a model get the 3D model at LOD4 and billboard cards at LOD8, LOD16 and LOD32 (`--tree-3d-lod8` uses the model at LOD8 too, with much bigger files). They are taken out of the billboard tree LOD (`.btt`); every other tree keeps billboard tree LOD.
 - Models are read with their shaders untouched ("passthru"). `spherenormals` shapes get normals pointing away from the model's centre, and the **tree LOD brightness** setting applies to the 3D models and the cards alike.
 - **Accept models by tree name** (on by default; `--tree-3d-crc-only` turns it off): when no model has the tree mesh's CRC32 in its name, the model stored under the plain tree name is used. That is how DynDOLOD Resources ships almost all of its models and how DynDOLOD itself matches (a CRC32 in the name is only for name collisions). A model made for another version of a tree mesh (before a mod or a patcher changed it) can look slightly off; with the option off you get exact matches only, which is none with DynDOLOD Resources. The log says how many tree types are matched by name.
-- A model whose textures can't be found isn't used, and the trees keep billboard tree LOD. The usual cause is the flat trunk textures (`textures\DynDOLOD\LOD\Trees\<tree>_<CRC32>_trunk_1.dds`), which TexGen renders from the model's `_trunk.nif` in `DynDOLOD\Render\Billboards`. Run TexGen with that resource installed, or use a pack that ships the textures.
+- A model whose textures can't be found isn't used, and the trees keep billboard tree LOD. The usual cause is the flat trunk textures (`textures\DynDOLOD\LOD\Trees\<tree>_<CRC32>_trunk_1.dds`). On the native desktop, enable **Hybrid tree trunk textures** and run **Textures, then LOD** with the tree mod's `_trunk.nif` render resources installed. TexGen output or a pack that ships the textures also works.
 - The log estimates how many triangles and megabytes the models add to the blocks before you generate. 3D trees can make LOD4 files much larger (about 40 KB per tree in a real list).
 
 Tree LOD and object LOD brightness go from 10% to 110% in 10% steps (`--tree-brightness`, `--object-brightness`). Object LOD is darkened through vertex colours, so the LOD textures themselves, which other mods share, are never changed.
@@ -362,7 +373,7 @@ Tick **Draw missing tree billboards** on the Trees page (`--render-trees`) and e
 - **How it looks:** the front view of the model, alpha-tested with its own textures, 2x supersampled, up to 512 pixels. Checked against TexGen's own billboards for 85 trees: the height is the same (median ratio 1.02) and the vertical offset matches exactly. The picture is a little brighter than TexGen's; the tree LOD brightness setting covers that.
 - **Cache:** the billboards are written to `%LocalAppData%\AnvilLOD\TreeBillboards` in TexGen's file layout and read last, below every mod. A billboard is drawn again only when its model or one of its textures changed. Delete the folder to start over.
 
-**What TexGen still has to do:** the billboards above replace TexGen's tree billboards, not its trunk textures. 3D tree LOD needs the flat trunk textures (`textures\DynDOLOD\LOD\Trees\<tree>_<CRC32>_trunk_1.dds`) that TexGen makes from each model's `_trunk.nif`; without them those trees keep billboard tree LOD (on the dev list: 11,584 trees with 3D LOD without TexGen's output, 50,626 with it).
+**Hybrid tree trunks:** the native desktop's **Texture generation** page also renders front/side trunk textures from `_trunk.nif` resources, aligned to the installed hybrid meshes. Enable **Hybrid tree trunk textures**, then **Textures, then LOD**. The missing-billboard fallback described above remains separate. See [native texture generation](docs/LINUX-PORT.md#native-texture-generation) for supported resources and remaining TexGen limitations.
 
 ## Textures that don't exist
 

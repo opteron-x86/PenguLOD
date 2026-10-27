@@ -86,7 +86,7 @@ public class ParentCopyTests
             };
             Assert.Equal(2, ParentCopyWriter.Write(dir, copies));
 
-            var b = File.ReadAllBytes(Path.Combine(dir, ParentCopyWriter.RelativePath));
+            var b = File.ReadAllBytes(Path.Combine(dir, ParentCopyWriter.RelativePath.Replace('\\', Path.DirectorySeparatorChar)));
             using var r = new BinaryReader(new MemoryStream(b));
             Assert.Equal("ALCP", Encoding.ASCII.GetString(r.ReadBytes(4)));
             Assert.Equal(1u, r.ReadUInt32());

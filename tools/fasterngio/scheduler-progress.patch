@@ -1,0 +1,295 @@
+--- a/src/Pipeline/TbbGraphScheduler.cpp
++++ b/src/Pipeline/TbbGraphScheduler.cpp
+@@ -3,6 +3,7 @@
+ #include "Concurrency/AtomicWait.h"
+ 
+ #include <oneapi/tbb/task_group.h>
++#include <oneapi/tbb/task_arena.h>
+ 
+ #include <atomic>
+ #include <chrono>
+@@ -20,7 +21,7 @@
+ 		{
+ 		public:
+ 			explicit TbbScope(std::shared_ptr<const Identity> a_owner) :
+-				owner(std::move(a_owner)) {}
++				owner(std::move(a_owner)) { arena.initialize(); }
+ 
+ 			[[nodiscard]] bool StopRequested() const noexcept override { return stopped.load(std::memory_order_acquire); }
+ 			void Cancel() noexcept override { stopped.store(true, std::memory_order_release); }
+@@ -29,10 +30,11 @@
+ 			{
+ 				// Delayed tasks land in the group later; wait until none are pending first.
+ 				Concurrency::WaitUntil(delayed, [](std::uint64_t a_pending) { return a_pending == 0; });
+-				group->wait();
++				arena.execute([this] { group->wait(); });
+ 			}
+ 
+ 			std::shared_ptr<const Identity> owner;
++			mutable oneapi::tbb::task_arena arena;
+ 			// Held by pointer: task_group's destructor may throw, TaskScope's must not.
+ 			std::unique_ptr<oneapi::tbb::task_group> group = std::make_unique<oneapi::tbb::task_group>();
+ 			mutable std::atomic<std::uint64_t> delayed{ 0 };
+@@ -81,13 +83,17 @@
+ 
+ 			static void Run(const std::shared_ptr<TbbScope>& a_scope, Task a_task)
+ 			{
+-				a_scope->group->run([scope = a_scope, task = std::move(a_task)] {
++				// External writer/timer callbacks must target this scope's arena.
++				// enqueue(defer(...)) both tracks the task for Wait and guarantees
++				// eventual execution even while all submitting threads are asleep.
++				// task_group::run alone inherits the caller's current arena.
++				a_scope->arena.enqueue(a_scope->group->defer([scope = a_scope, task = std::move(a_task)] {
+ 					const std::weak_ptr<TbbScope> weak = scope;
+ 					task(org::async::TaskContext{ [weak] {
+ 						const auto locked = weak.lock();
+ 						return !locked || locked->StopRequested();
+ 					} });
+-				});
++				}));
+ 			}
+ 
+ 			const std::shared_ptr<const Identity> _identity = std::make_shared<Identity>();
+--- a/src/Pipeline/FileWriterPool.h
++++ b/src/Pipeline/FileWriterPool.h
+@@ -30,7 +30,7 @@
+ 	class FileWriterPool
+ 	{
+ 	public:
+-		FileWriterPool(std::uint32_t a_threads, std::uint64_t a_maxPendingBytes);
++		FileWriterPool(std::uint32_t a_threads, std::uint64_t a_maxPendingBytes, std::atomic<std::uint64_t>* a_progress = nullptr);
+ 		// Writes everything still queued, then stops the threads.
+ 		~FileWriterPool();
+ 		FileWriterPool(const FileWriterPool&) = delete;
+@@ -71,6 +71,7 @@
+ 		void Write(Job& a_job);
+ 
+ 		const std::uint64_t _maxPendingBytes;
++		std::atomic<std::uint64_t>* const _progress;
+ 		std::vector<std::unique_ptr<Slot>> _slots;
+ 		std::atomic<std::uint32_t> _next{ 0 };
+ 		std::atomic<std::uint64_t> _pendingFiles{ 0 };
+--- a/src/Pipeline/FileWriterPool.cpp
++++ b/src/Pipeline/FileWriterPool.cpp
+@@ -11,8 +11,8 @@
+ 
+ namespace FasterNGIO::Pipeline
+ {
+-	FileWriterPool::FileWriterPool(std::uint32_t a_threads, std::uint64_t a_maxPendingBytes) :
+-		_maxPendingBytes(a_maxPendingBytes)
++	FileWriterPool::FileWriterPool(std::uint32_t a_threads, std::uint64_t a_maxPendingBytes, std::atomic<std::uint64_t>* a_progress) :
++		_maxPendingBytes(a_maxPendingBytes), _progress(a_progress)
+ 	{
+ 		const auto threads = (std::max)(a_threads, 1u);
+ 		for (std::uint32_t i = 0; i < threads; ++i) {
+@@ -82,6 +82,7 @@
+ 		try {
+ 			Platform::WriteWholeFile(a_job.path, a_job.bytes);
+ 			a_job.tally->written.fetch_add(1, std::memory_order_relaxed);
++			if (_progress) _progress->fetch_add(1, std::memory_order_relaxed);
+ 		} catch (const std::exception& e) {
+ 			spdlog::error("{}", e.what());
+ 			a_job.tally->failed.fetch_add(1, std::memory_order_relaxed);
+--- a/apps/FasterNGIO/Generate.h
++++ b/apps/FasterNGIO/Generate.h
+@@ -41,6 +41,7 @@
+ 		std::atomic<std::uint32_t> worldFormID{ 0 };
+ 		std::atomic<std::uint32_t> cellsDone{ 0 };
+ 		std::atomic<std::uint32_t> cellsTotal{ 0 };
++		std::atomic<std::uint64_t> filesWritten{ 0 };
+ 	};
+ 
+ 	struct RunControl
+--- a/apps/FasterNGIO/Generate.cpp
++++ b/apps/FasterNGIO/Generate.cpp
+@@ -561,7 +561,7 @@
+ 			const auto grassModels = LoadGrassModels(plugins.snapshot, *resolver);
+ 			placement.unloadableGrass = std::addressof(grassModels.missingGrass);
+ 			ThrowIfStopped(a_control);
+-			writer.emplace(options.writerThreads, kMaxPendingWriteBytes);
++			writer.emplace(options.writerThreads, kMaxPendingWriteBytes, a_control.progress ? &a_control.progress->filesWritten : nullptr);
+ 			RemoveNoGrassCaches(options.outputDirectory, plugins.snapshot, Platform::ModOrganizerDirectory().has_value(), *writer);
+ 			std::optional<std::unordered_set<std::string>> existingFiles;
+ 			bool emptyInsteadOfRemove = false;
+--- a/apps/FasterNGIO/Main.cpp
++++ b/apps/FasterNGIO/Main.cpp
+@@ -12,14 +12,62 @@
+ #endif
+ 
+ #include <algorithm>
++#include <chrono>
+ #include <exception>
+ #include <optional>
+ #include <string>
+ #include <string_view>
++#include <thread>
++#include <tuple>
+ #include <vector>
+ 
+ namespace
+ {
++	// The CLI is also AnvilLOD's backend: keep redirected logs useful during a
++	// long world, including the writer drain after the last cell was processed.
++	void ReportProgress(const FasterNGIO::App::RunProgress& a_progress, std::stop_token a_stop)
++	{
++		using namespace FasterNGIO::App;
++		using Clock = std::chrono::steady_clock;
++		const auto begin = Clock::now();
++		auto changedAt = begin;
++		auto nextReport = begin + std::chrono::seconds(5);
++		std::tuple<RunStage, std::uint32_t, std::uint32_t, std::uint64_t> previous{};
++		bool warned = false;
++		while (!a_stop.stop_requested()) {
++			std::this_thread::sleep_for(std::chrono::milliseconds(100));
++			if (a_stop.stop_requested()) break;
++			const auto now = Clock::now();
++			const auto stage = a_progress.stage.load(std::memory_order_relaxed);
++			const auto world = a_progress.worldIndex.load(std::memory_order_relaxed);
++			const auto cells = a_progress.cellsDone.load(std::memory_order_relaxed);
++			const auto files = a_progress.filesWritten.load(std::memory_order_relaxed);
++			const auto current = std::tuple{ stage, world, cells, files };
++			if (current != previous) {
++				previous = current;
++				changedAt = now;
++				warned = false;
++			}
++			if (!warned && (stage == RunStage::Generating || stage == RunStage::Writing) && now - changedAt >= std::chrono::seconds(120)) {
++				spdlog::warn("no cell/write progress for 120s; generation may be stalled. AnvilLOD can cancel this run without replacing the installed cache");
++				warned = true;
++			}
++			if (now < nextReport || stage == RunStage::Finished) continue;
++			nextReport = now + std::chrono::seconds(5);
++			const auto elapsed = std::chrono::duration<double>(now - begin).count();
++			if (stage == RunStage::LoadingPlugins) {
++				spdlog::info("progress: loading plugins and assets; elapsed {:.0f}s", elapsed);
++			} else if (stage == RunStage::Writing) {
++				spdlog::info("progress: finishing disk writes; {} files written; elapsed {:.0f}s", files, elapsed);
++			} else {
++				spdlog::info("progress: {} world {}/{} (0x{:08X}); cells processed {}/{}; {} files written; elapsed {:.0f}s",
++					stage == RunStage::Preparing ? "preparing" : "generating",
++					world + 1, a_progress.worldCount.load(std::memory_order_relaxed), a_progress.worldFormID.load(std::memory_order_relaxed),
++					cells, a_progress.cellsTotal.load(std::memory_order_relaxed), files, elapsed);
++			}
++		}
++	}
++
+ 	// The command line, run or handed to the launcher window.
+ 	int RunMain(const std::vector<std::string_view>& a_args)
+ 	{
+@@ -47,7 +95,9 @@
+ 				// of n alone would leave --threads 1 with no thread to run anything.
+ 				threadLimit.emplace(oneapi::tbb::global_control::max_allowed_parallelism, options->threads + 1);
+ 			}
+-			return App::Run(*options).exitCode;
++			App::RunProgress progress;
++			std::jthread reporter([&](std::stop_token stop) { ReportProgress(progress, stop); });
++			return App::Run(*options, { .progress = &progress }).exitCode;
+ 		} catch (const std::exception& e) {
+ 			spdlog::error("{}", e.what());
+ 			return 1;
+--- a/tests/CMakeLists.txt
++++ b/tests/CMakeLists.txt
+@@ -27,7 +27,8 @@
+ fasterngio_configure_target(FasterNGIOTests)
+ # zlib writes the compressed records of the test plugins.
+ target_link_libraries(FasterNGIOTests PRIVATE FasterNGIOApp ZLIB::ZLIB GTest::gtest_main)
++target_include_directories(FasterNGIOTests PRIVATE "${PROJECT_SOURCE_DIR}/external/ORGModuleServices/include")
+ if(FASTERNGIO_ENABLE_GPU AND WIN32)
+ 	fasterngio_enable_agility(FasterNGIOTests)
+ endif()
+-gtest_discover_tests(FasterNGIOTests DISCOVERY_MODE PRE_TEST)
++gtest_discover_tests(FasterNGIOTests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 30)
+--- a/tests/CellPipelineTests.cpp
++++ b/tests/CellPipelineTests.cpp
+@@ -1,11 +1,15 @@
+ #include "Pipeline/CellPipeline.h"
+ #include "Pipeline/FileWriterPool.h"
++#include "Pipeline/TbbGraphScheduler.h"
+ #include "Grass/LandTexture.h"
+ #include "Rejection/CpuBvh.h"
+ 
+ #include "TestSupport.h"
+ 
+ #include <gtest/gtest.h>
++#include <oneapi/tbb/global_control.h>
++#include <oneapi/tbb/task_arena.h>
++#include <future>
+ 
+ #include <atomic>
+ #include <stop_token>
+@@ -145,6 +149,32 @@
+ 		writer.Drain();
+ 	}
+ 	EXPECT_EQ(tally->written.load(), 3u);
++}
++
++TEST(CellPipeline, ResumesEveryCellAfterWriterBackpressure)
++{
++	oneapi::tbb::global_control threads(oneapi::tbb::global_control::max_allowed_parallelism, 32);
++	EmptyWorld world;
++	world.lands.clear();
++	for (std::int32_t x = 0; x < 4096; ++x) {
++		auto& land = world.lands.emplace_back();
++		land.cellX = x;
++		land.cellY = -1;
++		land.hasHeights = true;
++	}
++	auto tally = std::make_shared<Pipeline::WriteTally>();
++	// Even a four-byte empty cache exceeds this budget. Force many workers
++	// through the writer's suspension/resume handshake, including its last file.
++	Pipeline::FileWriterPool writer(1, 1);
++	auto desc = world.Desc();
++	desc.writer = &writer;
++	desc.writeTally = tally;
++	const auto stats = Pipeline::RunCellPipeline(desc);
++	writer.Drain();
++	EXPECT_EQ(stats.cellsWritten, 4096u);
++	EXPECT_EQ(stats.cellsFailed, 0u);
++	EXPECT_EQ(tally->written.load(), 4096u);
++	EXPECT_EQ(writer.PendingFiles(), 0u);
+ }
+ 
+ TEST(CellPipeline, CancelsCellsOnceStopped)
+@@ -215,3 +245,21 @@
+ 	// Ignored grass is never rejected, texture or not.
+ 	EXPECT_EQ(run(&mask, &ignored).bladesRejected, 0u);
+ }
++
++TEST(TbbGraphScheduler, DispatchDoesNotDependOnTheCallingArena)
++{
++	auto scheduler = Pipeline::MakeTbbGraphScheduler();
++	auto scope = scheduler->CreateScope("external writer");
++	std::promise<void> completed;
++	auto done = completed.get_future();
++	// An external callback may run in a different arena. The graph promises
++	// its own workers; it must not strand a wakeup in the caller's arena.
++	oneapi::tbb::task_arena caller(2, 2);
++	caller.execute([&] {
++		EXPECT_TRUE(scheduler->Dispatch(scope, {}, org::async::TaskDispatch::Cpu, "resume",
++			[&](const org::async::TaskContext&) { completed.set_value(); }));
++	});
++	EXPECT_EQ(done.wait_for(std::chrono::seconds(2)), std::future_status::ready);
++	// Also cleans up the old implementation when this regression test fails.
++	caller.execute([&] { scope->Wait(); });
++}
+--- a/tests/FileWriterPoolTests.cpp
++++ b/tests/FileWriterPoolTests.cpp
+@@ -23,8 +23,9 @@
+ {
+ 	TempDirectory directory;
+ 	auto tally = std::make_shared<Pipeline::WriteTally>();
++	std::atomic<std::uint64_t> progress{ 0 };
+ 	{
+-		Pipeline::FileWriterPool writer(3, 1ull << 30);
++		Pipeline::FileWriterPool writer(3, 1ull << 30, &progress);
+ 		std::vector<std::thread> producers;
+ 		for (int p = 0; p < 4; ++p) {
+ 			producers.emplace_back([&, p] {
+@@ -41,6 +42,7 @@
+ 		EXPECT_EQ(writer.PendingFiles(), 0u);
+ 	}
+ 	EXPECT_EQ(tally->written.load(), 200u);
++	EXPECT_EQ(progress.load(), 200u);
+ 	EXPECT_EQ(tally->failed.load(), 0u);
+ 	for (int id = 0; id < 200; ++id) {
+ 		const auto bytes = Tests::ReadAll(directory.Path() / (std::to_string(id) + ".bin"));

@@ -51,8 +51,8 @@ public static class SizeBreakdown
     public static SortedDictionary<string, SortedDictionary<int, long>> DiskBySeason(string outputFolder)
     {
         var bySeason = new SortedDictionary<string, SortedDictionary<int, long>>(StringComparer.Ordinal);
-        var meshes = Path.Combine(outputFolder, "meshes", "Terrain");
-        if (!Directory.Exists(meshes)) return bySeason;
+        var meshes = AnvilLOD.Core.World.GamePath.ResolveExisting(outputFolder, @"meshes\terrain");
+        if (meshes is null || !Directory.Exists(meshes)) return bySeason;
         foreach (var file in Directory.EnumerateFiles(meshes, "*.bto", SearchOption.AllDirectories))
         {
             // <world>.<level>.<x>.<y>[.<SUF>].bto

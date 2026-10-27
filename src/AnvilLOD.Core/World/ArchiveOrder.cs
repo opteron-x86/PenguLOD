@@ -15,14 +15,14 @@ public static class ArchiveOrder
     {
         // Longest plugin base name first, so "Skyrim - Textures" can't be taken by a plugin called "Skyrim".
         var bases = pluginOrder
-            .Select((name, index) => (Base: Path.GetFileNameWithoutExtension(name), Index: index))
+            .Select((name, index) => (Base: GamePath.GetFileNameWithoutExtension(name), Index: index))
             .Where(p => p.Base.Length > 0)
             .OrderByDescending(p => p.Base.Length)
             .ToList();
 
         int Rank(string archivePath)
         {
-            var file = Path.GetFileNameWithoutExtension(archivePath);
+            var file = GamePath.GetFileNameWithoutExtension(archivePath);
             foreach (var (b, index) in bases)
                 if (file.StartsWith(b, StringComparison.OrdinalIgnoreCase)
                     && (file.Length == b.Length || !char.IsLetterOrDigit(file[b.Length])))
@@ -33,7 +33,7 @@ public static class ArchiveOrder
         return archiveFiles
             .Select(p => (Path: p, Rank: Rank(p)))
             .OrderBy(t => t.Rank)
-            .ThenBy(t => Path.GetFileName(t.Path), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(t => GamePath.GetFileName(t.Path), StringComparer.OrdinalIgnoreCase)
             .Select(t => t.Path)
             .ToList();
     }

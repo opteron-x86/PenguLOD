@@ -1,0 +1,88 @@
+--- a/src/Grass/CellCache.cpp
++++ b/src/Grass/CellCache.cpp
+@@ -99,6 +99,7 @@
+ 
+ 	FinalizedCell FinalizeCell(const CellCandidates& a_candidates, std::span<const std::uint32_t> a_rejected, const BlockLayout& a_layout)
+ 	{
++		FinalizedCell result;
+ 		// The surviving blades of each group and quadrant, in placement order.
+ 		std::vector<std::vector<std::uint32_t>> kept(a_candidates.groups.size() * kQuadrants);
+ 		std::vector<bool> loadable;
+@@ -114,10 +115,18 @@
+ 			if (!loadable[blade.groupIndex]) {
+ 				continue;
+ 			}
++			// x/y/z/scale are half floats. Out-of-range terrain heights can encode
++			// infinity (observed in ksws07World), poisoning both the blade and the
++			// block's bounds. Omit only these unrepresentable blades, after all RNG
++			// draws and rejection; retain every valid blade's original bytes/order.
++			if (std::any_of(blade.words.begin(), blade.words.begin() + 4,
++				[](std::uint16_t word) { return (word & 0x7C00u) == 0x7C00u; })) {
++				++result.bladesInvalid;
++				continue;
++			}
+ 			kept[blade.groupIndex * kQuadrants + blade.quadrant].push_back(static_cast<std::uint32_t>(i));
+ 		}
+ 
+-		FinalizedCell result;
+ 		if (a_layout.capQuadrantBlades) {
+ 			for (auto& blades : kept) {
+ 				if (blades.size() > kMaxBladesPerQuadrant) {
+--- a/src/Grass/CellCache.h
++++ b/src/Grass/CellCache.h
+@@ -51,6 +51,8 @@
+ 		NgioCellCache cache;
+ 		// Blades past the quadrant cap.
+ 		std::uint32_t bladesCapped{ 0 };
++		// Position/scale overflowed the cache's half-float format, or were NaN.
++		std::uint32_t bladesInvalid{ 0 };
+ 	};
+ 
+ 	// Builds the .cgid payload from the blades that survive. a_rejected is one bit per blade (bit i
+--- a/src/Pipeline/CellPipeline.cpp
++++ b/src/Pipeline/CellPipeline.cpp
+@@ -454,6 +454,10 @@
+ 					_rejected.fetch_add(CountBits(work.rejected));
+ 					_blades.fetch_add(work.candidates.blades.size());
+ 					const auto finalized = Grass::FinalizeCell(work.candidates, work.rejected, _desc.blockLayout);
++					if (finalized.bladesInvalid != 0) {
++						spdlog::warn("{} cell ({}, {}): omitted {} blade(s) with position/scale outside the finite grass-cache range",
++							_desc.worldEditorID, work.candidates.cellX, work.candidates.cellY, finalized.bladesInvalid);
++					}
+ 					const auto& cache = finalized.cache;
+ 					if (finalized.bladesCapped != 0) {
+ 						_capped.fetch_add(finalized.bladesCapped);
+--- a/tests/CellCacheTests.cpp
++++ b/tests/CellCacheTests.cpp
+@@ -197,3 +197,31 @@
+ 	EXPECT_FALSE(Grass::IsNgioCacheFileOf("WhiterunWorldExtx0005y-003.cgid", "WhiterunWorld"));
+ 	EXPECT_FALSE(Grass::IsNgioCacheFileOf("Tamrielx0005y-003.cgid", "WhiterunWorld"));
+ }
++
++TEST(FinalizeCell, OmitsUnrepresentableBladesWithoutChangingValidPayloads)
++{
++	GameData::GrassInfo grass{};
++	auto valid = MakeCell(grass);
++	AddBlade(valid, 10.0f, 20.0f, 30.0f);
++	AddBlade(valid, 10.0f, 20.0f, -65504.0f);
++	const auto expected = Grass::SerializeNgioCellCache(Grass::FinalizeCell(valid, {}).cache);
++	auto mixed = valid;
++	// A finite world height can overflow the encoded half float. Also exercise
++	// NaN/infinity in every stored position component and the scale component.
++	AddBlade(mixed, 10.0f, 20.0f, -70000.0f);
++	for (std::size_t axis = 0; axis < 4; ++axis) {
++		AddBlade(mixed, 10.0f, 20.0f, 30.0f);
++		mixed.blades.back().words[axis] = axis % 2 ? 0x7E00u : 0x7C00u;
++	}
++	const auto result = Grass::FinalizeCell(mixed, {});
++	EXPECT_EQ(result.bladesInvalid, 5u);
++	EXPECT_EQ(Grass::SerializeNgioCellCache(result.cache), expected);
++	// Cells containing only invalid blades still emit the valid empty cache,
++	// suppressing an older installed cache at that coordinate.
++	mixed.blades.erase(mixed.blades.begin(), mixed.blades.begin() + 2);
++	const auto empty = Grass::FinalizeCell(mixed, {});
++	EXPECT_EQ(empty.bladesInvalid, 5u);
++	EXPECT_EQ(Grass::SerializeNgioCellCache(empty.cache), (std::vector<std::uint8_t>{ 0, 0, 0, 0 }));
++	const std::uint32_t rejected = 0xFFFFFFFFu;
++	EXPECT_EQ(Grass::FinalizeCell(mixed, std::span(&rejected, 1)).bladesInvalid, 0u);
++}

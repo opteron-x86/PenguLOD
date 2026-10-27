@@ -7,6 +7,7 @@ namespace AnvilLOD.Cli;
 
 public static class Program
 {
+    private static CancellationToken Cancellation;
     private const string Usage = """
         AnvilLOD — fast object LOD generator for Skyrim SE/AE
 
@@ -27,8 +28,8 @@ public static class Program
                                          samples it) and converts them to BC7. Without --apply it only lists them. Options:
                                          --apply  --output <folder> (put the fixed files there, same relative paths: a new mod that
                                          overrides the broken ones) or --in-place --backup <folder> (replace them; the originals are
-                                         copied to the backup folder first)  --texconv <texconv.exe or a folder that has it>
-                                         (default: found in the xLODGen / SSEEdit / DynDOLOD folders "Edit Scripts" or on the path)
+                                         copied to the backup folder first). Native managed conversion is the default.
+                                         --texconv <executable> optionally uses an external converter instead
                                          --mo2 scans every enabled mod of the profile and Overwrite.
 
           AnvilLOD convert-lod --source <mod folder> --output <folder> [--all-meshes] [--overwrite]
@@ -52,6 +53,10 @@ public static class Program
 
         Options:
           --mo2 <path>           MO2 instance folder (with ModOrganizer.ini) — reads mods directly, no need to launch from MO2
+          --wine-prefix <path>   Wine/Proton pfx folder used to resolve Windows drive paths
+          --game-ini <path>      Override Skyrim archive settings explicitly
+          --cache-folder <path>  Override the generated tree-billboard cache location
+          --threads <n>          Worker limit (0 = available processors minus one)
           --profile <name>       MO2 profile (default: the instance's selected profile)
           --data <path>          Skyrim Data folder (default: auto-detect / MO2 VFS)
           --plugins <path>       plugins.txt to use (requires --data)
@@ -113,7 +118,7 @@ public static class Program
           --no-trees             Don't build billboard tree LOD (.lst/.btt + atlas)
           --render-trees         Trees without a TexGen billboard get one drawn from their own model, so TexGen is not needed
                                  for them (tall trees only; small plants TexGen skipped on purpose stay without LOD).
-                                 The billboards are cached in %LOCALAPPDATA%\AnvilLOD\TreeBillboards; a real TexGen one wins.
+                                 Billboards are cached in the user cache folder (or --cache-folder); a real TexGen one wins.
           --tree-3d              Use 3D tree LOD models (DynDOLOD passthru_lod.nif, matched by the CRC32 of the
                                  tree's mesh) in object LOD: 3D at LOD4, billboard cards from LOD8 on.
                                  Trees without a model keep billboard tree LOD.
@@ -152,6 +157,7 @@ public static class Program
     /// <summary>Refuses options that would otherwise be silently ignored.</summary>
     private static CliArgs Checked(CliArgs a)
     {
+        a.ResolvePaths();
         _ = Mo2LocationsFromArgs(a);
         return CheckedLargeRefs(a);
     }
@@ -159,9 +165,9 @@ public static class Program
     private static AnvilLOD.Plugins.Mo2.Mo2Locations? Mo2LocationsFromArgs(CliArgs a)
     {
         var l = new AnvilLOD.Plugins.Mo2.Mo2Locations(a.Get("mo2-game"), a.Get("mo2-mods"), a.Get("mo2-profiles"), a.Get("mo2-overwrite"));
-        if (l.IsEmpty) return null;
+        if (l.IsEmpty) return a.Get("mo2") is not null && a.Get("wine-prefix") is { } prefix ? l with { WinePrefix = prefix } : null;
         if (a.Get("mo2") is null) throw new CliArgException("--mo2-game, --mo2-mods, --mo2-profiles and --mo2-overwrite only apply together with --mo2 <instance folder>.");
-        return l;
+        return l with { WinePrefix = a.Get("wine-prefix") };
     }
 
     private static CliArgs CheckedLargeRefs(CliArgs a)
@@ -209,31 +215,41 @@ public static class Program
             return args.Length == 0 ? 1 : 0;
         }
 
+        using var cancellation = new CancellationTokenSource();
+        Cancellation = cancellation.Token;
+        ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; cancellation.Cancel(); Console.Error.WriteLine("Cancelling…"); };
+        Console.CancelKeyPress += cancel;
         try
         {
+            var options = Checked(CliArgs.Parse(args[1..]));
+            int threads = 0;
+            if (options.Get("threads") is { } value && (!int.TryParse(value, out threads) || threads < 0 || threads > 1024))
+                throw new CliArgException("--threads must be a whole number from 0 to 1024.");
+            using var limits = RunLimits.Enter(threads, Cancellation, options.Get("cache-folder"));
             return args[0].ToLowerInvariant() switch
             {
-                "scan" => RunScan(Checked(CliArgs.Parse(args[1..])), generate: false),
-                "generate" => RunScan(Checked(CliArgs.Parse(args[1..])), generate: true),
-                "author" => RunAuthor(Checked(CliArgs.Parse(args[1..]))),
-                "lodmaker" => RunLodMaker(Checked(CliArgs.Parse(args[1..]))),
-                "convert-lod" => RunConvertLod(Checked(CliArgs.Parse(args[1..]))),
-                "fix-textures" => RunFixTextures(Checked(CliArgs.Parse(args[1..]))),
+                "scan" => RunScan(options, generate: false),
+                "generate" => RunScan(options, generate: true),
+                "author" => RunAuthor(options),
+                "lodmaker" => RunLodMaker(options),
+                "convert-lod" => RunConvertLod(options),
+                "fix-textures" => RunFixTextures(options),
                 _ => Fail($"Unknown command '{args[0]}'.\n\n{Usage}"),
             };
         }
-        catch (CliArgException e)
-        {
-            return Fail(e.Message + "\n\n" + Usage);
-        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        { Console.Error.WriteLine("Cancelled. Partial output may remain; rerun before installing it."); return 130; }
+        catch (CliArgException e) { return Fail(e.Message + "\n\n" + Usage); }
+        catch (Exception e) { return Fail(e.GetBaseException().Message); }
+        finally { Console.CancelKeyPress -= cancel; }
     }
 
     private static int RunScan(CliArgs a, bool generate)
     {
         var total = Stopwatch.StartNew();
         var gameOptions = a.Get("mo2") is { } mo2Folder
-            ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2Folder, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a))
-            : new GameContextOptions(a.Get("data"), a.Get("plugins"));
+            ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2Folder, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"))
+            : new GameContextOptions(a.Get("data"), a.Get("plugins"), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"));
         var outputFolder = a.Get("output") ?? (generate ? OutputFolder.DefaultFolder(gameOptions) : null);
         if (generate && a.Get("output") is null) Console.WriteLine($"No --output given: using {outputFolder}");
 
@@ -304,7 +320,7 @@ public static class Program
 
         // Progress<T> posts asynchronously; a synchronous reporter keeps console output ordered.
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
-        var s = ScanPipeline.Run(req, sync);
+        var s = ScanPipeline.Run(req, sync, Cancellation);
         total.Stop();
 
         Console.WriteLine();
@@ -339,7 +355,7 @@ public static class Program
         var reportPath = a.Get("report") ?? Path.Combine(AppContext.BaseDirectory, "AnvilLOD.scan.json");
         ScanReport.Write(reportPath, s, total.Elapsed);
         Console.WriteLine($"Report: {reportPath}");
-        return 0;
+        return s.Generation is { BlocksFailed: > 0 } || s.Grids.Count == 0 ? 1 : 0;
     }
 
     private static int RunAuthor(CliArgs a)
@@ -350,8 +366,8 @@ public static class Program
         var total = Stopwatch.StartNew();
         var req = new AnvilLOD.Plugins.Authoring.AuthorRequest(
             a.Get("mo2") is { } mo2
-                ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a))
-                : new GameContextOptions(a.Get("data"), a.Get("plugins")),
+                ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"))
+                : new GameContextOptions(a.Get("data"), a.Get("plugins"), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix")),
             plugin, output,
             LodMeshes: !a.Has("no-meshes"),
             Billboards: !a.Has("no-billboards"),
@@ -366,7 +382,7 @@ public static class Program
             CustomBudget: ParseBudget(a.Get("budget")).Custom);
         Console.WriteLine("WARNING: " + AnvilLOD.Plugins.Authoring.ModAuthorTool.Warning);
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
-        var r = AnvilLOD.Plugins.Authoring.ModAuthorTool.Run(req, sync);
+        var r = AnvilLOD.Plugins.Authoring.ModAuthorTool.Run(req, sync, Cancellation);
         Console.WriteLine();
         foreach (var g in r.Items.GroupBy(i => (i.Kind, Status: i.Status.Split(':')[0])).OrderBy(g => g.Key.Kind).ThenBy(g => g.Key.Status))
             Console.WriteLine($"  {g.Key.Kind,-7} {g.Key.Status,-45} {g.Count(),5}");
@@ -399,7 +415,7 @@ public static class Program
         if (folders.Count == 0) throw new CliArgException("fix-textures needs --input <folder> (repeatable) or --mo2 <instance>.");
         var total = Stopwatch.StartNew();
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
-        var bad = AnvilLOD.Core.Textures.TextureFixer.Scan(folders, sync);
+        var bad = AnvilLOD.Core.Textures.TextureFixer.Scan(folders, sync, Cancellation);
         foreach (var b in bad.OrderBy(b => b.Mod, StringComparer.OrdinalIgnoreCase).ThenBy(b => b.Relative, StringComparer.OrdinalIgnoreCase))
             Console.WriteLine($"  {b.Mod}\\{b.Relative}  {b.Format}  {b.Width}x{b.Height}, {b.Mips} mips  {(b.Fixable ? "can be converted" : "cannot be converted here")}");
         if (!a.Has("apply") || bad.Count == 0)
@@ -412,11 +428,13 @@ public static class Program
         var backup = a.Get("backup");
         if (inPlace == (output is not null)) throw new CliArgException("--apply needs either --output <folder> or --in-place with --backup <folder>.");
         if (inPlace && backup is null) throw new CliArgException("--in-place needs --backup <folder> (the originals are copied there first).");
-        var texconv = AnvilLOD.Core.Textures.TextureFixer.FindTexconv([a.Get("texconv"), .. new[] { mo2Root }.Where(x => x is not null).SelectMany(r => new[] { Path.Combine(r!, "tools") }),
-            Environment.GetEnvironmentVariable("TEXCONV")])
-            ?? throw new CliArgException("texconv.exe was not found: pass --texconv <exe or folder> (xEdit, xLODGen and DynDOLOD have it in their \"Edit Scripts\" folder).");
-        Console.WriteLine($"Using {texconv}");
-        var results = AnvilLOD.Core.Textures.TextureFixer.Fix(bad, texconv, inPlace ? null : output, inPlace ? backup : null, dryRun: false, sync);
+        var texconv = a.Get("texconv");
+        if (texconv is not null && !File.Exists(texconv)) throw new CliArgException("--texconv must name an executable file.");
+        if (texconv is not null && !OperatingSystem.IsWindows() && texconv.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            throw new CliArgException("Use a Linux texconv executable, or omit --texconv for native managed BC6H conversion.");
+        Console.WriteLine(texconv is null ? "Using native managed BC6H → BC7 conversion" : $"Using {texconv}");
+        var results = AnvilLOD.Core.Textures.TextureFixer.Fix(bad, texconv ?? "", inPlace ? null : output, inPlace ? backup : null,
+            dryRun: false, sync, Cancellation, nativeConverter: texconv is null ? AnvilLOD.Textures.NativeTextureConverter.Bc6ToBc7 : null);
         foreach (var r in results.Where(r => !r.Status.StartsWith("Converted", StringComparison.Ordinal))) Console.WriteLine($"  {r.Source.Mod}\\{r.Source.Relative}: {r.Status}");
         return results.Any(r => r.Status.StartsWith("Failed", StringComparison.Ordinal)) ? 1 : 0;
     }
@@ -428,7 +446,7 @@ public static class Program
         var total = Stopwatch.StartNew();
         Console.WriteLine("WARNING: " + AnvilLOD.Plugins.Authoring.OldrimLodConverter.Warning);
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
-        var r = AnvilLOD.Plugins.Authoring.OldrimLodConverter.Run(new AnvilLOD.Plugins.Authoring.ConvertRequest(source, output, a.Has("all-meshes"), a.Has("overwrite")), sync);
+        var r = AnvilLOD.Plugins.Authoring.OldrimLodConverter.Run(new AnvilLOD.Plugins.Authoring.ConvertRequest(source, output, a.Has("all-meshes"), a.Has("overwrite")), sync, Cancellation);
         Console.WriteLine($"Report: {r.ReportFile}");
         return 0;
     }
@@ -463,7 +481,7 @@ public static class Program
             RuleFile: !a.Has("no-rules"), Overwrite: a.Has("overwrite"), Budget: budget, CustomBudget: custom, Plugin: a.Get("plugin"));
         Console.WriteLine("WARNING: " + AnvilLOD.Plugins.Authoring.LodMeshMaker.Warning);
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
-        var r = AnvilLOD.Plugins.Authoring.LodMeshMaker.Run(req, sync);
+        var r = AnvilLOD.Plugins.Authoring.LodMeshMaker.Run(req, sync, Cancellation);
         Console.WriteLine();
         foreach (var g in r.Items.GroupBy(i => i.Status.Split(':')[0]).OrderBy(g => g.Key))
             Console.WriteLine($"  {g.Key,-48} {g.Count(),5}");

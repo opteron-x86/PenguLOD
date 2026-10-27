@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using AnvilLOD.Core.Lod;
 using AnvilLOD.Core.Pipeline;
+using AnvilLOD.Core.World;
 using AnvilLOD.Textures;
 
 namespace AnvilLOD.Plugins;
@@ -24,7 +25,7 @@ public static class OpaqueLodStage
     public static Result Run(IAssetSource assets, OpaqueLodTextures opaque, string output, IProgress<string>? progress, CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
-        var root = Path.Combine(output, OpaqueLodTextures.OutputRoot);
+        var root = GamePath.ToFileSystemPath(output, OpaqueLodTextures.OutputRoot);
         var sidecarPath = Path.Combine(root, Sidecar);
         var known = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
@@ -37,10 +38,10 @@ public static class OpaqueLodStage
         int written = 0, unchanged = 0, failed = 0;
         var errors = new ConcurrentBag<string>();
 
-        Parallel.ForEach(opaque.Conversions, new ParallelOptions { CancellationToken = ct }, kv =>
+        Parallel.ForEach(opaque.Conversions, RunLimits.Parallel(ct), kv =>
         {
             var (rel, src) = (kv.Key, kv.Value);
-            var dest = Path.Combine(output, rel);
+            var dest = GamePath.ToFileSystemPath(output, rel);
             var stamp = "v1|" + (assets.Fingerprint(src) ?? "?");
             if (File.Exists(dest) && known.TryGetValue(rel, out var prev) && prev == stamp) { Interlocked.Increment(ref unchanged); return; }
             try
@@ -74,7 +75,7 @@ public static class OpaqueLodStage
     {
         try
         {
-            var root = Path.Combine(output, OpaqueLodTextures.OutputRoot);
+            var root = GamePath.ToFileSystemPath(output, OpaqueLodTextures.OutputRoot);
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
         catch (IOException) { }

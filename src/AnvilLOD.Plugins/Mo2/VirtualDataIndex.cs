@@ -1,3 +1,4 @@
+using AnvilLOD.Core.Pipeline;
 using System.Diagnostics;
 using AnvilLOD.Core.World;
 
@@ -46,7 +47,7 @@ public sealed class VirtualDataIndex
         int missing = 0;
         foreach (var mod in profile.EnabledModsLowToHigh)
         {
-            var dir = Path.Combine(inst.ModsFolder, mod);
+            var dir = GamePath.ResolveExisting(inst.ModsFolder, mod) ?? Path.Combine(inst.ModsFolder, mod);
             if (exclude is not null && string.Equals(Path.GetFullPath(dir).TrimEnd('\\', '/'), exclude, StringComparison.OrdinalIgnoreCase))
             {
                 excluded = dir;
@@ -59,7 +60,7 @@ public sealed class VirtualDataIndex
 
         // Enumerate every layer in parallel, then merge in priority order.
         var perLayer = new (List<KeyValuePair<string, string>> Root, List<KeyValuePair<string, string>> Loose)[layers.Count];
-        Parallel.For(0, layers.Count, i => perLayer[i] = ScanLayer(layers[i], looseRoots, inst.SkipDirectories));
+        Parallel.For(0, layers.Count, RunLimits.Parallel(), i => perLayer[i] = ScanLayer(layers[i], looseRoots, inst.SkipDirectories));
 
         var root = new Dictionary<string, string>(StringComparer.Ordinal);
         var loose = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -100,8 +101,8 @@ public sealed class VirtualDataIndex
             foreach (var root0 in looseRoots)
             {
                 var rel = root0.Replace('/', '\\').Trim('\\').ToLowerInvariant();
-                var dir = Path.Combine(layer, rel.Replace('\\', Path.DirectorySeparatorChar));
-                if (Directory.Exists(dir)) WalkLoose(dir, rel, loose, skipDirs);
+                var dir = GamePath.ResolveExisting(layer, rel);
+                if (dir is not null && Directory.Exists(dir)) WalkLoose(dir, rel, loose, skipDirs);
             }
         }
         catch (DirectoryNotFoundException) { }
@@ -162,11 +163,10 @@ public sealed class VirtualDataIndex
         if (_loose.TryGetValue(key, out var p)) return p;
         foreach (var r in _indexedRoots)
             if (key.StartsWith(r, StringComparison.Ordinal)) return null;
-        var rel = key.Replace('\\', Path.DirectorySeparatorChar);
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            var full = Path.Combine(Layers[i], rel);
-            if (File.Exists(full) && !File.Exists(full + ".mohidden")) return full;
+            var full = GamePath.ResolveExisting(Layers[i], key);
+            if (full is not null && File.Exists(full) && !File.Exists(full + ".mohidden")) return full;
         }
         return null;
     }

@@ -15,7 +15,7 @@ public static class OutputFolder
     private static readonly string[] Kept = ["meta.ini"];
 
     /// <summary>Files that only AnvilLOD writes: a folder holding one of them is its output.</summary>
-    private static readonly string[] OwnMarkers = ["AnvilLOD.manifest.json", "AnvilLOD.log"];
+    private static readonly string[] OwnMarkers = ["AnvilLOD.manifest.json", "AnvilLOD.log", TextureGenerationManifest.FileName, GrassGenerationManifest.FileName];
 
     /// <summary>Names that show a folder is a game, mod manager or mods folder, never somewhere to empty.</summary>
     private static readonly string[] ProtectedMarkers =
@@ -60,7 +60,17 @@ public static class OutputFolder
             Directory.CreateDirectory(full);
             created = true;
         }
-        if (!clear || created) return new Result(created, false, 0, null); // a folder that was just made has nothing to clear
+        if (created) return new Result(true, false, 0, null);
+        if (!clear)
+        {
+            // An incremental rebuild cannot remove malformed paths left by an older Linux build. They can make
+            // Windows plugins (including PGLite) fail while walking the virtual Data folder, even if unused.
+            if (!OperatingSystem.IsWindows() && FindInvalidWindowsName(full) is { } invalid)
+                throw new IOException($"The previous output contains a path Windows cannot read: '{invalid}'. "
+                    + "Enable 'Clear previous AnvilLOD output before generation' or choose a new empty output folder, "
+                    + "then replace the old output mod instead of merging files into it.");
+            return new Result(false, false, 0, null);
+        }
 
         if (WhyNotToClear(full) is { } why)
             return new Result(created, false, 0, $"Output folder not cleared: {why} Pick an empty folder (or use \"{DefaultName}\") to get a clean output on every run.");
@@ -115,5 +125,19 @@ public static class OutputFolder
         foreach (var f in dir.EnumerateFiles("*", SearchOption.AllDirectories))
             if ((f.Attributes & FileAttributes.ReadOnly) != 0) f.Attributes = FileAttributes.Normal;
         dir.Delete(recursive: true);
+    }
+
+    private static string? FindInvalidWindowsName(string root)
+    {
+        var pending = new Stack<DirectoryInfo>();
+        pending.Push(new DirectoryInfo(root));
+        while (pending.TryPop(out var dir))
+            foreach (var entry in dir.EnumerateFileSystemInfos())
+            {
+                if (entry.Name.Any(c => c < 32 || "<>:\"|?*\\".Contains(c))) return entry.FullName;
+                if (entry is DirectoryInfo child && (entry.Attributes & FileAttributes.ReparsePoint) == 0)
+                    pending.Push(child);
+            }
+        return null;
     }
 }

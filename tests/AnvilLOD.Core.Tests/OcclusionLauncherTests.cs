@@ -15,7 +15,7 @@ public sealed class OcclusionLauncherTests : IDisposable
 
     private string Touch(string relative, string text = "x")
     {
-        var path = Path.Combine(_root, relative);
+        var path = Path.Combine(_root, relative.Replace('\\', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, text);
         return path;

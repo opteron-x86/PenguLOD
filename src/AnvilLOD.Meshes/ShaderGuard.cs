@@ -1,3 +1,5 @@
+using AnvilLOD.Core.World;
+
 namespace AnvilLOD.Meshes;
 
 /// <summary>
@@ -14,7 +16,7 @@ public static class ShaderGuard
     public static string[] TextureSlots(IReadOnlyList<string> textures)
     {
         var slots = new string[Slots];
-        for (int i = 0; i < Slots; i++) slots[i] = i < textures.Count ? textures[i] ?? "" : "";
+        for (int i = 0; i < Slots; i++) slots[i] = i < textures.Count ? GamePath.NormalizeTexture(textures[i] ?? "") : "";
         return slots;
     }
 

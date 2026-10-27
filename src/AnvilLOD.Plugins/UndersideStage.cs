@@ -1,3 +1,4 @@
+using AnvilLOD.Core.Pipeline;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using AnvilLOD.Core.World;
@@ -66,7 +67,7 @@ public static class UndersideStage
             if (origins.Count == 0) continue;
 
             var shapes = new ConcurrentBag<UndersideMesher.Shape>();
-            Parallel.ForEach(origins, new ParallelOptions { CancellationToken = ct }, o =>
+            Parallel.ForEach(origins, RunLimits.Parallel(ct), o =>
             {
                 if (UndersideMesher.Build(terrain, ws, o.X, o.Y, step) is { } shape) shapes.Add(shape);
             });
@@ -74,7 +75,7 @@ public static class UndersideStage
             var nif = UndersideBuilder.Build(ws, [.. shapes]);
             if (nif is null) continue;
 
-            var path = Path.Combine(output, UndersideBuilder.RelativePath(ws));
+            var path = GamePath.ToFileSystemPath(output, UndersideBuilder.RelativePath(ws));
             if (File.Exists(path) && new FileInfo(path).Length == nif.Bytes.Length && File.ReadAllBytes(path).AsSpan().SequenceEqual(nif.Bytes))
                 unchanged++;
             else

@@ -98,6 +98,20 @@ public class OutputFolderTests : IDisposable
         Assert.True(File.Exists(Path.Combine(dir, "meshes", "a.nif")));
     }
 
+    [Theory]
+    [InlineData("textures/d:/author/texture.dds")]
+    [InlineData("meshes\\LOD\\Grass/grass.nif")]
+    public void Incremental_output_with_Windows_invalid_names_requires_cleanup(string badPath)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var dir = Make("bad", "AnvilLOD.manifest.json", badPath);
+        var error = Assert.Throws<IOException>(() => OutputFolder.Prepare(dir, clear: false));
+        Assert.Contains("replace the old output mod", error.Message);
+        Assert.True(File.Exists(Path.Combine(dir, badPath))); // a failed preflight must not delete anything
+        Assert.Null(OutputFolder.Prepare(dir, clear: true).Warning);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(dir));
+    }
+
     [Fact]
     public void The_default_folder_is_AnvilLOD_Output_in_the_mods_folder_or_documents()
     {

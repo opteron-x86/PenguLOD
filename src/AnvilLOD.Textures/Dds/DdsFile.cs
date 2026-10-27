@@ -4,7 +4,7 @@ using AnvilLOD.Textures.Bc;
 namespace AnvilLOD.Textures.Dds;
 
 /// <summary>
-/// Minimal DDS reader/writer: 2D textures, BC1/2/3/4/5/7 and 32-bit uncompressed, legacy or DX10 headers.
+/// Minimal DDS reader/writer: 2D textures, BC1/2/3/4/5/7 and 24/32-bit uncompressed, legacy or DX10 headers.
 /// Reading decodes the top mip to RGBA8; writing produces BC7 (DX10 header) with a full mip chain.
 /// </summary>
 public static class DdsFile
@@ -12,7 +12,7 @@ public static class DdsFile
     private const uint Magic = 0x20534444; // "DDS "
     private const int HeaderSize = 124;
 
-    public sealed record Info(int Width, int Height, int MipCount, BcFormat Format, bool Uncompressed, bool Bgra, int DataOffset, int DxgiFormat);
+    public sealed record Info(int Width, int Height, int MipCount, BcFormat Format, bool Uncompressed, bool Bgra, int DataOffset, int DxgiFormat, int BitsPerPixel = 32);
 
     public static Info ReadInfo(ReadOnlySpan<byte> file)
     {
@@ -20,6 +20,8 @@ public static class DdsFile
             throw new InvalidDataException("Not a DDS file.");
         int height = BinaryPrimitives.ReadInt32LittleEndian(file[12..]);
         int width = BinaryPrimitives.ReadInt32LittleEndian(file[16..]);
+        if (width <= 0 || height <= 0 || (long)width * height > int.MaxValue / 4)
+            throw new InvalidDataException("Invalid DDS dimensions.");
         int mips = Math.Max(1, BinaryPrimitives.ReadInt32LittleEndian(file[28..]));
 
         // DDS_PIXELFORMAT at offset 76
@@ -40,6 +42,7 @@ public static class DdsFile
                 case "ATI1" or "BC4U": return new(width, height, mips, BcFormat.Bc4, false, false, offset, 80);
                 case "ATI2" or "BC5U": return new(width, height, mips, BcFormat.Bc5, false, false, offset, 83);
                 case "DX10":
+                    if (file.Length < 148) throw new InvalidDataException("Truncated DDS DX10 header.");
                     int dxgi = BinaryPrimitives.ReadInt32LittleEndian(file[128..]);
                     offset += 20;
                     return dxgi switch
@@ -59,6 +62,8 @@ public static class DdsFile
         }
         if (bitCount == 32)
             return new(width, height, mips, BcFormat.None, true, rMask == 0x00FF0000, offset, rMask == 0x00FF0000 ? 87 : 28);
+        if (bitCount == 24 && (pfFlags & 0x40) != 0)
+            return new(width, height, mips, BcFormat.None, true, rMask == 0x00FF0000, offset, 0, 24);
         throw new NotSupportedException($"DDS pixel format ({bitCount}-bit, flags 0x{pfFlags:X}) is not supported.");
     }
 
@@ -69,6 +74,37 @@ public static class DdsFile
         var data = file.AsSpan(info.DataOffset);
         if (info.Uncompressed)
         {
+            if (info.BitsPerPixel == 24)
+            {
+                int pitch = checked(info.Width * 3);
+                if ((BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(8)) & 8) != 0)
+                    pitch = BinaryPrimitives.ReadInt32LittleEndian(file.AsSpan(20));
+                if (pitch < info.Width * 3 || (long)pitch * info.Height > data.Length)
+                    throw new InvalidDataException("Truncated or invalid 24-bit DDS rows.");
+                uint rMask = BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(92));
+                uint gMask = BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(96));
+                uint bMask = BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(100));
+                static byte Channel(uint pixel, uint mask)
+                {
+                    if (mask == 0 || mask > 0xffffff) throw new InvalidDataException("Invalid 24-bit DDS channel mask.");
+                    int shift = System.Numerics.BitOperations.TrailingZeroCount(mask);
+                    uint max = mask >> shift, value = (pixel & mask) >> shift;
+                    return (byte)((value * 255UL + max / 2) / max);
+                }
+                var expanded = new byte[checked(info.Width * info.Height * 4)];
+                for (int y = 0; y < info.Height; y++)
+                {
+                    AnvilLOD.Core.Pipeline.RunLimits.Check();
+                    for (int x = 0; x < info.Width; x++)
+                    {
+                        int src = y * pitch + x * 3, dst = (y * info.Width + x) * 4;
+                        uint pixel = (uint)(data[src] | data[src + 1] << 8 | data[src + 2] << 16);
+                        expanded[dst] = Channel(pixel, rMask); expanded[dst + 1] = Channel(pixel, gMask);
+                        expanded[dst + 2] = Channel(pixel, bMask); expanded[dst + 3] = 255;
+                    }
+                }
+                return (expanded, info.Width, info.Height, info);
+            }
             var rgba = data[..(info.Width * info.Height * 4)].ToArray();
             if (info.Bgra)
                 for (int i = 0; i < rgba.Length; i += 4) (rgba[i], rgba[i + 2]) = (rgba[i + 2], rgba[i]);

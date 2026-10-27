@@ -1,3 +1,4 @@
+using AnvilLOD.Core.Pipeline;
 using System.Collections.Concurrent;
 
 namespace AnvilLOD.Core.Occlusion;
@@ -214,7 +215,7 @@ public sealed class OcclusionCalculator
         var list = cells.Where(c => _grid.HasData(c.X, c.Y)).ToList();
         var result = new ConcurrentDictionary<(int X, int Y), TvdtData>();
         int done = 0;
-        Parallel.ForEach(list, new ParallelOptions { CancellationToken = ct }, c =>
+        Parallel.ForEach(list, RunLimits.Parallel(ct), c =>
         {
             result[c] = Compute(c.X, c.Y);
             progress?.Report(Interlocked.Increment(ref done));

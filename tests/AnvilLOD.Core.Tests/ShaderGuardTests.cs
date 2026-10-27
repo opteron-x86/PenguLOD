@@ -14,7 +14,7 @@ public class ShaderGuardTests
     {
         Assert.Equal(9, ShaderGuard.TextureSlots(["a.dds"]).Length);
         Assert.Equal(9, ShaderGuard.TextureSlots([]).Length);
-        Assert.Equal("a.dds", ShaderGuard.TextureSlots(["a.dds"])[0]);
+        Assert.Equal(@"textures\a.dds", ShaderGuard.TextureSlots(["a.dds"])[0]);
         Assert.All(ShaderGuard.TextureSlots(["a.dds"]).Skip(1), s => Assert.Equal("", s));
     }
 

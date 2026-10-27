@@ -15,4 +15,6 @@
     <ProjectReference Include="..\..\src\AnvilLOD.Textures\AnvilLOD.Textures.csproj" />
     <ProjectReference Include="..\..\src\AnvilLOD.Plugins\AnvilLOD.Plugins.csproj" />
   </ItemGroup>
+  <ItemGroup><Compile Include="../Shared/TextureFixture.cs" Link="TextureFixture.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/GrassFixture.cs" Link="GrassFixture.cs" /></ItemGroup>
 </Project>

@@ -46,7 +46,7 @@ public class LodMeshMakerTests : IDisposable
 
     private string Model(string folder, string file)
     {
-        var path = Path.Combine(_root, folder, file);
+        var path = Path.Combine(_root, folder.Replace('\\', Path.DirectorySeparatorChar), file);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, DenseModel(Path.GetFileNameWithoutExtension(file)));
         return path;

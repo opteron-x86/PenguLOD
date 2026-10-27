@@ -39,13 +39,13 @@ public static class OldrimLodConverter
         var sw = Stopwatch.StartNew();
         if (!Directory.Exists(req.SourceFolder)) throw new DirectoryNotFoundException($"Source folder not found: {req.SourceFolder}");
         Directory.CreateDirectory(req.OutputFolder);
-        if (string.Equals(Path.GetFullPath(req.SourceFolder).TrimEnd('\\'), Path.GetFullPath(req.OutputFolder).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(req.SourceFolder)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(req.OutputFolder)), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The output folder must be a different folder from the source.");
 
         // Index: loose meshes first, then the folder's archives (loose files win, as in the game).
         var sources = new Dictionary<string, Func<byte[]>>(StringComparer.OrdinalIgnoreCase);
-        var meshesDir = Path.Combine(req.SourceFolder, "meshes");
-        foreach (var bsa in Directory.EnumerateFiles(req.SourceFolder, "*.bsa", SearchOption.TopDirectoryOnly).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+        var meshesDir = GamePath.ResolveExisting(req.SourceFolder, "meshes");
+        foreach (var bsa in Directory.EnumerateFiles(req.SourceFolder).Where(p => p.EndsWith(".bsa", StringComparison.OrdinalIgnoreCase)).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
         {
             var reader = OpenArchive(bsa, progress);
             if (reader is null) continue;
@@ -59,8 +59,8 @@ public static class OldrimLodConverter
                 }
             }
         }
-        if (Directory.Exists(meshesDir))
-            foreach (var full in Directory.EnumerateFiles(meshesDir, "*.nif", SearchOption.AllDirectories))
+        if (meshesDir is not null && Directory.Exists(meshesDir))
+            foreach (var full in Directory.EnumerateFiles(meshesDir, "*", SearchOption.AllDirectories).Where(p => p.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)))
             {
                 var path = full;
                 sources[GamePath.Normalize(Path.GetRelativePath(req.SourceFolder, full))] = () => File.ReadAllBytes(path);
@@ -107,7 +107,7 @@ public static class OldrimLodConverter
                 continue;
             }
 
-            var stem = Path.GetFileNameWithoutExtension(key);
+            var stem = GamePath.GetFileNameWithoutExtension(key);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.WriteAllBytes(target, LodNifWriter.Write(stem, mesh.Parts, "AnvilLOD Oldrim converter"));
             converted++;

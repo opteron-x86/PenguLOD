@@ -76,7 +76,7 @@ public sealed class TreeAtlasBuilder
         int reduced = items.Count(i => i.Factor > 1);
 
         // Decode (and scale) every billboard to RGBA.
-        Parallel.ForEach(items, new ParallelOptions { CancellationToken = ct }, it =>
+        Parallel.ForEach(items, RunLimits.Parallel(ct), it =>
         {
             var (rgba, w, h, _) = DdsFile.DecodeTopMip(it.File);
             for (int f = it.Factor; f > 1; f /= 2) (rgba, w, h) = Downsample(rgba, w, h);
@@ -100,7 +100,7 @@ public sealed class TreeAtlasBuilder
         var empty = new byte[16];
         Bc7Encoder.EncodeBlock(new byte[64], empty);
         for (int i = 0; i < top.Length; i += 16) empty.CopyTo(top, i);
-        Parallel.ForEach(items, new ParallelOptions { CancellationToken = ct }, it =>
+        Parallel.ForEach(items, RunLimits.Parallel(ct), it =>
         {
             int bw = (it.W + 3) / 4, bh = (it.H + 3) / 4;
             byte[] blocks;
@@ -180,7 +180,7 @@ public sealed class TreeAtlasBuilder
     {
         int nw = Math.Max(1, w / 2), nh = Math.Max(1, h / 2);
         var dst = new byte[nw * nh * 4];
-        Parallel.For(0, nh, y =>
+        Parallel.For(0, nh, RunLimits.Parallel(), y =>
         {
             for (int x = 0; x < nw; x++)
             {

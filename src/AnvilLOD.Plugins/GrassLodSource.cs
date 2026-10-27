@@ -168,7 +168,7 @@ public sealed class GrassLodSource : ISyntheticMeshSource
         }
 
         var types = GrassCache.Read(bytes);
-        GrassCache.TryParseFileName(Path.GetFileName(cache), out _, out int x, out int y, out _);
+        GrassCache.TryParseFileName(GamePath.GetFileName(cache), out _, out int x, out int y, out _);
         var origin = new Vector3(x * CellCoord.CellSize, y * CellCoord.CellSize, 0);
 
         var withBillboards = new List<(GrassBillboard, IReadOnlyList<GrassInstance>)>();
