@@ -93,6 +93,7 @@ public sealed partial class MainWindow
             .Concat(s.Stats.MissingMeshes.OrderByDescending(m => m.Value).Take(100).Select(m => $"Missing mesh ({m.Value:N0} refs): {m.Key}"))
             .Concat(s.Generation?.MeshErrors.Select(m => "Mesh error: " + m) ?? [])
             .Concat(s.Generation?.BlockErrors.Select(m => "Block error: " + m) ?? []);
+        _treeCoverage.ItemsSource = s.Tree3D?.Levels;
         _issues.Text = string.Join('\n', issues);
     }
     public sealed record WorldRow(string World, int Lod4, int Lod8, int Lod16, int Lod32);

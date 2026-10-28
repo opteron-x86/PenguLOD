@@ -116,6 +116,7 @@ public static class ScanPipeline
     public static ScanSummary Run(ScanRequest req, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+        req.Scan.Tree3D?.Validate();
         if (req.Generate && string.IsNullOrWhiteSpace(req.OutputFolder))
             throw new ArgumentException("Choose an output folder before generating LOD.");
         if (req.Generate) GenerationDestination.Validate(req.Game, req.OutputFolder!);
@@ -433,7 +434,7 @@ public static class ScanPipeline
             var t3 = req.Scan.Tree3D ?? Tree3DSettings.Off;
             if (t3.Enabled)
             {
-                tree3d = new Tree3DSource(assets, req.TreeBrightness);
+                tree3d = new Tree3DSource(assets, req.TreeBrightness, t3);
                 var withModel = allTrees.Where(t => t.Model3D is not null).ToList();
                 var reasons = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
                 Parallel.ForEach(withModel.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase), RunLimits.Parallel(ct),
@@ -457,24 +458,23 @@ public static class ScanPipeline
                 int byName = in3d.Where(t => t.Model3DByName).Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 int types = in3d.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 int nameOnly = scanner.Tree3DNameOnlyAvailable;
-                long t3Tris = 0, t3Bytes = 0;
-                foreach (var g in in3d.GroupBy(t => t.Model3D!, StringComparer.OrdinalIgnoreCase))
+                var coverage = tree3d.Report(in3d, t3);
+                long t3Tris = coverage.Sum(r => r.PlacedTriangles);
+                double t3Mb = coverage.Sum(r => r.ApproxMegabytes);
+                int nativeTypes = in3d.Where(t => t.Model3DGenerated).Select(t => t.Model3D).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                int near3d = in3d.Count(t => tree3d.Select(t.Model3D!, 4, t.Model3DGenerated).MeshPath is not null);
+                foreach (var fallback in coverage.Where(r => r.Fallback is not null))
                 {
-                    var (v, tr) = tree3d.Size(g.Key);
-                    t3Tris += (long)tr * g.Count();
-                    t3Bytes += ((long)v * 32 + (long)tr * 6) * g.Count();
+                    string message = $"{fallback.Model} LOD{fallback.Level}: {fallback.Fallback}";
+                    t3Warnings.Add(message); progress?.Report("3D tree fallback: " + message);
                 }
-                int t3Levels = t3.Lod8 ? 2 : 1;
-                tree3dStats = new Tree3DStats(in3d.Count, types, types - byName, byName, skippedTypes.Count, skippedTrees, nameOnly, t3Warnings,
-                    t3Tris, t3Bytes / 1048576.0);
-                progress?.Report($"3D tree LOD: {in3d.Count:N0} of {allTrees.Count:N0} trees use a 3D model ({types} models: {types - byName} matched by CRC32, {byName} by name; "
-                                 + (t3.Lod8 ? "LOD4 and LOD8" : "LOD4 only") + "), billboard cards further out");
+                tree3dStats = new Tree3DStats(near3d, types, types - byName - nativeTypes, byName, skippedTypes.Count, skippedTrees, nameOnly, t3Warnings,
+                    t3Tris, t3Mb, coverage, nativeTypes, allTrees.Count);
+                progress?.Report($"3D tree LOD: {near3d:N0} of {allTrees.Count:N0} trees use near 3D geometry; {nativeTypes} types use native source reduction.");
                 if (scanner.Tree3DPatchedMeshes > 0)
                     progress?.Report($"3D tree LOD: PGPatcher's ParallaxGen_Diff.json lists {scanner.Tree3DPatchedMeshes:N0} patched meshes; {scanner.Tree3DMatchedByOriginalCrc} tree models were found under the checksum from before patching, as DynDOLOD does.");
                 if (in3d.Count > 0)
-                    progress?.Report($"3D tree LOD: the models add about {t3Tris * t3Levels / 1e6:F1} million triangles and {t3Bytes * t3Levels / 1048576.0:F0} MB to the LOD blocks"
-                                     + (t3.Lod8 ? "" : " (turning on LOD8 would roughly double that)")
-                                     + ". Heavy models are the usual cause of huge LOD files; a lighter model set or fewer levels keeps them small.");
+                    progress?.Report($"Tree geometry across selected near levels: {t3Tris / 1e6:F1} million triangles, approximately {t3Mb:F0} MB before block merging. See per-model/level coverage in the scan report.");
                 if (nameOnly > 0)
                     progress?.Report($"3D tree LOD: {nameOnly} tree types have a 3D model under the plain tree name that doesn't match their mesh (changed by a mod or patcher). "
                                      + "Turn on \"accept models by name\" to use them.");
@@ -486,7 +486,7 @@ public static class ScanPipeline
             if (light.Count > 0 || in3d.Count > 0) cards = new TreeCardSource(assets, req.TreeBrightness);
             if (in3d.Count > 0)
             {
-                allRefs = [.. allRefs, .. Tree3DSource.ToReferences(in3d, t3)];
+                allRefs = [.. allRefs, .. tree3d!.ToReferences(in3d, t3)];
                 foreach (var t in in3d) objectLodWorlds.Add(t.Worldspace);
             }
             if (light.Count > 0)

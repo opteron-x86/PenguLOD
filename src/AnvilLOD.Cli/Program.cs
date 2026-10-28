@@ -128,7 +128,12 @@ public static class Program
           --tree-3d              Use 3D tree LOD models (DynDOLOD passthru_lod.nif, matched by the CRC32 of the
                                  tree's mesh) in object LOD: 3D at LOD4, billboard cards from LOD8 on.
                                  Trees without a model keep billboard tree LOD.
-          --tree-3d-lod8         With --tree-3d: use the 3D model at LOD8 too (bigger files)
+          --tree-3d-lod8         With --tree-3d: use a distinct/simpler model at LOD8 when it fits the budget
+          --tree-near-budget N  Triangles per near tree model, default 4000; 0 removes the cap
+          --tree-far-budget N   Triangles per far tree model, default 1600
+          --tree-near-error N   Maximum trunk simplification deviation, default 4 game units
+          --tree-far-error N    Maximum far-trunk deviation, default 24 game units
+          --no-native-trees     Do not build missing 3D tree models from full tree meshes
           --tree-3d-crc-only     With --tree-3d: only use models whose file name carries the tree mesh's CRC32.
                                  Default: when none matches, the model stored under the plain tree name is used
                                  (how DynDOLOD Resources ships almost all of its models, and how DynDOLOD matches)
@@ -210,7 +215,14 @@ public static class Program
                 throw new CliArgException("--tree-3d-lod8, --tree-3d-by-name, --tree-3d-crc-only and --tree-3d-dyndolod-first only apply together with --tree-3d.");
             return null;
         }
-        return new Tree3DSettings(Enabled: true, Lod8: a.Has("tree-3d-lod8"), PlainNameFallback: !a.Has("tree-3d-crc-only"), MapTrees: !a.Has("no-map-trees"), PreferNamedLod: !a.Has("tree-3d-dyndolod-first"));   // --tree-3d-own-lod (0.2.62) is still accepted: it is the default now   // --tree-3d-by-name is still accepted: it is the default now
+        int Budget(string key, int fallback) => a.Get(key) is { } value && int.TryParse(value, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int result) ? result : a.Has(key) ? throw new CliArgException("Invalid --" + key) : fallback;
+        float Error(string key, float fallback) => a.Get(key) is { } value && float.TryParse(value, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float result) ? result : a.Has(key) ? throw new CliArgException("Invalid --" + key) : fallback;
+        var settings = new Tree3DSettings(Enabled: true, Lod8: a.Has("tree-3d-lod8"), PlainNameFallback: !a.Has("tree-3d-crc-only"),
+            MapTrees: !a.Has("no-map-trees"), PreferNamedLod: !a.Has("tree-3d-dyndolod-first"), NearTriangleBudget: Budget("tree-near-budget", 4000),
+            FarTriangleBudget: Budget("tree-far-budget", 1600), NearMaxError: Error("tree-near-error", 4), FarMaxError: Error("tree-far-error", 24), GenerateMissing: !a.Has("no-native-trees"));
+        settings.Validate(); return settings;
     }
 
     public static int Main(string[] args)

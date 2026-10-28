@@ -64,7 +64,8 @@ public sealed class TreeCardSource : ISyntheticMeshSource
     private (string Dds, string Normal, string Txt) Files(string plainDds)
     {
         var stem = plainDds.EndsWith("_1.dds", StringComparison.OrdinalIgnoreCase) ? plainDds[..^6] : plainDds[..^4];
-        return (stem + "_1.dds", stem + "_1_n.dds", stem + ".txt");
+        return _assets.Exists(stem + "_1.dds") ? (stem + "_1.dds", stem + "_1_n.dds", stem + ".txt")
+            : (stem + ".dds", stem + "_n.dds", stem + ".txt");
     }
 
     private LodMesh? Create(string plainDds)
@@ -73,7 +74,7 @@ public sealed class TreeCardSource : ISyntheticMeshSource
         if (!_assets.Exists(dds) || !_assets.TryOpen(txt, out var st)) return null;
         string text;
         using (var reader = new StreamReader(st)) text = reader.ReadToEnd();
-        var bb = TreeBillboard.Parse(dds, text, useFirstView: true);
+        var bb = TreeBillboard.Parse(dds, text, useFirstView: dds.EndsWith("_1.dds", StringComparison.OrdinalIgnoreCase));
         if (bb is null) return null;
 
         var material = new LodMaterial(

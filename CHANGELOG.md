@@ -12,6 +12,9 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 - Native terrain/water stage with landscape layer baking, model-space normals, existing-BTR
   fallback, terrain-shadow heightmap export and desktop controls. Automated format/fixture
   validation passes; in-game visual validation remains pending.
+- Per-level tree budgets, authored far-model selection, native trunk reduction and optional
+  full-model fallback. Foliage geometry and UVs are preserved; over-budget levels use
+  billboards with explicit coverage/cost reports in the desktop and scan JSON.
 
 ## [0.1.0-alpha.1] - 2026-10-27
 

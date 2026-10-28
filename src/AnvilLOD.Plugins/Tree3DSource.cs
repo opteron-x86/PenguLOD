@@ -3,6 +3,8 @@ using System.Numerics;
 using AnvilLOD.Core.World;
 using AnvilLOD.Meshes;
 using AnvilLOD.Meshes.Nif;
+using AnvilLOD.Meshes.Authoring;
+using AnvilLOD.Core.Pipeline;
 
 namespace AnvilLOD.Plugins;
 
@@ -16,8 +18,12 @@ public sealed record Tree3DStats(
     long TreesSkipped,
     int NameOnlyAvailable,          // types whose only model is under the plain name, with the option off
     IReadOnlyList<string> Warnings,
-    long Triangles = 0,             // triangles the 3D models add per LOD level that uses them (summed over every placed tree)
-    double ApproxMegabytes = 0);    // rough size of that geometry in the blocks, per level
+    long Triangles = 0,             // total across the selected near levels, including their card fallbacks
+    double ApproxMegabytes = 0,
+    IReadOnlyList<Tree3DLevelReport>? Levels = null, int NativeTypes = 0, int TotalTrees = 0);
+
+public sealed record Tree3DLevelReport(string Model, int Level, string SourceModel, int Instances, int SourceTriangles,
+    int OutputTriangles, long PlacedTriangles, double ApproxMegabytes, string Method, string? Fallback);
 
 /// <summary>
 /// 3D tree LOD models (DynDOLOD's <c>…passthru_lod.nif</c>) placed in object LOD: real crown geometry plus trunk
@@ -31,20 +37,26 @@ public sealed record Tree3DStats(
 public sealed class Tree3DSource : ISyntheticMeshSource
 {
     public const string Prefix = "~anvillod-tree3d|";
-    private const int Version = 3;   // 2: trunk shapes without an alpha property go through the opaque-texture mapping; 3: vertex alpha forced opaque
+    private const int Version = 4;   // 2: trunk shapes without an alpha property go through the opaque-texture mapping; 3: vertex alpha forced opaque
 
     private readonly AssetIndex _assets;
     private readonly float _brightness;
+    private readonly Tree3DSettings _settings;
+    private readonly Dictionary<(string Model, int Level, bool Native), Selection> _selections = [];
+    public sealed record Selection(string? MeshPath, string Source, int OriginalTriangles, int Triangles, int Vertices, string Method, string? Reason);
     private readonly ConcurrentDictionary<string, Lazy<LodMesh?>> _raw = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, LodMesh?> _built = new(StringComparer.OrdinalIgnoreCase);
 
-    public Tree3DSource(AssetIndex assets, float brightness = 1f)
+    public Tree3DSource(AssetIndex assets, float brightness = 1f, Tree3DSettings? settings = null)
     {
         _assets = assets;
         _brightness = brightness;
+        _settings = settings ?? new Tree3DSettings(true); _settings.Validate();
     }
 
     public static string MeshPath(string modelPath) => Prefix + modelPath;
+    private static string LevelPath(string model, int level, bool native) => Prefix + level + "|" + (native ? "native|" : "lod|") + model;
+    private static string SourcePath(string path) => path[(path.LastIndexOf('|') + 1)..];
 
     public bool Owns(string path) => path.StartsWith(Prefix, StringComparison.Ordinal);
 
@@ -56,9 +68,9 @@ public sealed class Tree3DSource : ISyntheticMeshSource
     public bool MapTextures(string path) => true;
 
     public string? Fingerprint(string path)
-        => Owns(path) ? $"t{Version}|b{_brightness:F3}|{_assets.Fingerprint(path[Prefix.Length..])}" : null;
+        => Owns(path) ? $"t{Version}|b{_brightness:F3}|{_settings.Fingerprint}|{_assets.Fingerprint(SourcePath(path))}" : null;
 
-    public LodMesh? Build(string path) => _built.GetOrAdd(path, p => Process(p, Raw(p[Prefix.Length..])));
+    public LodMesh? Build(string path) => _built.GetOrAdd(path, p => Process(p, Raw(SourcePath(p))));
 
     private LodMesh? Raw(string modelPath) => _raw.GetOrAdd(modelPath, p => new Lazy<LodMesh?>(() => Load(p))).Value;
 
@@ -83,12 +95,16 @@ public sealed class Tree3DSource : ISyntheticMeshSource
     {
         LodMesh? mesh;
         try { mesh = Raw(modelPath); }
-        catch (Exception ex) { return "could not be read: " + ex.Message; }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return "could not be read: " + ex.Message; }
         if (mesh is null) return "could not be found";
         if (mesh.Parts.Count == 0)
             return mesh.Warnings.Count > 0 ? "no usable shapes (" + string.Join("; ", mesh.Warnings.Distinct().Take(2)) + ")" : "no usable shapes";
+        if (mesh.Warnings.Any(w => w.Contains("Skinned shape", StringComparison.Ordinal) || w.Contains("could not be read", StringComparison.Ordinal) || w.Contains("not supported", StringComparison.Ordinal)))
+            return "unsupported geometry: " + string.Join("; ", mesh.Warnings.Take(3));
         foreach (var part in mesh.Parts)
         {
+            if (part.Positions.Any(p => !float.IsFinite(p.X) || !float.IsFinite(p.Y) || !float.IsFinite(p.Z))
+                || part.UVs.Any(p => !float.IsFinite(p.X) || !float.IsFinite(p.Y))) return "non-finite geometry or UV coordinates";
             var tex = part.Material.Textures.Count > 0 ? part.Material.Textures[0] : "";
             if (string.IsNullOrWhiteSpace(tex)) return "a shape has no diffuse texture";
             var path = tex.Replace('/', '\\').TrimStart('\\');
@@ -102,18 +118,83 @@ public sealed class Tree3DSource : ISyntheticMeshSource
     public (int Vertices, int Triangles) Size(string modelPath)
     {
         LodMesh? mesh;
-        try { mesh = Raw(modelPath); } catch { return (0, 0); }
+        try { mesh = Raw(modelPath); } catch (Exception e) when (e is not OperationCanceledException) { return (0, 0); }
         return mesh is null ? (0, 0) : (mesh.Parts.Sum(p => p.VertexCount), mesh.Parts.Sum(p => p.TriangleCount));
     }
 
+    public Selection Select(string model, int level, bool native = false)
+    {
+        RunLimits.Check();
+        var key = (Model: model.ToLowerInvariant(), Level: level, Native: native);
+        if (_selections.TryGetValue(key, out var saved)) return saved;
+        string selected = model;
+        bool distinct = false;
+        if (level == 8)
+        {
+            string? far = null;
+            foreach (var marker in new[] { "_lod_0.nif", "_lod0.nif" })
+                if (model.EndsWith(marker, StringComparison.OrdinalIgnoreCase)) far = model[..^marker.Length] + marker.Replace("0", "1");
+            if (native) far = model[..^4] + "_lod_1.nif";
+            if (far is not null && _assets.Exists(far) && Validate(far) is null) { selected = far; distinct = true; native = false; }
+        }
+        var raw = Raw(selected);
+        if (raw is null) return Save(new(null, selected, 0, 0, 0, "Billboard", "Source model cannot be read."));
+        if (native) raw = NativeMaterial(raw);
+        int budget = level == 4 ? _settings.NearTriangleBudget : _settings.FarTriangleBudget;
+        float error = level == 4 ? _settings.NearMaxError : _settings.FarMaxError;
+        var reduced = TreeMeshReducer.Reduce(raw, budget, error);
+        if (reduced.OverBudget) return Save(new(null, selected, reduced.OriginalTriangles, 4, 8, "Billboard",
+            $"{reduced.Triangles:N0} triangles exceed LOD{level} budget {budget:N0}; foliage UV silhouettes were preserved."));
+        // A farther level must earn its cost: if the same mesh cannot be reduced, use crossed cards.
+        if (level == 8 && !distinct && reduced.Triangles >= raw.Parts.Sum(p => p.TriangleCount))
+            return Save(new(null, selected, reduced.OriginalTriangles, 4, 8, "Billboard", "No simpler far model; retained intact foliage as a billboard fallback."));
+        if (level == 8)
+        {
+            var near = Select(model, 4, key.Native);
+            if (near.MeshPath is null || reduced.Triangles > near.Triangles)
+                return Save(new(null, selected, reduced.OriginalTriangles, 4, 8, "Billboard", "Near level uses billboards or the far model is heavier than the near model."));
+        }
+        string path = LevelPath(selected, level, native);
+        var processed = Process(path, reduced.Mesh)!; _built[path] = processed;
+        return Save(new(path, selected, reduced.OriginalTriangles, reduced.Triangles, processed.Parts.Sum(p => p.VertexCount),
+            distinct ? "Authored far model" : native ? "Native source reduction" : reduced.Triangles < reduced.OriginalTriangles ? "Native reduction" : "Installed model", null));
+        Selection Save(Selection value) { _selections[key] = value; return value; }
+    }
+
+    private static LodMesh NativeMaterial(LodMesh mesh) => new()
+    {
+        Path = mesh.Path, Warnings = mesh.Warnings, Parts = mesh.Parts.Select(p => new LodMeshPart
+        {
+            Name = p.Name, Positions = p.Positions,
+            UVs = p.Material.Passthru is { } uv ? p.UVs.Select(v => v * new Vector2(uv.UvScaleX, uv.UvScaleY) + new Vector2(uv.UvOffsetX, uv.UvOffsetY)).ToArray() : p.UVs, Normals = p.Normals, Tangents = p.Tangents, Bitangents = p.Bitangents,
+            Colors = p.Colors, Triangles = p.Triangles,
+            Material = p.Material with { ShaderFlags1 = 0x80000300u | (p.Material.ShaderFlags1 & 0x1008u),
+                ShaderFlags2 = 5u | (p.Material.ShaderFlags2 & 0x50u), Passthru = null }
+        }).ToArray()
+    };
+
+    public IReadOnlyList<Tree3DLevelReport> Report(IEnumerable<TreeReference> trees, Tree3DSettings settings)
+    {
+        var reports = new List<Tree3DLevelReport>();
+        foreach (var group in trees.GroupBy(t => (t.Model3D!, t.Model3DGenerated)))
+            foreach (int level in settings.Lod8 ? new[] { 4, 8 } : new[] { 4 })
+            {
+                var s = Select(group.Key.Item1, level, group.Key.Model3DGenerated); int count = group.Count();
+                reports.Add(new(group.Key.Item1, level, s.Source, count, s.OriginalTriangles, s.Triangles, (long)s.Triangles * count,
+                    ((long)s.Vertices * 32 + (long)s.Triangles * 6) * count / 1048576.0, s.Method, s.Reason));
+            }
+        return reports.OrderBy(r => r.Level).ThenByDescending(r => r.PlacedTriangles).ToArray();
+    }
+
     /// <summary>Object LOD references for the trees: 3D model at LOD4 (and LOD8 if asked), billboard cards further out.</summary>
-    public static IEnumerable<LodReference> ToReferences(IEnumerable<TreeReference> trees, Tree3DSettings settings)
+    public IEnumerable<LodReference> ToReferences(IEnumerable<TreeReference> trees, Tree3DSettings settings)
     {
         foreach (var t in trees)
         {
-            var model = MeshPath(t.Model3D!);
+            var near = Select(t.Model3D!, 4, t.Model3DGenerated);
+            var model = near.MeshPath ?? TreeCardSource.Prefix + t.Billboard.TexturePath;
             var card = TreeCardSource.Prefix + t.Billboard.TexturePath;
-            var near8 = settings.Lod8 ? model : card;
+            var near8 = settings.Lod8 ? Select(t.Model3D!, 8, t.Model3DGenerated).MeshPath ?? card : card;
             // Trees copied in from a child worldspace (walled cities) only matter close up, as before.
             var meshes = t.ObjectLod ? new LodMeshSet(model, near8, null, null) : new LodMeshSet(model, near8, card, settings.MapTrees ? card : null);
             yield return new LodReference(

@@ -21,6 +21,7 @@ public static class ScanReport
             s.PluginsLoaded,
             s.MissingPlugins,
             s.Warnings,
+            treeCoverage = s.Tree3D,
             s.Stats.PlacedObjectsVisited,
             s.Stats.LodReferencesFound,
             s.Stats.SkippedDisabled,

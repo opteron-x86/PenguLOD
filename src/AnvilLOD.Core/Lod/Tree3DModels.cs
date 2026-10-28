@@ -10,7 +10,7 @@ public static class Tree3DModels
 {
     public const string Folder = "meshes\\dyndolod\\lod\\trees\\";
 
-    public enum MatchKind { None, Crc32, PlainName, NamedLod }
+    public enum MatchKind { None, Crc32, PlainName, NamedLod, Native }
 
     public sealed record Match(string Path, MatchKind Kind);
 

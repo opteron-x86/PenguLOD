@@ -1,4 +1,5 @@
 using System.Numerics;
+using AnvilLOD.Core.Pipeline;
 
 namespace AnvilLOD.Meshes.Authoring;
 
@@ -15,6 +16,7 @@ public static class MeshSimplifier
     /// <param name="minTriangles">Never go below this many triangles.</param>
     public static LodMeshPart Simplify(LodMeshPart part, float maxError, int minTriangles = 4)
     {
+        RunLimits.Check();
         int nv = part.VertexCount, nt = part.TriangleCount;
         if (nt <= minTriangles) return part;
 
@@ -25,6 +27,7 @@ public static class MeshSimplifier
         var weld = new Dictionary<(int, int, int), int>();
         for (int v = 0; v < nv; v++)
         {
+            if ((v & 4095) == 0) RunLimits.Check();
             var p = part.Positions[v];
             var key = ((int)MathF.Round(p.X * 100f), (int)MathF.Round(p.Y * 100f), (int)MathF.Round(p.Z * 100f));
             if (!weld.TryGetValue(key, out var pid))
@@ -128,6 +131,7 @@ public static class MeshSimplifier
         var remap = new Dictionary<int, int>();
         while (liveTris > minTriangles && heap.TryDequeue(out var c, out _))
         {
+            RunLimits.Check();
             int a = c.From, b = c.To;
             if (dead[a] || dead[b] || version[a] != c.Vf || version[b] != c.Vt) continue;
             if (!TryBuildRemap(a, b)) continue;

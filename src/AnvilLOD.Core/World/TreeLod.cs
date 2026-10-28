@@ -45,7 +45,8 @@ public sealed record TreeReference(
     TreeBillboard Billboard,
     bool ObjectLod = false,   // copied from a child worldspace: never loads here, so it goes into object LOD as cards
     string? Model3D = null,   // data-relative path of its 3D tree LOD model (…passthru_lod.nif), when the 3D option found one
-    bool Model3DByName = false) // that model was found by plain name, not by the CRC32 of the tree's mesh
+    bool Model3DByName = false,
+    bool Model3DGenerated = false) // that model was found by plain name, not by the CRC32 of the tree's mesh
 {
     public CellCoord Cell => CellCoord.FromWorld(Position.X, Position.Y);
 }
@@ -61,12 +62,20 @@ public sealed record TreeReference(
 /// <param name="MapTrees">Draw the trees' billboard cards in LOD32 too. LOD32 is only shown on the world map (uLockedObjectMapLOD=32), so off = no trees on the map, nothing changes in the game's own far view.</param>
 /// <param name="PreferNamedLod">Use a tree mod's own LOD model (<c>&lt;tree&gt;_LOD_0.nif</c>) before a DynDOLOD-style CRC32 / plain-name one, when both exist.
 /// DynDOLOD only tries the named LOD model as a last resort, but a mod that ships hybrid models (the Nature of the Wild Lands addon) made them for this.</param>
-public sealed record Tree3DSettings(bool Enabled = false, bool Lod8 = false, bool PlainNameFallback = false, bool MapTrees = true, bool PreferNamedLod = false)
+public sealed record Tree3DSettings(bool Enabled = false, bool Lod8 = false, bool PlainNameFallback = false, bool MapTrees = true, bool PreferNamedLod = false,
+    int NearTriangleBudget = 4000, int FarTriangleBudget = 1600, float NearMaxError = 4, float FarMaxError = 24, bool GenerateMissing = true)
 {
     public static readonly Tree3DSettings Off = new();
 
     /// <summary>Part of the settings fingerprint, so a changed option rebuilds the blocks it affects.</summary>
-    public string Fingerprint => Enabled ? $"tree3d:{(Lod8 ? "l48" : "l4")}{(PlainNameFallback ? "+name" : "")}{(PreferNamedLod ? "+ownlod" : "")}{(MapTrees ? "" : "+nomaptrees")}" : "";
+    public string Fingerprint => Enabled ? $"tree3d:{(Lod8 ? "l48" : "l4")}{(PlainNameFallback ? "+name" : "")}{(PreferNamedLod ? "+ownlod" : "")}{(MapTrees ? "" : "+nomaptrees")}" + FormattableString.Invariant($"|budgets:{NearTriangleBudget}/{FarTriangleBudget}|error:{NearMaxError}/{FarMaxError}|native:{GenerateMissing}") : "";
+
+    public void Validate()
+    {
+        if (NearTriangleBudget is < 0 or > 1000000 || FarTriangleBudget is < 0 or > 1000000
+            || !float.IsFinite(NearMaxError) || !float.IsFinite(FarMaxError) || NearMaxError is < 0 or > 1024 || FarMaxError is < 0 or > 4096)
+            throw new ArgumentException("Invalid 3D-tree budgets or simplification bounds.");
+    }
 }
 
 /// <summary>
