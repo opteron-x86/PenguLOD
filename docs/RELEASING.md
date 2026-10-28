@@ -7,22 +7,23 @@ do not bump it simply to release PenguLOD.
 
 ## Prepare a release
 
-1. Set the next version, for example `python3 tools/version.py 0.1.0-alpha.2`.
-2. Add a matching `## [0.1.0-alpha.2] - YYYY-MM-DD` section to `CHANGELOG.md`. Update the
+1. Set the next version, for example `python3 tools/version.py 0.2.0-alpha.2`.
+2. Add a matching `## [0.2.0-alpha.2] - YYYY-MM-DD` section to `CHANGELOG.md`. Update the
    README version and provenance if needed. Explain limitations and any migration changes.
 3. Run `bash tools/test.sh` and `bash tools/build.sh`, then `xvfb-run -a bash tools/native-smoke.sh`.
    Verify settings import and representative generation workflows when their code changes.
-4. Commit, push and wait for the Linux workflow to pass on that exact commit.
+4. Build the AppImage with `bash tools/package-appimage.sh`. Commit, push and wait for the
+   Linux workflow and all package compatibility jobs to pass on that exact commit.
 5. Tag that commit and push only the new tag:
 
 ```bash
-git tag -a v0.1.0-alpha.2 -m 'PenguLOD 0.1.0-alpha.2'
-git push origin v0.1.0-alpha.2
+git tag -a v0.2.0-alpha.2 -m 'PenguLOD 0.2.0-alpha.2'
+git push origin v0.2.0-alpha.2
 ```
 
 The tag pipeline verifies `vVERSION`, runs the same build/tests, and publishes a GitHub release.
 Alpha/beta/rc tags are marked pre-release. Assets include the portable Linux x64 package,
-committed source archive and `SHA256SUMS`; the binary package also includes the patched
+AppImage, committed source archive and `SHA256SUMS`; the binary package also includes the patched
 FasterNGIO source and dependency notices. Release notes come from the matching changelog section.
 The workflow refuses to overwrite an existing release.
 

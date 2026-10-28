@@ -5,6 +5,11 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.2.0-alpha.1] - 2026-10-27
+
+- Portable archive and AppImage packages, isolated candidate builds, and compatibility checks
+  for Ubuntu 24.04, Debian 13 and Fedora 43. Flatpak evaluated; no Flatpak release claimed.
+
 - Shared desktop/CLI presets and validation, per-stage CLI commands, request export,
   saved-job inspection and compact reports. Legacy CLI generation now uses safe publication.
 
@@ -35,6 +40,8 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 - Per-level tree budgets, authored far-model selection, native trunk reduction and optional
   full-model fallback. Foliage geometry and UVs are preserved; over-budget levels use
   billboards with explicit coverage/cost reports in the desktop and scan JSON.
+- Native fallback preserves record-specific alternate tree textures by retaining their
+  generated billboards, including seasonal replacements.
 
 ## [0.1.0-alpha.1] - 2026-10-27
 

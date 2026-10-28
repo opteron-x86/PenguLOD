@@ -209,8 +209,8 @@ The pinned upstream source and dependencies are packaged in
 `backends/fasterngio/FasterNGIO-source.tar.gz`, with licenses and build information beside it.
 The local CachyOS backend requires **glibc 2.43 or newer**. Other distributions should rebuild
 with `tools/build-fasterngio.sh` on their target distribution or select a compatible executable.
-The Ubuntu CI configuration builds against its older system libraries; that workflow has not
-been run from this workspace.
+Official Ubuntu 24.04 CI releases build against older system libraries and pass native backend
+tests. Prefer those binaries when distributing to other machines; see [packaging](PACKAGING.md).
 
 ## Native texture generation
 
@@ -306,9 +306,10 @@ changed files. Keep incomplete output disabled. LOD verifies the manifest and in
 its content fingerprint in incremental-build settings, so changing generated
 textures rebuilds affected work instead of reusing an old build blindly.
 
-This is **not full TexGen feature parity**. PBR material baking, TexGen's special
-`x`-format glow/alpha conversions, HD billboards, seasonal billboard variants,
-complex-grass material shading and reference-scale discovery are not implemented.
+This is **not full TexGen feature parity**. Source normal and configurable PBR/AO baking are
+available; [material calibration](MATERIALS.md) explains their limits. [Seasonal tree and terrain
+output](SEASONS.md) uses written form-swap INIs. TexGen's special `x`-format glow/alpha conversions,
+full HD billboard parity, complex-grass material shading and reference-scale discovery remain unsupported.
 Models with unsupported/skinned shapes are skipped as a whole, rather than
 producing billboards with missing branches or leaves; rendered objects with
 unsupported shapes fail explicitly. Existing TexGen billboards remain useful for
@@ -355,8 +356,8 @@ The original upstream solution still includes Windows-only WPF.
 package license notices, and creates the portable archive. `tools/test.sh` runs
 engine tests and Avalonia headless tests using actual Skia rendering. Screenshots
 are saved under `.artifacts/screenshots`; TRX reports go to `.artifacts/test-results`.
-The GitHub Actions workflow builds, tests and checks native X11 startup on Ubuntu;
-it has been added here but has not been run on GitHub from this local branch.
+The GitHub Actions workflow builds, tests and checks native X11 startup on Ubuntu, then
+checks the portable/AppImage packages on Ubuntu, Debian and Fedora. See [packaging](PACKAGING.md).
 
 For an optional real-game desktop test, export a JSON preset with an isolated
 source, output directory and cache directory, then run:
@@ -422,15 +423,16 @@ This is a working local Linux port, not a claim of full in-game parity:
   game plugin separately for dynamic LOD, parent copies and related runtime features.
   Choosing SKSE installation **None** means separately installed; it does not turn
   those features off. The Objects only preset disables the runtime-dependent features.
-- Terrain LOD generation and GPU object-texture atlasing are unfinished upstream
-  features. The desktop exposes the existing CPU engine and terrain-underside feature.
-- Full modlist performance, seasons, PBR, grass/tree integration, experimental
-  occlusion and in-game visuals still need testing against the intended mod setup.
+- Native terrain/water, object atlases, bounded native trees and seasonal terrain/tree
+  output are implemented in PenguLOD. Material baking is an approximation of game shading;
+  see the [roadmap](ROADMAP.md) for feature boundaries and validation.
+- Full modlist performance, new terrain/seasons/material output, experimental occlusion
+  and in-game visuals still need testing against the intended mod setup.
   VR is selectable and uses the shared engine, but no VR installation was available
   for an end-to-end check.
-- The existing external Windows xLODGen launcher has not been ported. The desktop
-  uses the built-in occlusion calculator.
+- Terrain and occlusion use native generators. The inherited Windows xLODGen launcher
+  remains outside the Linux workflow.
 
 The project retains [GPL-3.0-only](../LICENSE.txt). Avalonia and BCnEncoder.NET
 license texts and Inter font licensing are included under `assets/licenses` and
-in the portable package. No release, remote commit or mod installation has been made.
+in the portable package. Published releases contain no game or generated mod assets.

@@ -13,6 +13,36 @@ namespace AnvilLOD.Core.Tests;
 public class SeasonalGenerationTests
 {
     [Fact]
+    public void NativeTreeFallbackPreservesRecordSpecificTextureVariantsAsBillboards()
+    {
+        using var f = new TerrainFixture(seasons: true, treeAlternates: true);
+        Assert.True(TextureGeneration.Run(f.Textures.Request with { Stitched = false, Trees = true }).Published);
+        using var game = GameContext.Open(f.Game);
+        var assets = game.BuildAssets(_ => true);
+        TextureGenerationManifest.Read(f.Textures.Output, true)!.Attach(assets, f.Textures.Output);
+        var settings = new Tree3DSettings(Enabled: true);
+        var scan = new MutagenReferenceScanner(game, assets).Scan(new(Worldspaces: ["FixtureWorld"], TreeLod: true, Tree3D: settings));
+        var original = Assert.Single(scan.Trees!);
+        Assert.Null(original.Model3D);
+        // Exercise the seasonal replacement as if the original species had a usable 3D mesh.
+        var winter = SeasonalAssets.SwapTree(game, assets, original with { Model3D = @"meshes\trees\testtree.nif" },
+            SeasonalAssets.Read(game, assets, "Trees")["WIN"], settings);
+        Assert.Null(winter.Model3D);
+        Assert.NotEqual(original.Billboard.TexturePath, winter.Billboard.TexturePath);
+        foreach (var (tree, dominant) in new[] { (original, 0), (winter, 1) })
+        {
+            Assert.True(assets.TryOpen(tree.Billboard.TexturePath, out var stream));
+            using (stream)
+            {
+                using var data = new MemoryStream(); stream.CopyTo(data);
+                var pixels = TextureImages.Decode(data.ToArray()).Pixels;
+                Assert.Contains(Enumerable.Range(0, pixels.Length / 4), i => pixels[i * 4 + 3] > 128
+                    && pixels[i * 4 + dominant] > pixels[i * 4 + 1 - dominant] + 50);
+            }
+        }
+    }
+
+    [Fact]
     public void SeasonalLandscapeUsesSwappedLayersAndCorrectTexturePaths()
     {
         using var f=new TerrainFixture(seasons:true);

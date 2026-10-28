@@ -9,7 +9,7 @@ resizing. Output normals are transformed into the billboard's frame and renormal
 light, PBR scale/gamma and ambient-occlusion strength. Explicit `textures/pbr/` albedo paths
 use the configured curve; where the source material provides RMAOS in texture slot 5,
 its blue channel supplies AO. This channel convention follows the
-[Bottled Shaders lighting implementation](https://github.com/InTheBottle/Bottled-Shaders/blob/main/package/Shaders/Lighting.hlsl).
+[Bottled Shaders lighting implementation](https://github.com/InTheBottle/Bottled-Shaders/blob/f0deaabe1f5d8c675bce06927a5c257f4af4e94d/package/Shaders/Lighting.hlsl).
 Missing optional normal/AO maps fall back to geometry normals/unoccluded albedo.
 
 The output targets Skyrim's LOD shader. It is a static bake, not an implementation of

@@ -7,7 +7,7 @@ import shutil
 import xml.etree.ElementTree as ET
 
 root = pathlib.Path(__file__).resolve().parents[1]
-out = root / 'dist/linux-x64'
+out = pathlib.Path(os.environ.get('PENGULOD_PACKAGE_DIR', str(root / 'dist/linux-x64')))
 packages = pathlib.Path(os.environ.get('NUGET_PACKAGES', str(root / '.tools/nuget')))
 licenses = out / 'licenses'
 licenses.mkdir(exist_ok=True)

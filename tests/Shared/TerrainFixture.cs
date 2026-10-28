@@ -15,7 +15,7 @@ public sealed class TerrainFixture : IDisposable
     public string Output => Path.Combine(Root, "Terrain output");
     public GameContextOptions Game => Textures.Game;
     public TerrainGenerationRequest Request => new(Game, Output, ["FixtureWorld"], TextureSize:64);
-    public TerrainFixture(bool missingCell=false, bool seasons=false)
+    public TerrainFixture(bool missingCell=false, bool seasons=false, bool treeAlternates=false)
     {
         var mod = new SkyrimMod(ModKey.FromNameAndExtension("Skyrim.esm"), SkyrimRelease.SkyrimSE);
         var water = mod.Waters.AddNew(); water.EditorID="FixtureWater";
@@ -30,6 +30,12 @@ public sealed class TerrainFixture : IDisposable
             var winterLand=mod.LandscapeTextures.AddNew();winterLand.EditorID="WinterLand";winterLand.TextureSet.SetTo(winterTx);
             tree=mod.Trees.AddNew();tree.EditorID="FixtureTree";tree.Model=new Model {File=@"trees\testtree.nif"};
             var winterTree=mod.Trees.AddNew();winterTree.EditorID="WinterTree";winterTree.Model=new Model {File=@"trees\wintertree.nif"};
+            if (treeAlternates)
+            {
+                var normalAlt = new AlternateTexture { Name = "tree:0", Index = 0 }; normalAlt.NewTexture.SetTo(tx);
+                var winterAlt = new AlternateTexture { Name = "winter:0", Index = 0 }; winterAlt.NewTexture.SetTo(winterTx);
+                tree.Model.AlternateTextures = [normalAlt]; winterTree.Model.AlternateTextures = [winterAlt];
+            }
             TextureFixture.Put(Textures.Data,@"meshes\trees\wintertree.nif",AnvilLOD.Meshes.Authoring.LodNifWriter.Write("winter",[TextureFixture.Card("crown",@"textures\red.dds")]));
             TextureFixture.Put(Textures.Data,@"seasons\Fixture_WIN.ini",System.Text.Encoding.UTF8.GetBytes("[LandTextures]\nFixtureLand|WinterLand\n[Trees]\nFixtureTree|WinterTree\n"));
         }

@@ -47,6 +47,8 @@ jobs:
         run: bash tools/build.sh
       - name: Native X11 startup
         run: xvfb-run -a bash tools/native-smoke.sh
+      - name: Package AppImage
+        run: bash tools/package-appimage.sh
       - name: Archive source and checksums
         run: bash tools/package-release.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -56,6 +58,7 @@ jobs:
           compression-level: 0
           path: |
             dist/PenguLOD-*.tar.gz
+            dist/PenguLOD-*.AppImage
             dist/SHA256SUMS
             dist/RELEASE-NOTES.md
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -67,10 +70,64 @@ jobs:
             .artifacts/test-results
             .artifacts/screenshots
             .tools/fasterngio-build/Testing/Temporary/LastTest.log
+  compatibility:
+    name: Package compatibility (${{ matrix.image }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            manager: apt
+          - image: debian:13
+            manager: apt
+          - image: fedora:43
+            manager: dnf
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Install runtime dependencies
+        env:
+          PACKAGE_MANAGER: ${{ matrix.manager }}
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          if [ "$PACKAGE_MANAGER" = apt ]; then
+            apt-get update
+            apt-get install -y libfontconfig1 libx11-6 libice6 libsm6 libicu-dev libssl3 libxrandr2 libxi6 libxrender1 libxcursor1 libgl1 libglib2.0-0t64 libvulkan1 mesa-vulkan-drivers xvfb xauth tar gzip libstdc++6
+          else
+            dnf install -y fontconfig libX11 libICE libSM libicu openssl-libs libXrandr libXi libXrender libXcursor mesa-libGL glib2 vulkan-loader mesa-vulkan-drivers xorg-x11-server-Xvfb xorg-x11-xauth tar gzip libstdc++
+          fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: PenguLOD-linux-x64
+          path: artifacts
+      - name: Portable and AppImage smoke checks
+        shell: bash
+        run: |
+          (cd artifacts && sha256sum -c SHA256SUMS)
+          tar -xzf artifacts/PenguLOD-*-linux-x64.tar.gz
+          ./linux-x64/PenguLOD --version
+          ./linux-x64/PenguLOD --help
+          ./linux-x64/PenguLOD compute-info --report compute.json
+          ./linux-x64/backends/fasterngio/FasterNGIO --help
+          Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > xvfb.log 2>&1 &
+          display_pid=$!
+          trap 'kill "$display_pid" 2>/dev/null || true' EXIT
+          export DISPLAY=:99
+          for attempt in {1..30}; do
+            test -S /tmp/.X11-unix/X99 && break
+            kill -0 "$display_pid"
+            sleep 0.1
+          done
+          timeout 30s ./linux-x64/PenguLOD.Desktop --settings "$PWD/smoke-settings.json" --smoke-test
+          chmod +x artifacts/*.AppImage
+          artifacts/PenguLOD-*-x86_64.AppImage --appimage-extract-and-run --cli --version
   release:
     name: Publish tagged release
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'opteron-x86/PenguLOD'
-    needs: build
+    needs: [build, compatibility]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -90,4 +147,4 @@ jobs:
           sha256sum -c SHA256SUMS
           options=()
           if [[ "$RELEASE_TAG" == *-* ]]; then options+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" --verify-tag --title "PenguLOD ${RELEASE_TAG#v}" --notes-file RELEASE-NOTES.md "${options[@]}" PenguLOD-*.tar.gz SHA256SUMS
+          gh release create "$RELEASE_TAG" --verify-tag --title "PenguLOD ${RELEASE_TAG#v}" --notes-file RELEASE-NOTES.md "${options[@]}" PenguLOD-*.tar.gz PenguLOD-*.AppImage SHA256SUMS

@@ -5,6 +5,10 @@ preferred. With **Build missing 3D tree models**, trees without an installed mod
 native reduction of their full model. Missing textures or unsupported geometry retain
 billboard tree LOD and appear in the report.
 
+Full models with record-specific alternate texture sets keep their generated billboards
+when no authored 3D LOD is available. This also applies to seasonal replacements: native
+reduction must not silently discard a record's texture variant.
+
 Near and far triangle budgets apply per model (defaults: 4,000 at LOD4 and 1,600 at LOD8).
 A budget of zero removes that cap. Separate error limits bound trunk simplification.
 The reducer retains material boundaries, surviving UV coordinates and alpha-tested foliage

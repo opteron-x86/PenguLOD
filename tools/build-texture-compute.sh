@@ -9,7 +9,7 @@ python3 - <<'PY'
 import pathlib,struct
 source=pathlib.Path('.artifacts/texture-compute/bc7.spv').read_bytes()
 words=struct.unpack('<%dI'%(len(source)//4),source)
-pathlib.Path('.artifacts/texture-compute/bc7_spv.h').write_text('static const uint32_t bc7_spv[] = {'+','.join(hex(w) for w in words)+'};\n')
+pathlib.Path('.artifacts/texture-compute/bc7_spv.h').write_text('#include <stdint.h>\nstatic const uint32_t bc7_spv[] = {'+','.join(hex(w) for w in words)+'};\n')
 PY
 "${CC:-cc}" -std=c11 -O2 -fPIC -shared -Wall -Wextra -Werror \
     "${includes[@]}" -I.artifacts/texture-compute native/texture-compute/backend.c \

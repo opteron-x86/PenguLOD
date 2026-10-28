@@ -281,7 +281,14 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             if (match is null && tree3d.PlainNameFallback && _resolver?.Index.Find(modelPath) is { } named
                 && named.FirstOrDefault(p => !string.IsNullOrEmpty(p)) is { } namedPath)
                 match = new Tree3DModels.Match(namedPath, Tree3DModels.MatchKind.NamedLod);
-            if (match is null && tree3d.GenerateMissing) match = new Tree3DModels.Match(modelPath, Tree3DModels.MatchKind.Native);
+            if (match is null && tree3d.GenerateMissing)
+            {
+                // Raw full models do not contain per-record alternate texture sets. Keep the
+                // record-specific billboard instead of silently rendering the wrong tree variant.
+                if (tree.Model?.AlternateTextures is { Count: > 0 })
+                    progress?.Report($"3D tree {fk}: using its billboard because the full model has alternate textures.");
+                else match = new Tree3DModels.Match(modelPath, Tree3DModels.MatchKind.Native);
+            }
             return match;
         }
 

@@ -12,7 +12,8 @@ Install the .NET 10 SDK. On Ubuntu 24.04 the native dependencies are:
 ```bash
 sudo apt-get install g++-14 cmake ninja-build pkg-config curl patch python3 \
   zlib1g-dev liblz4-dev libtbb-dev libspdlog-dev libfmt-dev libgtest-dev \
-  libfontconfig1 libx11-6 libice6 libsm6 libicu-dev xvfb
+  libfontconfig1 libx11-6 libice6 libsm6 libicu-dev xvfb \
+  libvulkan-dev mesa-vulkan-drivers glslang-tools
 CC=gcc-14 CXX=g++-14 bash tools/build.sh
 bash tools/test.sh
 xvfb-run -a bash tools/native-smoke.sh
@@ -31,10 +32,12 @@ start the app from a portable folder that the build will not overwrite.
 
 ## Source layout
 
-- `src/AnvilLOD.Desktop`: PenguLOD Avalonia UI and settings/services.
+- `src/AnvilLOD.Desktop`: PenguLOD Avalonia UI and services.
+- `src/AnvilLOD.Configuration`: desktop/CLI presets, validation and request construction.
 - `src/AnvilLOD.Cli`: PenguLOD command-line entry point.
 - `src/AnvilLOD.Core`, `Plugins`, `Meshes`, `Textures`: shared engine.
 - `tools/fasterngio`: pinned native grass backend patches and packaging.
+- `native/texture-compute`: optional headless Vulkan BC7 helper.
 - `tests`: engine and desktop regression fixtures.
 - `skse`: inherited game-runtime plugin source; versioned separately with `UPSTREAM_VERSION`.
 

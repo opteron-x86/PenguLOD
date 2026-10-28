@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+payload="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/usr/lib/PenguLOD"
+if [[ "${1:-}" == --cli ]]; then
+    shift
+    exec "$payload/PenguLOD" "$@"
+fi
+exec "$payload/PenguLOD.Desktop" "$@"

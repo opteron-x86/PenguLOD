@@ -315,7 +315,7 @@ public sealed partial class MainWindow : Window
         Card("ABOUT PENGULOD", Stack(10, Text(ProductInfo.Description),
             Text("Native Avalonia desktop • managed .NET engine • GPL-3.0-only"),
             Text("Built on CageTV’s AnvilLOD. Maintained by opteron-x86 and PenguLOD contributors.", true),
-            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. The Windows SKSE DLLs are not bundled in the Linux package. Terrain LOD generation and the upstream GPU atlas backend are not implemented.", true),
+            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. Install the matching AnvilLOD game plugin separately. This alpha includes native terrain, tree reduction, seasonal output and object atlases; compare new output in game before replacing a known-good setup.", true),
             Button("Open project on GitHub", () => Open(ProductInfo.Repository))))));
 
     private Border ToolResults(string page)
