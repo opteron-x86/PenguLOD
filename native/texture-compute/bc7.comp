@@ -1,0 +1,56 @@
+#version 450
+// Opaque BC7 mode 6, matching the portable encoder's principal-axis/refit algorithm.
+// Alpha-tested images stay on the CPU's mode 5/6 quality-selection path.
+layout(local_size_x=64) in;
+layout(std430,binding=0) readonly buffer Source {uint pixels[];};
+layout(std430,binding=1) writeonly buffer Destination {uvec4 blocks[];};
+layout(push_constant) uniform Parameters {uint width;uint height;};
+const int weights[16]=int[](0,4,9,13,17,21,26,30,34,38,43,47,51,55,60,64);
+vec4 px[16];
+void endpoints(out vec4 low,out vec4 high) {
+    vec4 mean=vec4(0);for(int i=0;i<16;i++)mean+=px[i]/16;
+    mat4 cov=mat4(0);for(int i=0;i<16;i++){vec4 d=px[i]-mean;cov+=outerProduct(d,d);}
+    vec4 axis=vec4(1);
+    for(int j=0;j<8;j++){vec4 n=cov*axis;float len=dot(n,n);if(len<1e-12)break;axis=n/sqrt(len);}
+    float a=3.4e38,b=-3.4e38;
+    for(int i=0;i<16;i++){float t=dot(px[i]-mean,axis);a=min(a,t);b=max(b,t);}
+    low=clamp(mean+a*axis,0,255);high=clamp(mean+b*axis,0,255);
+}
+void quantize(vec4 endpoint,out ivec4 q,out int bit) {
+    float best=3.4e38;bit=0;q=ivec4(0);
+    for(int p=0;p<2;p++){ivec4 candidate=ivec4(clamp(roundEven((endpoint-p)/2),0,127));
+        vec4 d=vec4(candidate*2+p)-endpoint;float error=dot(d,d);if(error<best){best=error;q=candidate;bit=p;}}
+}
+float assign(ivec4 q0,int p0,ivec4 q1,int p1,out int indices[16]) {
+    vec4 palette[16];
+    for(int i=0;i<16;i++)palette[i]=vec4(((64-weights[i])*(q0*2+p0)+weights[i]*(q1*2+p1)+32)>>6);
+    float total=0;
+    for(int i=0;i<16;i++){float best=3.4e38;indices[i]=0;
+        for(int k=0;k<16;k++){vec4 d=px[i]-palette[k];float error=dot(d,d);if(error<best){best=error;indices[i]=k;}}total+=best;}
+    return total;
+}
+void bits(inout uvec4 result,inout uint position,uint value,uint count) {
+    uint word=position/32,shift=position%32;result[word]|=value<<shift;
+    if(shift+count>32)result[word+1]|=value>>(32-shift);position+=count;
+}
+void main() {
+    uint block=gl_GlobalInvocationID.x,bw=(width+3)/4;
+    if(block>=bw*((height+3)/4))return;
+    for(uint i=0;i<16;i++){uint x=min(block%bw*4+i%4,width-1),y=min(block/bw*4+i/4,height-1);
+        uint v=pixels[y*width+x];px[i]=vec4(v&255,(v>>8)&255,(v>>16)&255,255);}
+    vec4 e0,e1;endpoints(e0,e1);ivec4 q0,q1;int p0,p1;int indices[16];
+    quantize(e0,q0,p0);quantize(e1,q1,p1);float error=assign(q0,p0,q1,p1,indices);
+    float aa=0,ab=0,bb=0;vec4 ax=vec4(0),bx=vec4(0);
+    for(int i=0;i<16;i++){float b=weights[indices[i]]/64.0,a=1-b;aa+=a*a;ab+=a*b;bb+=b*b;ax+=a*px[i];bx+=b*px[i];}
+    float determinant=aa*bb-ab*ab;
+    if(abs(determinant)>1e-6){ivec4 a,b;int pa,pb,candidate[16];
+        quantize(clamp((bb*ax-ab*bx)/determinant,0,255),a,pa);
+        quantize(clamp((aa*bx-ab*ax)/determinant,0,255),b,pb);
+        if(assign(a,pa,b,pb,candidate)<error){q0=a;q1=b;p0=pa;p1=pb;for(int i=0;i<16;i++)indices[i]=candidate[i];}}
+    if(indices[0]>=8){ivec4 q=q0;q0=q1;q1=q;int p=p0;p0=p1;p1=p;for(int i=0;i<16;i++)indices[i]=15-indices[i];}
+    uvec4 result=uvec4(0);uint pos=0;bits(result,pos,64,7);
+    for(int c=0;c<4;c++){bits(result,pos,uint(q0[c]),7);bits(result,pos,uint(q1[c]),7);}
+    bits(result,pos,uint(p0),1);bits(result,pos,uint(p1),1);bits(result,pos,uint(indices[0]),3);
+    for(int i=1;i<16;i++)bits(result,pos,uint(indices[i]),4);
+    blocks[block]=result;
+}

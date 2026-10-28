@@ -5,6 +5,10 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+- Optional headless Vulkan BC7 encoding with device/quality checks, a measured automatic
+  speed gate, CPU fallback and desktop/CLI benchmark reports. Software-driver validation
+  passes; hardware performance validation remains pending.
+
 - Native paired object texture atlases with UV remapping, material grouping, padded mips,
   conservative eligibility checks and coverage reports; replaced the unused atlas placeholder.
 

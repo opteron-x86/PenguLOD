@@ -303,7 +303,10 @@ public sealed partial class MainWindow : Window
             Text("Save a custom file to activate these rules for generation. The editor writes LODGen entries only; retain your original file if it also contains other settings.", true)));
     }
     private Control Preferences() => Scroll(Stack(16, Heading("Preferences", "Control resource use and keep portable presets for different mod lists."),
-        Card("PROCESSING", Stack(12, Number("Worker threads", nameof(DesktopSettings.MaxThreads), 0, 1024), Text("0 uses available processors minus one. Cancellation waits for active engine operations to finish.", true),
+        Card("PROCESSING", Stack(12, Choice("Texture compute", nameof(DesktopSettings.TextureCompute), ["Cpu", "Auto", "Vulkan"]),
+            Text("Optional Vulkan BC7 encoding for large opaque textures. Auto requires a measured speedup and a passing quality check. Alpha foliage and small images use CPU. Grass collision caching is a separate backend.", true),
+            Button("Check texture acceleration", CheckTextureCompute),
+            Number("Worker threads", nameof(DesktopSettings.MaxThreads), 0, 1024), Text("0 uses available processors minus one. Cancellation waits for active engine operations to finish.", true),
             PathField("Run history and cache folder", nameof(DesktopSettings.CacheFolder), hint: "Blank uses " + SettingsStore.CacheRoot),
             Button("Detect Steam installation", DetectInstall))),
         Card("SETTINGS & PRESETS", Stack(12, Text("Settings file\n" + _store.FilePath, true),

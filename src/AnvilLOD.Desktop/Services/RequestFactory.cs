@@ -34,7 +34,7 @@ public static class RequestFactory
     public static GenerationPipelineRequest Pipeline(DesktopSettings s) => new(
         s.PipelineGrass ? Grass(s) : null, s.PipelineTextures ? Textures(s) : null,
         s.PipelineLod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
-        s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight);
+        s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute);
 
     public static TerrainGenerationRequest Terrain(DesktopSettings s)
     {

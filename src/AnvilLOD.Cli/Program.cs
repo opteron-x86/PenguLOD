@@ -250,6 +250,7 @@ public static class Program
             using var limits = RunLimits.Enter(threads, Cancellation, options.Get("cache-folder"));
             return args[0].ToLowerInvariant() switch
             {
+                "compute-info" => RunComputeInfo(options),
                 "pipeline" => RunPipeline(options),
                 "diagnose" => RunDiagnose(options),
                 "scan" => RunScan(options, generate: false),
@@ -266,6 +267,15 @@ public static class Program
         catch (CliArgException e) { return Fail(e.Message + "\n\n" + Usage); }
         catch (Exception e) { return Fail(e.GetBaseException().Message); }
         finally { Console.CancelKeyPress -= cancel; }
+    }
+
+    private static int RunComputeInfo(CliArgs options)
+    {
+        var report = AnvilLOD.Textures.TextureCompute.Benchmark(options.Has("allow-software"));
+        var json = JsonSerializer.Serialize(report, PersistentPipeline.Json);
+        Console.WriteLine(json);
+        if (options.Get("report") is { } file) { Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!); File.WriteAllText(file,json); }
+        return options.Has("allow-software") && !report.QualityPassed ? 1 : 0;
     }
 
     private static int RunDiagnose(CliArgs options)
@@ -286,7 +296,8 @@ public static class Program
             ?? throw new CliArgException("The pipeline request is empty.");
         request = request with { Resume = !a.Has("no-resume") && request.Resume,
             VerifySourceContents = a.Has("verify-source-contents") || request.VerifySourceContents,
-            Preflight = !a.Has("no-preflight") && request.Preflight };
+            Preflight = !a.Has("no-preflight") && request.Preflight,
+            TextureCompute = a.Get("texture-compute") ?? request.TextureCompute };
         string cache = a.Get("cache-folder") ?? Path.Combine(Environment.GetEnvironmentVariable("XDG_CACHE_HOME")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache"), "PenguLOD");
         var result = GenerationPipeline.Run(request, cache, new SyncProgress(Console.WriteLine), Cancellation);

@@ -4,7 +4,7 @@ namespace AnvilLOD.Textures.Bc;
 /// <summary>
 /// Small, fast BC7 encoder using mode 6 only (one subset, RGBA 7.7.7.7 + p-bit endpoints, 4-bit indices).
 /// Endpoints come from the principal axis, then one least-squares refinement pass.
-/// Good enough for LOD atlases and billboards; a GPU encoder replaces it in milestone 2.
+/// Portable quality path for all images; large opaque images can use the optional Vulkan mode 6 backend.
 /// </summary>
 public static class Bc7Encoder
 {
@@ -13,6 +13,12 @@ public static class Bc7Encoder
         EncodeImage(rgba.ToArray(), width, height);
 
     public static byte[] EncodeImage(byte[] rgba, int width, int height)
+    {
+        if(width<=0 || height<=0 || rgba.Length!=checked(width*height*4))throw new ArgumentException("Invalid RGBA image dimensions.");
+        return TextureCompute.TryEncode(rgba,width,height,out var encoded)?encoded:EncodeImageCpu(rgba,width,height);
+    }
+
+    internal static byte[] EncodeImageCpu(byte[] rgba, int width, int height)
     {
         int bw = (width + 3) / 4, bh = (height + 3) / 4;
         var output = new byte[bw * bh * 16];

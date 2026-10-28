@@ -41,7 +41,7 @@ public sealed partial class MainWindow
         {
             progress.Report("Checking pipeline settings and output paths...");
             string cache = RequestFactory.Optional(snapshot.CacheFolder) is { } folder ? RequestFactory.PathValue(folder, snapshot) : SettingsStore.CacheRoot;
-            return GenerationPipeline.Run(request(snapshot), cache, progress, ct);
+            return GenerationPipeline.Run(request(snapshot) with {TextureCompute=snapshot.TextureCompute}, cache, progress, ct);
         }, (result, folder, elapsed) =>
         {
             _lastPipelineFolder = result.JobFolder;

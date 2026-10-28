@@ -7,7 +7,7 @@ using AnvilLOD.Core.Pipeline;
 namespace AnvilLOD.Plugins;
 
 public sealed record GenerationPipelineRequest(GrassGenerationRequest? Grass = null, TextureGenerationRequest? Textures = null,
-    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false, TerrainGenerationRequest? Terrain = null, bool Preflight = true);
+    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false, TerrainGenerationRequest? Terrain = null, bool Preflight = true, string TextureCompute = "Cpu");
 public sealed record LodStageReceipt(string OutputFolder, int Files, int BlocksWritten, int BlocksUnchanged,
     long Triangles, IReadOnlyList<string> Warnings, string? PreviousOutput);
 public sealed record GenerationPipelineResult(string JobFolder, PipelineInputSnapshot Inputs, PipelineJournal Journal,
@@ -23,6 +23,7 @@ public static class GenerationPipeline
     public static GenerationPipelineResult Run(GenerationPipelineRequest request, string cache,
         IProgress<string>? progress = null, CancellationToken ct = default)
     {
+        using var compute = AnvilLOD.Textures.TextureCompute.Enter(request.TextureCompute, progress);
         var source = request.Grass?.Game ?? request.Textures?.Game ?? request.Lod?.Game ?? request.Terrain?.Game
             ?? throw new ArgumentException("Select at least one pipeline stage.");
         var outputs = new[] { request.Grass?.OutputFolder, request.Textures?.OutputFolder, request.Lod?.OutputFolder, request.Terrain?.OutputFolder }.OfType<string>().ToArray();
@@ -64,7 +65,7 @@ public static class GenerationPipeline
         TerrainGenerationResult? terrainResult = null; DiagnosticReport? diagnostics = null;
         ScanSummary? summary = null; LodStageReceipt? receipt = null;
         string? active = null, error = null;
-        string Fingerprint<T>(T value, params string?[] extra) => inputs.Fingerprint + "|" + JsonSerializer.Serialize(value)
+        string Fingerprint<T>(T value, params string?[] extra) => inputs.Fingerprint + (value is GrassGenerationRequest ? "" : "|compute:" + request.TextureCompute) + "|" + JsonSerializer.Serialize(value)
             + "|" + PipelineInputs.ExternalFingerprint(extra, request.VerifySourceContents, ct);
         try
         {

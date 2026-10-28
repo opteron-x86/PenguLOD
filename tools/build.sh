@@ -17,6 +17,7 @@ PY
         ;;
     *) echo 'Usage: bash tools/build.sh [--reuse-backend]' >&2; exit 2 ;;
 esac
+bash tools/build-texture-compute.sh
 version="$(python3 tools/version.py)"
 # Only the dedicated package directory is cleared, never user output or settings.
 rm -rf -- dist/linux-x64

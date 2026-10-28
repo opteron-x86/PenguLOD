@@ -33,8 +33,12 @@ jobs:
       - name: Install native build and UI dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-14 cmake ninja-build pkg-config curl patch python3 zlib1g-dev liblz4-dev libtbb-dev libspdlog-dev libfmt-dev libgtest-dev libfontconfig1 libx11-6 libice6 libsm6 libicu-dev xvfb
+          sudo apt-get install -y g++-14 cmake ninja-build pkg-config curl patch python3 zlib1g-dev liblz4-dev libtbb-dev libspdlog-dev libfmt-dev libgtest-dev libfontconfig1 libx11-6 libice6 libsm6 libicu-dev xvfb libvulkan-dev mesa-vulkan-drivers glslang-tools vulkan-validationlayers
+      - name: Build optional texture compute backend
+        run: bash tools/build-texture-compute.sh
       - name: Engine and rendered UI tests
+        env:
+          PENGULOD_TEST_VULKAN: '1'
         run: bash tools/test.sh
       - name: Build backend, test and publish portable Linux applications
         env:

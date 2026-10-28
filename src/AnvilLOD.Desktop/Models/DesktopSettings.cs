@@ -194,6 +194,8 @@ public sealed class DesktopSettings : ObservableObject
     public bool ConvertAllMeshes { get => _convertAllMeshes; set => Set(ref _convertAllMeshes, value); }
     private bool _convertOverwrite = false;
     public bool ConvertOverwrite { get => _convertOverwrite; set => Set(ref _convertOverwrite, value); }
+    private string _textureCompute = "Cpu";
+    public string TextureCompute { get => _textureCompute; set => Set(ref _textureCompute, value ?? "Cpu"); }
     private decimal _maxThreads = 0m;
     public decimal MaxThreads { get => _maxThreads; set => Set(ref _maxThreads, value); }
     private decimal _makerDetail = 1m;
