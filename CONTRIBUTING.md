@@ -13,7 +13,7 @@ Install the .NET 10 SDK. On Ubuntu 24.04 the native dependencies are:
 sudo apt-get install g++-14 cmake ninja-build pkg-config curl patch python3 \
   zlib1g-dev liblz4-dev libtbb-dev libspdlog-dev libfmt-dev libgtest-dev \
   libfontconfig1 libx11-6 libice6 libsm6 libicu-dev xvfb \
-  libvulkan-dev mesa-vulkan-drivers glslang-tools
+  libvulkan-dev mesa-vulkan-drivers glslang-tools appstream
 CC=gcc-14 CXX=g++-14 bash tools/build.sh
 bash tools/test.sh
 xvfb-run -a bash tools/native-smoke.sh

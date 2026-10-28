@@ -25,13 +25,19 @@ pathlib.Path('.artifacts/appimage-tool/runtime').write_bytes(pathlib.Path(sys.ar
 PY
 appdir="$PWD/.artifacts/PenguLOD.AppDir"
 rm -rf -- "$appdir"
-mkdir -p "$appdir/usr/bin" "$appdir/usr/lib/PenguLOD" "$appdir/usr/share/metainfo"
+mkdir -p "$appdir/usr/bin" "$appdir/usr/lib/PenguLOD" "$appdir/usr/share/metainfo" \
+    "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/256x256/apps"
 cp -a "$payload/." "$appdir/usr/lib/PenguLOD/"
 cp packaging/AppRun "$appdir/AppRun"
 cp packaging/io.github.opteron_x86.PenguLOD.desktop "$appdir/"
+cp packaging/io.github.opteron_x86.PenguLOD.desktop "$appdir/usr/share/applications/"
 cp packaging/io.github.opteron_x86.PenguLOD.metainfo.xml "$appdir/usr/share/metainfo/io.github.opteron_x86.PenguLOD.appdata.xml"
 cp assets/pengulod-256.png "$appdir/pengulod.png"
+cp assets/pengulod-256.png "$appdir/usr/share/icons/hicolor/256x256/apps/pengulod.png"
 chmod +x "$appdir/AppRun"
 ln -s ../../AppRun "$appdir/usr/bin/PenguLOD.Desktop"
-ARCH=x86_64 .artifacts/appimage-tool/squashfs-root/AppRun --runtime-file .artifacts/appimage-tool/runtime \
+# Validate the complete installed tree offline; appimagetool's single-file validator
+# otherwise checks host-installed desktop entries and makes unnecessary network requests.
+appstreamcli validate-tree --no-net "$appdir"
+ARCH=x86_64 .artifacts/appimage-tool/squashfs-root/AppRun --no-appstream --runtime-file .artifacts/appimage-tool/runtime \
     --mksquashfs-opt -processors --mksquashfs-opt 2 "$appdir" "$PWD/dist/PenguLOD-$version-x86_64.AppImage"
