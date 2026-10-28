@@ -45,6 +45,7 @@ public sealed class LodGenerator
 
     /// <summary>When set, textures that the full models replace with PBR ones are swapped for matching LOD textures.</summary>
     public PbrLodTextures? Pbr { get; init; }
+    public Func<LodMesh,LodMesh>? ObjectAtlasTransform { get; set; }
 
     /// <summary>When set, shapes without an alpha property whose diffuse texture has a translucent alpha channel point at an opaque copy.</summary>
     public OpaqueLodTextures? Opaque { get; init; }
@@ -559,7 +560,11 @@ public sealed class LodGenerator
                     var test = _terrain is null ? null
                         : new BtoBuilder.TerrainTest((x, y) => _terrain.HeightAt(quad.Worldspace, x, y), TerrainHeights.MarginFor(quad.Level),
                             RemoveUnderwater ? (x, y) => _terrain.WaterAt(quad.Worldspace, x, y) : null);
-                    var result = BtoBuilder.Build(quad, quads[quad], GetMesh, test, Brightness, Categorize, Inset, SnowShaderMode, SnowCover);
+                    var result = BtoBuilder.Build(quad, quads[quad], key =>
+                    {
+                        var mesh = GetMesh(key);
+                        return mesh is null || key.StartsWith('~') ? mesh : ObjectAtlasTransform?.Invoke(mesh) ?? mesh;
+                    }, test, Brightness, Categorize, Inset, SnowShaderMode, SnowCover);
                     var rel = seasonSuffix is null ? quad.RelativePath : AnvilLOD.Core.Lod.SeasonSwaps.SeasonalPath(quad.RelativePath, seasonSuffix);
                     var path = Path.Combine(outputFolder, rel.Replace('\\', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(path)!);

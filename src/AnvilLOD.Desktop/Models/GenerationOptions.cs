@@ -75,6 +75,8 @@ public static class GenerationOptions
         new("esl", "World & runtime", "ESL record limit", "Auto reads the game version; 4096 requires Skyrim 1.6.1130 or newer.", "Auto", Choices: ["Auto", "2048", "4096"]),
         new("largeRefs", "World & runtime", "Large-reference master", "Write missing large references to AnvilLOD.esm.", false),
         new("largeEsl", "World & runtime", "Flag large-reference master as ESL", "Avoid using a full plugin slot.", true),
+        new("objectAtlas", "Object atlases", "Pack object texture atlases", "Paired diffuse/normal pages; unsupported materials keep their source textures. Rebuilds all blocks when the LOD stage runs.", false),
+        new("atlasCell", "Object atlases", "Atlas cell size", "Includes a padded border to prevent mip bleeding.", "256", Choices: ["64", "128", "256", "512"]),
         new("pbr", "PBR & terrain", "PBR object LOD", "Use matching PBR albedo textures and TexGen twins.", false),
         new("pbrBrightness", "PBR & terrain", "PBR brightness", "Multiplier on the default PBR conversion scale.", 1m, 0, 4),
         new("pbrSize", "PBR & terrain", "PBR texture size", "Maximum side length of converted textures.", "512", Choices: ["128", "256", "512", "1024", "2048"]),

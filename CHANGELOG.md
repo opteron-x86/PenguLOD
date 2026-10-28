@@ -5,6 +5,9 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+- Native paired object texture atlases with UV remapping, material grouping, padded mips,
+  conservative eligibility checks and coverage reports; replaced the unused atlas placeholder.
+
 - Seasonal terrain, tree atlases/BTT/LST and native 3D tree replacements, using Seasons of
   Skyrim form swaps. Added a synthetic seasonal profile and end-to-end regression checks.
 

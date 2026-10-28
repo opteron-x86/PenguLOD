@@ -74,6 +74,12 @@ public sealed class DesktopSettings : ObservableObject
     private decimal _terrainTextureSize = 512;
     public decimal TerrainTextureSize { get => _terrainTextureSize; set => Set(ref _terrainTextureSize, value); }
     private decimal _terrainBrightness = 1;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Seasons
+    {
+        get => GenerationOptions.Get<bool>(this, "seasons");
+        set { Options["seasons"] = JsonSerializer.SerializeToElement(value); Changed(); }
+    }
     public decimal TerrainBrightness { get => _terrainBrightness; set => Set(ref _terrainBrightness, value); }
     private decimal _terrainVertexColor = 1;
     public decimal TerrainVertexColor { get => _terrainVertexColor; set => Set(ref _terrainVertexColor, value); }

@@ -59,7 +59,7 @@ public sealed record ScanRequest(
     string? OcclusionFolder = null,
     string? GeneratedTextureFolder = null,
     string? GeneratedGrassFolder = null,
-    string? GeneratedTerrainFolder = null);
+    string? GeneratedTerrainFolder = null, bool ObjectAtlas = false, int AtlasCellSize = 256);
 
 public sealed record ScanSummary(
     ScanStats Stats,
@@ -510,7 +510,7 @@ public static class ScanPipeline
         var hashes = new System.Collections.Concurrent.ConcurrentDictionary<QuadKey, string>();
         Parallel.ForEach(quads, RunLimits.Parallel(ct), kv =>
             hashes[kv.Key] = QuadHasher.Hash(kv.Key, kv.Value, Fingerprint,
-                req.SettingsFingerprint + (mapObjectLevel >= 0 ? $"|map32:{mapObjectLevel}" : "") + (MathF.Abs(req.ObjectBrightness - 1f) > 0.001f ? $"|bright:{req.ObjectBrightness:F2}" : "") + (req.PbrLod ? FormattableString.Invariant($"|pbr:{req.PbrLodBrightness:F2}:{req.PbrLodSize}") : "") + (ruleOptions.Candles ? "|candles" : "") + (ruleOptions.FxGlow ? "|fxglow" : "") + (ruleOptions.CustomFile is { } cf ? $"|rules:{new FileInfo(cf).Length}:{new FileInfo(cf).LastWriteTimeUtc.Ticks}" : "") + (req.SnowShaderMode != 0 ? $"|snowmode:{req.SnowShaderMode}" : "") + (req.SnowCover != 0 ? $"|snowcover:{req.SnowCover}" : "") + (req.MountainFit && req.MountainInset > 0f ? "|mtnfit1" : "") + (req.OpaqueAlpha ? "|opaque1" : "") + (req.DetailedShips ? FormattableString.Invariant($"|ships2:{LodInset.DefaultShip:F1}") : "") + (req.IceInset > 0f ? FormattableString.Invariant($"|iceinset:{req.IceInset:F1}") : "") + (req.MountainInset > 0f ? FormattableString.Invariant($"|mtninset:{req.MountainInset:F1}") : "") + (req.ObjectInset > 0f ? FormattableString.Invariant($"|objinset:{req.ObjectInset:F1}") : "") + (cullTerrain is null ? "|keep-buried"
+                req.SettingsFingerprint + (req.ObjectAtlas ? $"|atlas1:{req.AtlasCellSize}" : "") + (mapObjectLevel >= 0 ? $"|map32:{mapObjectLevel}" : "") + (MathF.Abs(req.ObjectBrightness - 1f) > 0.001f ? $"|bright:{req.ObjectBrightness:F2}" : "") + (req.PbrLod ? FormattableString.Invariant($"|pbr:{req.PbrLodBrightness:F2}:{req.PbrLodSize}") : "") + (ruleOptions.Candles ? "|candles" : "") + (ruleOptions.FxGlow ? "|fxglow" : "") + (ruleOptions.CustomFile is { } cf ? $"|rules:{new FileInfo(cf).Length}:{new FileInfo(cf).LastWriteTimeUtc.Ticks}" : "") + (req.SnowShaderMode != 0 ? $"|snowmode:{req.SnowShaderMode}" : "") + (req.SnowCover != 0 ? $"|snowcover:{req.SnowCover}" : "") + (req.MountainFit && req.MountainInset > 0f ? "|mtnfit1" : "") + (req.OpaqueAlpha ? "|opaque1" : "") + (req.DetailedShips ? FormattableString.Invariant($"|ships2:{LodInset.DefaultShip:F1}") : "") + (req.IceInset > 0f ? FormattableString.Invariant($"|iceinset:{req.IceInset:F1}") : "") + (req.MountainInset > 0f ? FormattableString.Invariant($"|mtninset:{req.MountainInset:F1}") : "") + (req.ObjectInset > 0f ? FormattableString.Invariant($"|objinset:{req.ObjectInset:F1}") : "") + (cullTerrain is null ? "|keep-buried"
                     : "|terrain:" + (cullTerrain.Fingerprints.TryGetValue(kv.Key.Worldspace, out var tf) ? tf : "none") + (req.RemoveUnderwater ? "|water:" + cullTerrain.Heights.WaterFingerprint(kv.Key.Worldspace) : "")),
                 id => scan.TextureVariants is { } tv && tv.TryGetValue(id, out var v) ? Fingerprint(v.FullModel) : null));
         sw.Stop();
@@ -523,6 +523,8 @@ public static class ScanPipeline
             && scopeWorldspaces.Contains(ws)
             && (req.Levels is not { Count: > 0 } || req.Levels.Contains((LodLevel)lv));
         var plan = manifest.Plan(hashes, req.OutputFolder, InScope);
+        if (req.ObjectAtlas) plan = new BuildPlan(hashes.Keys.ToArray(),[],plan.StaleFiles); // atlas layout can affect every block
+        if(req.AtlasCellSize is <64 or >512 || (req.AtlasCellSize&(req.AtlasCellSize-1))!=0)throw new ArgumentException("Atlas cell size must be a power of two from 64 to 512.");
 
         GenerateStats? gen = null;
         TreeGenerateStats? trees = null;
@@ -557,6 +559,18 @@ public static class ScanPipeline
             var pbrLod = req.PbrLod ? new PbrLodTextures(assets) : null;
             var opaqueLod = req.OpaqueAlpha ? new OpaqueLodTextures(assets, OpaqueLodStage.IsTranslucent) : null;
             var generator = new LodGenerator(assets, cullTerrain?.Heights, new CompositeSyntheticSource(grass, cards, tree3d, ships)) { RemoveUnderwater = req.RemoveUnderwater, Brightness = req.ObjectBrightness, SnowShaderMode = req.SnowShaderMode, SnowCover = req.SnowCover, FitMountains = req.MountainFit && req.MountainInset > 0f, Pbr = pbrLod, Opaque = opaqueLod, Categorize = SizeBreakdown.Categorize, Inset = req.IceInset > 0f || req.MountainInset > 0f || req.ObjectInset > 0f || req.DetailedShips ? path => LodInset.For(path, req.IceInset, req.MountainInset, req.DetailedShips ? LodInset.DefaultShip : 0f, req.ObjectInset) : null, TextureVariants = scan.TextureVariants };
+            if (req.ObjectAtlas)
+            {
+                var models=quads.Values.SelectMany(v=>v).SelectMany(r=>new[]{r.Meshes.Lod4,r.Meshes.Lod8,r.Meshes.Lod16,r.Meshes.Lod32})
+                    .OfType<string>().Where(p=>!p.StartsWith('~')).Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(p=>{ct.ThrowIfCancellationRequested();return generator.GetMesh(p);}).OfType<LodMesh>().ToArray();
+                // Mapping above discovers converted PBR/opaque inputs. Materialize them before packing paired pages.
+                if(pbrLod is not null && PbrLodStage.Run(assets,pbrLod,output,req.PbrLodSize,req.PbrLodBrightness,progress,ct) is {Failed:>0} pbrFailure)
+                    throw new InvalidDataException("Cannot atlas failed PBR inputs: "+string.Join("; ",pbrFailure.Errors));
+                if(opaqueLod is not null && OpaqueLodStage.Run(assets,opaqueLod,output,progress,ct) is {Failed:>0} opaqueFailure)
+                    throw new InvalidDataException("Cannot atlas failed opaque inputs: "+string.Join("; ",opaqueFailure.Errors));
+                generator.ObjectAtlasTransform=ObjectAtlasStage.Build(models,assets,output,req.AtlasCellSize,progress,ct).Transform;
+            }
             gen = generator.Generate(quads, plan.Rebuild, output, progress, ct);
             if (ships is not null && ships.Built() is { Count: > 0 } builtShips)
                 progress?.Report($"Detailed ships: {builtShips.Count} ship models drawn from their real models ("
