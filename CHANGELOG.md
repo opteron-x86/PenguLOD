@@ -9,6 +9,9 @@ Pre-release versions are marked alpha or beta until the supported workflows have
   output reuse, cancellation recovery and per-stage measured timings.
 - Isolated LOD publication with previous-output backups, concurrent-job locks and retained
   failure logs; a failed or empty generation preserves the installed output.
+- Native terrain/water stage with landscape layer baking, model-space normals, existing-BTR
+  fallback, terrain-shadow heightmap export and desktop controls. Automated format/fixture
+  validation passes; in-game visual validation remains pending.
 
 ## [0.1.0-alpha.1] - 2026-10-27
 

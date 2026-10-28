@@ -89,8 +89,20 @@ public sealed class TerrainHeights
     public float? VertexAt(string worldspace, int gx, int gy)
     {
         int cx = LodGrid.FloorDiv(gx, Grid - 1), cy = LodGrid.FloorDiv(gy, Grid - 1);
-        if (!_cells.TryGetValue((worldspace.ToLowerInvariant(), cx, cy), out var h)) return null;
-        return h[(gy - cy * (Grid - 1)) * Grid + (gx - cx * (Grid - 1))];
+        var ws = worldspace.ToLowerInvariant();
+        if (!_cells.TryGetValue((ws, cx, cy), out var h))
+        {
+            // The outermost row/column still belongs to the last known LAND cell.
+            // Prefer the north/east cell when both exist, making every tile use the same seam.
+            bool found = false;
+            for (int dy = 0; dy >= -1 && !found; dy--)
+                for (int dx = 0; dx >= -1 && !found; dx--)
+                    if ((dx == 0 || gx % 32 == 0) && (dy == 0 || gy % 32 == 0)
+                        && _cells.TryGetValue((ws, cx + dx, cy + dy), out h))
+                    { cx += dx; cy += dy; found = true; }
+            if (!found) return null;
+        }
+        return h![(gy - cy * (Grid - 1)) * Grid + (gx - cx * (Grid - 1))];
     }
 
     /// <summary>Terrain height at a world position (bilinear between the 4 surrounding vertices), or null if unknown.</summary>

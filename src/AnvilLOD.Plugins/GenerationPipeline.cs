@@ -7,12 +7,12 @@ using AnvilLOD.Core.Pipeline;
 namespace AnvilLOD.Plugins;
 
 public sealed record GenerationPipelineRequest(GrassGenerationRequest? Grass = null, TextureGenerationRequest? Textures = null,
-    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false);
+    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false, TerrainGenerationRequest? Terrain = null);
 public sealed record LodStageReceipt(string OutputFolder, int Files, int BlocksWritten, int BlocksUnchanged,
     long Triangles, IReadOnlyList<string> Warnings, string? PreviousOutput);
 public sealed record GenerationPipelineResult(string JobFolder, PipelineInputSnapshot Inputs, PipelineJournal Journal,
     GrassGenerationResult? Grass, TextureGenerationResult? Textures, LodStageReceipt? LodReceipt, ScanSummary? Lod,
-    string? FailedStage, string? Error)
+    string? FailedStage, string? Error, TerrainGenerationResult? Terrain = null)
 {
     public bool Success => Error is null;
 }
@@ -23,9 +23,9 @@ public static class GenerationPipeline
     public static GenerationPipelineResult Run(GenerationPipelineRequest request, string cache,
         IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        var source = request.Grass?.Game ?? request.Textures?.Game ?? request.Lod?.Game
+        var source = request.Grass?.Game ?? request.Textures?.Game ?? request.Lod?.Game ?? request.Terrain?.Game
             ?? throw new ArgumentException("Select at least one pipeline stage.");
-        var outputs = new[] { request.Grass?.OutputFolder, request.Textures?.OutputFolder, request.Lod?.OutputFolder }.OfType<string>().ToArray();
+        var outputs = new[] { request.Grass?.OutputFolder, request.Textures?.OutputFolder, request.Lod?.OutputFolder, request.Terrain?.OutputFolder }.OfType<string>().ToArray();
         foreach (var output in outputs)
         {
             GenerationDestination.Validate(source, output);
@@ -34,7 +34,7 @@ public static class GenerationPipeline
             if (HostPath.IsWithin(cache, output) || HostPath.IsWithin(output, cache))
                 throw new ArgumentException("Keep the pipeline cache and generated output folders separate.");
         }
-        foreach (var game in new[] { request.Grass?.Game, request.Textures?.Game, request.Lod?.Game }.OfType<GameContextOptions>())
+        foreach (var game in new[] { request.Grass?.Game, request.Textures?.Game, request.Lod?.Game, request.Terrain?.Game }.OfType<GameContextOptions>())
             if (JsonSerializer.Serialize(game) != JsonSerializer.Serialize(source))
                 throw new ArgumentException("Every pipeline stage must use the same game source and profile.");
         if (request.Lod is not null && (request.Grass?.Preview == true || request.Textures?.ModelFilter.Length > 0))
@@ -42,21 +42,26 @@ public static class GenerationPipeline
         source = source with { ExcludeFolders = (source.ExcludeFolders ?? []).Concat(outputs).Distinct().ToArray() };
         var grass = request.Grass is { } g ? g with { Game = source } : null;
         var textures = request.Textures is { } t ? t with { Game = source } : null;
+        var terrain = request.Terrain is { } tr ? tr with { Game = source } : null;
         var lod = request.Lod is { } l ? l with { Game = source, Generate = true,
             GeneratedGrassFolder = grass?.OutputFolder ?? l.GeneratedGrassFolder,
-            GeneratedTextureFolder = textures?.OutputFolder ?? l.GeneratedTextureFolder } : null;
+            GeneratedTextureFolder = textures?.OutputFolder ?? l.GeneratedTextureFolder,
+            GeneratedTerrainFolder = terrain?.OutputFolder ?? l.GeneratedTerrainFolder } : null;
         if (grass is not null) GrassGeneration.Validate(grass);
         if (textures is not null) TextureGeneration.Validate(textures);
         if (lod is { OutputFolder: null }) throw new ArgumentException("Choose a LOD output folder.");
+        if (terrain is not null) TerrainGeneration.Validate(terrain);
         var plan = new List<PipelineStagePlan>();
         if (grass is not null) plan.Add(new("grass", "Grass cache", grass.OutputFolder, []));
         if (textures is not null) plan.Add(new("textures", "Textures", textures.OutputFolder, []));
+        if (terrain is not null) plan.Add(new("terrain", "Terrain and water", terrain.OutputFolder, []));
         if (lod is not null) plan.Add(new("lod", "LOD", lod.OutputFolder!, plan.Select(p => p.Id).ToArray()));
         using var job = new PersistentPipeline(cache, plan, request.Resume, progress, ct);
         var inputs = PipelineInputs.Capture(source, outputs, [], request.VerifySourceContents, progress, ct);
         File.WriteAllText(Path.Combine(job.Folder, "inputs.json"), JsonSerializer.Serialize(inputs, PersistentPipeline.Json));
         File.WriteAllText(Path.Combine(job.Folder, "request.json"), JsonSerializer.Serialize(request, PersistentPipeline.Json));
         GrassGenerationResult? grassResult = null; TextureGenerationResult? textureResult = null;
+        TerrainGenerationResult? terrainResult = null;
         ScanSummary? summary = null; LodStageReceipt? receipt = null;
         string? active = null, error = null;
         string Fingerprint<T>(T value, params string?[] extra) => inputs.Fingerprint + "|" + JsonSerializer.Serialize(value)
@@ -84,12 +89,17 @@ public static class GenerationPipeline
                 }, r => ManifestSnapshot(r.OutputFolder, TextureGenerationManifest.FileName,
                     TextureGenerationManifest.Read(r.OutputFolder, requireComplete: textures.ModelFilter.Length == 0)!.Files, ct));
             }
+            if (terrain is not null)
+            {
+                active = "terrain";
+                terrainResult = job.Run("terrain", Fingerprint(terrain), () => TerrainGeneration.Run(terrain, progress, ct), r => r.Output);
+            }
             if (lod is not null)
             {
                 active = "lod";
                 OutputSnapshot? output = null;
                 receipt = job.Run("lod", Fingerprint(lod, lod.DynDolodFolder, lod.CustomRulesFile,
-                    grass is null ? lod.GeneratedGrassFolder : null, textures is null ? lod.GeneratedTextureFolder : null), () =>
+                    grass is null ? lod.GeneratedGrassFolder : null, textures is null ? lod.GeneratedTextureFolder : null, terrain is null ? lod.GeneratedTerrainFolder : null), () =>
                 {
                     // The engine verifies generated inputs before writing to the isolated destination.
                     using var staged = new StagedOutput(lod.OutputFolder!, !lod.CleanOutput, progress, ct);
@@ -113,7 +123,7 @@ public static class GenerationPipeline
         }
         catch (Exception e) when (e is not OperationCanceledException)
         { error = e.Message; progress?.Report("Pipeline stopped at " + active + ": " + e); }
-        return new(job.Folder, inputs, job.Journal, grassResult, textureResult, receipt, summary, active, error);
+        return new(job.Folder, inputs, job.Journal, grassResult, textureResult, receipt, summary, active, error, terrainResult);
     }
 
     private static OutputSnapshot ManifestSnapshot(string root, string manifest, Dictionary<string, string> files, CancellationToken ct)

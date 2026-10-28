@@ -31,6 +31,18 @@ public static class RequestFactory
             GameIniPath: P(s.GameIni), WinePrefix: P(s.WinePrefix));
     }
 
+    public static TerrainGenerationRequest Terrain(DesktopSettings s)
+    {
+        int Whole(decimal value) => value == decimal.Truncate(value) ? checked((int)value) : throw new ArgumentException("Terrain sizes must be whole numbers.");
+        var worlds = s.Worldspaces.Split([',', ';', ' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var request = new TerrainGenerationRequest(Game(s), RequiredPath(s.TerrainOutput, "a terrain output folder", s), worlds.Length == 0 ? null : worlds,
+            TextureSize: Whole(s.TerrainTextureSize), Brightness: (float)s.TerrainBrightness, VertexColorStrength: (float)s.TerrainVertexColor,
+            TextureRepeatsPerCell: (float)s.TerrainRepeats, SkirtDepth: (float)s.TerrainSkirt, Water: s.TerrainWater,
+            UseExistingTerrain: s.TerrainFallback, ExportHeightmaps: s.TerrainHeightmaps, HeightmapMaximumSize: Whole(s.TerrainHeightmapSize));
+        TerrainGeneration.Validate(request);
+        return request;
+    }
+
     public static TextureGenerationRequest Textures(DesktopSettings s)
     {
         if (s.TextureGenBaseSize != decimal.Truncate(s.TextureGenBaseSize) || s.TextureGenMaxSize != decimal.Truncate(s.TextureGenMaxSize))
@@ -118,6 +130,7 @@ public static class RequestFactory
             CsGrassLod: B("csGrass"), MapObjectLevel: I("mapLevel"),
             Occlusion: generate && B("occlusion") ? new OcclusionSettings(I("occRadius"), F("occClearance"), I("occSamples"), F("occEye"), F("occParent"), I("occParentTargets"), I("occBlockTargets"), I("occEyes")) : null,
             GeneratedTextureFolder: s.UseGeneratedTextures ? RequiredPath(s.TextureGenOutput, "a texture output folder", s) : null,
-            GeneratedGrassFolder: s.UseGeneratedGrass ? RequiredPath(s.GrassOutput, "a grass cache output folder", s) : null);
+            GeneratedGrassFolder: s.UseGeneratedGrass ? RequiredPath(s.GrassOutput, "a grass cache output folder", s) : null,
+            GeneratedTerrainFolder: s.UseGeneratedTerrain ? RequiredPath(s.TerrainOutput, "a terrain output folder", s) : null);
     }
 }

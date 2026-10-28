@@ -18,8 +18,8 @@ public sealed partial class MainWindow
         Heading("Pipeline", "Generate a complete set in stages. Completed stages survive cancellation, failure and application restarts."),
         Card("STAGES", Stack(12,
             Row(Check("Cache grass", nameof(DesktopSettings.PipelineGrass)), Check("Textures", nameof(DesktopSettings.PipelineTextures)),
-                Check("Object / tree / grass LOD", nameof(DesktopSettings.PipelineLod))),
-            Text("Configure the source and output folders on Overview, Grass cache and Texture generation. Each stage needs its own output folder. New grass and textures feed LOD automatically.", true))),
+                Check("Terrain and water", nameof(DesktopSettings.PipelineTerrain)), Check("Object / tree / grass LOD", nameof(DesktopSettings.PipelineLod))),
+            Text("Configure the source and output folders on Overview, Grass cache, Texture generation and Terrain. Each stage needs its own output folder. New grass and textures feed LOD automatically.", true))),
         Card("RESUME & VERIFICATION", Stack(12,
             Check("Reuse completed stages after verifying their files", nameof(DesktopSettings.ResumeCompletedStages)),
             Check("Verify all source asset contents", nameof(DesktopSettings.VerifySourceContents)),
@@ -36,7 +36,8 @@ public sealed partial class MainWindow
             state.PipelineGrass ? RequestFactory.Grass(state) : null,
             state.PipelineTextures ? RequestFactory.Textures(state) : null,
             state.PipelineLod ? RequestFactory.Scan(state, true) : null,
-            state.ResumeCompletedStages, state.VerifySourceContents));
+            state.ResumeCompletedStages, state.VerifySourceContents,
+            Terrain: state.PipelineTerrain ? RequestFactory.Terrain(state) : null));
     }
 
     private Task RunPersistentPipeline(string title, DesktopSettings snapshot, Func<DesktopSettings, GenerationPipelineRequest> request)
@@ -67,6 +68,13 @@ public sealed partial class MainWindow
                 _lastTextureGeneration = textures; _textureGenResults.ItemsSource = textures.Items;
                 _textureGenSummary.Text = $"{textures.Files:N0} files · {textures.Errors:N0} failures · {textures.Warnings.Count:N0} warnings";
                 if (textures.Published) _settings.UseGeneratedTextures = string.IsNullOrWhiteSpace(snapshot.TextureGenFilter);
+            }
+            if (result.Terrain is { } terrain)
+            {
+                _settings.UseGeneratedTerrain = true;
+                _terrainResults.ItemsSource = terrain.Worlds;
+                _terrainSummary.Text = $"{terrain.Tiles.Count:N0} terrain tiles · {terrain.Warnings.Count:N0} warnings · {terrain.Seconds:F1}s generation.\nPrevious output: {terrain.PreviousOutput ?? "none"}";
+                File.WriteAllText(Path.Combine(folder, "terrain-report.json"), JsonSerializer.Serialize(terrain, PersistentPipeline.Json));
             }
             if (result.Lod is { } summary)
             { ScanReport.Write(Path.Combine(folder, "scan-report.json"), summary, elapsed); ShowSummary(summary); }

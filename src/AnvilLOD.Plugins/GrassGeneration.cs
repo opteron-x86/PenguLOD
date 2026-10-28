@@ -42,6 +42,8 @@ public static partial class GrassGeneration
             throw new ArgumentException("A small-area preview needs exactly one worldspace, such as Tamriel.");
         if (req.NgioConfig is { } config && !File.Exists(config)) throw new FileNotFoundException("GrassControl.ini override not found: " + config);
         GenerationDestination.Validate(req.Game, req.OutputFolder);
+        if (File.Exists(Path.Combine(req.OutputFolder, TerrainGeneration.ManifestName)))
+            throw new ArgumentException("Choose a separate output folder; this contains generated terrain.");
         // Full output verification is done by Run under its output lock, with progress and cancellation.
     }
 

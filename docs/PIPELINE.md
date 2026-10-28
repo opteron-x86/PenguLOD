@@ -1,6 +1,6 @@
 # Persistent generation
 
-The Pipeline page selects grass, textures and LOD stages. Each stage needs its own output
+The Pipeline page selects grass, textures, terrain/water and object LOD stages. Each stage needs its own output
 folder. Run the same selection again to resume after cancellation, failure or an application
 restart. A completed stage is reused only when its settings, input inventory, dependencies
 and every recorded output file still match. Changing a stage invalidates its dependents.

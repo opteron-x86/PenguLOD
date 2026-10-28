@@ -124,7 +124,7 @@ public sealed partial class MainWindow : Window
     private void BuildShell()
     {
         _page.Content = null;
-        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary, _pipelineSummary, _pipelineStages })
+        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary, _pipelineSummary, _pipelineStages, _terrainSummary, _terrainResults })
         {
             if (control.Parent is Panel panel) panel.Children.Remove(control);
             else if (control.Parent is ContentControl content) content.Content = null;
@@ -134,6 +134,7 @@ public sealed partial class MainWindow : Window
         _pages["Pipeline"] = PipelinePage();
         _pages["Grass cache"] = GrassGenerationPage();
         _pages["Texture generation"] = TextureGenerationPage();
+        _pages["Terrain"] = TerrainPage();
         _pages["Generation settings"] = GenerationSettings();
         _pages["Mesh maker"] = MeshMaker();
         _pages["Mod author"] = ModAuthor();

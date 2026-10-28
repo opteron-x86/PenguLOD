@@ -57,6 +57,30 @@ public sealed class DesktopSettings : ObservableObject
     public string AuthorPlugin { get => _authorPlugin; set => Set(ref _authorPlugin, value ?? ""); }
     private string _authorOutput = "";
     public string AuthorOutput { get => _authorOutput; set => Set(ref _authorOutput, value ?? ""); }
+    private string _terrainOutput = "";
+    public string TerrainOutput { get => _terrainOutput; set => Set(ref _terrainOutput, value); }
+    private bool _pipelineTerrain = false;
+    public bool PipelineTerrain { get => _pipelineTerrain; set => Set(ref _pipelineTerrain, value); }
+    private bool _useGeneratedTerrain = false;
+    public bool UseGeneratedTerrain { get => _useGeneratedTerrain; set => Set(ref _useGeneratedTerrain, value); }
+    private decimal _terrainTextureSize = 512;
+    public decimal TerrainTextureSize { get => _terrainTextureSize; set => Set(ref _terrainTextureSize, value); }
+    private decimal _terrainBrightness = 1;
+    public decimal TerrainBrightness { get => _terrainBrightness; set => Set(ref _terrainBrightness, value); }
+    private decimal _terrainVertexColor = 1;
+    public decimal TerrainVertexColor { get => _terrainVertexColor; set => Set(ref _terrainVertexColor, value); }
+    private decimal _terrainRepeats = 24;
+    public decimal TerrainRepeats { get => _terrainRepeats; set => Set(ref _terrainRepeats, value); }
+    private decimal _terrainSkirt = 512;
+    public decimal TerrainSkirt { get => _terrainSkirt; set => Set(ref _terrainSkirt, value); }
+    private bool _terrainWater = true;
+    public bool TerrainWater { get => _terrainWater; set => Set(ref _terrainWater, value); }
+    private bool _terrainFallback = true;
+    public bool TerrainFallback { get => _terrainFallback; set => Set(ref _terrainFallback, value); }
+    private bool _terrainHeightmaps = true;
+    public bool TerrainHeightmaps { get => _terrainHeightmaps; set => Set(ref _terrainHeightmaps, value); }
+    private decimal _terrainHeightmapSize = 8192;
+    public decimal TerrainHeightmapSize { get => _terrainHeightmapSize; set => Set(ref _terrainHeightmapSize, value); }
     private string _textureGenOutput = "";
     public string TextureGenOutput { get => _textureGenOutput; set => Set(ref _textureGenOutput, value ?? ""); }
     private string _textureGenFilter = "";

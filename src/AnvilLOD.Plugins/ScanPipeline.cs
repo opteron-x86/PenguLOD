@@ -58,7 +58,8 @@ public sealed record ScanRequest(
     AnvilLOD.Core.Occlusion.OcclusionSettings? Occlusion = null,   // work out the occlusion data (Occlusion.esp) ourselves, with these settings (null = off)
     string? OcclusionFolder = null,
     string? GeneratedTextureFolder = null,
-    string? GeneratedGrassFolder = null);
+    string? GeneratedGrassFolder = null,
+    string? GeneratedTerrainFolder = null);
 
 public sealed record ScanSummary(
     ScanStats Stats,
@@ -146,6 +147,17 @@ public static class ScanPipeline
         }
 
 
+        if (req.GeneratedTerrainFolder is { } terrain)
+        {
+            if (req.OutputFolder is { } lod && (HostPath.IsWithin(lod, terrain) || HostPath.IsWithin(terrain, lod)))
+                throw new ArgumentException("LOD and terrain output folders must be separate.");
+            var manifest = TerrainGeneration.ReadManifest(terrain);
+            manifest.Verify(terrain, progress, ct);
+            req = req with { SettingsFingerprint = req.SettingsFingerprint + "|terrain:" + manifest.Digest };
+        }
+        if (req.OutputFolder is { } terrainOutput && File.Exists(Path.Combine(terrainOutput, TerrainGeneration.ManifestName)))
+            throw new ArgumentException("LOD output must be separate from terrain output.");
+
         // The output folder is made and, unless told not to, emptied before the log is opened in it.
         var prepared = req.Generate ? OutputFolder.Prepare(req.OutputFolder!, req.CleanOutput) : null;
 
@@ -203,6 +215,8 @@ public static class ScanPipeline
                  || p.StartsWith("grass\\", StringComparison.Ordinal) || p.StartsWith("seasons\\", StringComparison.Ordinal)
                  || p.StartsWith("textures\\", StringComparison.Ordinal)); // grass model textures (rendered grass billboards), the textures 3D tree LOD models need, and so the texture audit can tell a BSA texture from a missing one
         progress?.Report($"Indexed {assets.ArchivedFileCount:N0} files from {assets.ArchiveCount} archives in {assets.IndexTime.TotalSeconds:F1}s");
+        if (req.GeneratedTerrainFolder is { } terrainFolder)
+            assets.SetOverrides(terrainFolder, TerrainGeneration.ReadManifest(terrainFolder).Files.Keys.Select(p => p.Replace('/', '\\')), ct: ct);
         if (req.GeneratedTextureFolder is { } textures)
         {
             progress?.Report("Indexing generated textures...");
