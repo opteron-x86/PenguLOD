@@ -57,6 +57,14 @@ public sealed class DesktopSettings : ObservableObject
     public string AuthorPlugin { get => _authorPlugin; set => Set(ref _authorPlugin, value ?? ""); }
     private string _authorOutput = "";
     public string AuthorOutput { get => _authorOutput; set => Set(ref _authorOutput, value ?? ""); }
+    private bool _pipelinePreflight = true;
+    public bool PipelinePreflight { get => _pipelinePreflight; set => Set(ref _pipelinePreflight, value); }
+    private bool _diagnosticDeepScan;
+    public bool DiagnosticDeepScan { get => _diagnosticDeepScan; set => Set(ref _diagnosticDeepScan, value); }
+    private bool _diagnosticVerifyFiles;
+    public bool DiagnosticVerifyFiles { get => _diagnosticVerifyFiles; set => Set(ref _diagnosticVerifyFiles, value); }
+    private string _diagnosticAsset = "";
+    public string DiagnosticAsset { get => _diagnosticAsset; set => Set(ref _diagnosticAsset, value); }
     private string _terrainOutput = "";
     public string TerrainOutput { get => _terrainOutput; set => Set(ref _terrainOutput, value); }
     private bool _pipelineTerrain = false;

@@ -21,6 +21,7 @@ public sealed partial class MainWindow
                 Check("Terrain and water", nameof(DesktopSettings.PipelineTerrain)), Check("Object / tree / grass LOD", nameof(DesktopSettings.PipelineLod))),
             Text("Configure the source and output folders on Overview, Grass cache, Texture generation and Terrain. Each stage needs its own output folder. New grass and textures feed LOD automatically.", true))),
         Card("RESUME & VERIFICATION", Stack(12,
+            Check("Run preflight before generation", nameof(DesktopSettings.PipelinePreflight)),
             Check("Reuse completed stages after verifying their files", nameof(DesktopSettings.ResumeCompletedStages)),
             Check("Verify all source asset contents", nameof(DesktopSettings.VerifySourceContents)),
             Text("Plugins and configuration are always content-checked. The normal input check uses file size and timestamps for large assets. Full verification hashes every source asset and can take longer on large lists. Published outputs are always content-verified before reuse.", true),
@@ -32,12 +33,7 @@ public sealed partial class MainWindow
     internal Task RunSelectedPipeline()
     {
         var s = _settings.Snapshot();
-        return RunPersistentPipeline("Pipeline", s, state => new GenerationPipelineRequest(
-            state.PipelineGrass ? RequestFactory.Grass(state) : null,
-            state.PipelineTextures ? RequestFactory.Textures(state) : null,
-            state.PipelineLod ? RequestFactory.Scan(state, true) : null,
-            state.ResumeCompletedStages, state.VerifySourceContents,
-            Terrain: state.PipelineTerrain ? RequestFactory.Terrain(state) : null));
+        return RunPersistentPipeline("Pipeline", s, RequestFactory.Pipeline);
     }
 
     private Task RunPersistentPipeline(string title, DesktopSettings snapshot, Func<DesktopSettings, GenerationPipelineRequest> request)
@@ -49,6 +45,7 @@ public sealed partial class MainWindow
         }, (result, folder, elapsed) =>
         {
             _lastPipelineFolder = result.JobFolder;
+            if (result.Diagnostics is { } diagnostics) ShowDiagnostics(diagnostics, Path.Combine(result.JobFolder, "diagnostics.json"));
             File.WriteAllText(Path.Combine(folder, "pipeline.json"), JsonSerializer.Serialize(result.Journal, PersistentPipeline.Json));
             _pipelineStages.ItemsSource = result.Journal.Stages.Select(s => new PipelineStageRow(s.Plan.Title, s.Status,
                 s.Reused ? "Yes" : "No", s.Reused ? "—" : s.Timings.GetValueOrDefault("preparation").ToString("F1"), s.Reused ? "—" : s.ProcessingSeconds.ToString("F1"),

@@ -7,12 +7,12 @@ using AnvilLOD.Core.Pipeline;
 namespace AnvilLOD.Plugins;
 
 public sealed record GenerationPipelineRequest(GrassGenerationRequest? Grass = null, TextureGenerationRequest? Textures = null,
-    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false, TerrainGenerationRequest? Terrain = null);
+    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false, TerrainGenerationRequest? Terrain = null, bool Preflight = true);
 public sealed record LodStageReceipt(string OutputFolder, int Files, int BlocksWritten, int BlocksUnchanged,
     long Triangles, IReadOnlyList<string> Warnings, string? PreviousOutput);
 public sealed record GenerationPipelineResult(string JobFolder, PipelineInputSnapshot Inputs, PipelineJournal Journal,
     GrassGenerationResult? Grass, TextureGenerationResult? Textures, LodStageReceipt? LodReceipt, ScanSummary? Lod,
-    string? FailedStage, string? Error, TerrainGenerationResult? Terrain = null)
+    string? FailedStage, string? Error, TerrainGenerationResult? Terrain = null, DiagnosticReport? Diagnostics = null)
 {
     public bool Success => Error is null;
 }
@@ -61,13 +61,20 @@ public static class GenerationPipeline
         File.WriteAllText(Path.Combine(job.Folder, "inputs.json"), JsonSerializer.Serialize(inputs, PersistentPipeline.Json));
         File.WriteAllText(Path.Combine(job.Folder, "request.json"), JsonSerializer.Serialize(request, PersistentPipeline.Json));
         GrassGenerationResult? grassResult = null; TextureGenerationResult? textureResult = null;
-        TerrainGenerationResult? terrainResult = null;
+        TerrainGenerationResult? terrainResult = null; DiagnosticReport? diagnostics = null;
         ScanSummary? summary = null; LodStageReceipt? receipt = null;
         string? active = null, error = null;
         string Fingerprint<T>(T value, params string?[] extra) => inputs.Fingerprint + "|" + JsonSerializer.Serialize(value)
             + "|" + PipelineInputs.ExternalFingerprint(extra, request.VerifySourceContents, ct);
         try
         {
+            if (request.Preflight)
+            {
+                active = "preflight";
+                diagnostics = PipelineDiagnostics.Run(request with { Grass = grass, Textures = textures, Terrain = terrain, Lod = lod }, progress: progress, ct: ct);
+                diagnostics.Write(Path.Combine(job.Folder, "diagnostics.json"));
+                if (!diagnostics.CanGenerate) throw new InvalidDataException("Preflight found blocking issues: " + string.Join("; ", diagnostics.Issues.Where(i => i.Severity == "Error").Select(i => i.Message)));
+            }
             if (grass is not null)
             {
                 active = "grass";
@@ -123,7 +130,7 @@ public static class GenerationPipeline
         }
         catch (Exception e) when (e is not OperationCanceledException)
         { error = e.Message; progress?.Report("Pipeline stopped at " + active + ": " + e); }
-        return new(job.Folder, inputs, job.Journal, grassResult, textureResult, receipt, summary, active, error, terrainResult);
+        return new(job.Folder, inputs, job.Journal, grassResult, textureResult, receipt, summary, active, error, terrainResult, diagnostics);
     }
 
     private static OutputSnapshot ManifestSnapshot(string root, string manifest, Dictionary<string, string> files, CancellationToken ct)

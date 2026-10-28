@@ -208,6 +208,22 @@ public sealed class AssetIndex : IAssetSource
         return null;
     }
 
+    /// <summary>Diagnostic origin without disclosing an absolute filesystem path.</summary>
+    public string? DescribeOrigin(string dataRelativePath)
+    {
+        var key = GamePath.Normalize(dataRelativePath);
+        if (_overrides.ContainsKey(key)) return "Verified generated input";
+        if (Replaced(key)) return null;
+        if (Loose(key) is { } loose)
+        {
+            int depth = key.Count(c => c == '\\');
+            var root = loose.Directory;
+            for (int i = 0; i < depth && root?.Parent is not null; i++) root = root.Parent;
+            return "Loose layer: " + (root?.Name ?? "Data");
+        }
+        return _archived.TryGetValue(key, out var archive) ? "Archive: " + Path.GetFileName(archive.ArchiveName) : Fallback(key) is not null ? "Generated fallback cache" : null;
+    }
+
     /// <summary>Where the winning copy comes from — handy for reports ("loose" or the BSA name).</summary>
     public string? SourceOf(string dataRelativePath)
     {

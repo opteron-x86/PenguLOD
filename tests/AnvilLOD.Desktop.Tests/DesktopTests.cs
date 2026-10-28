@@ -50,6 +50,24 @@ public sealed class DesktopTests : IDisposable
             .Children.OfType<T>().Single();
 
     [AvaloniaFact]
+    public async Task DiagnosticsShowRuntimeRequirementsAndExportMetadataOnly()
+    {
+        using var fixture = new TextureFixture(); var window = Window();
+        window.ReplaceSettings(new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = fixture.Data, PluginsFile = fixture.Plugins,
+            OutputFolder = Path.Combine(fixture.Root, "lod"), CacheFolder = Path.Combine(fixture.Root, "cache"),
+            PipelineGrass = false, PipelineTextures = false, PipelineLod = true });
+        window.Show();
+        try
+        {
+            Click(window, "Diagnostics"); await window.RunDiagnostics(); Assert.Equal("Diagnostics complete", window.Status);
+            var report = Assert.Single(Directory.GetFiles(window.Settings.CacheFolder, "diagnostics.json", SearchOption.AllDirectories));
+            var json = File.ReadAllText(report); Assert.Contains("runtime-plugin-missing", json); Assert.DoesNotContain(fixture.Root, json);
+            Assert.False(Directory.Exists(window.Settings.OutputFolder));
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task TerrainPipelineGeneratesAndResumesFromDesktop()
     {
         using var fixture = new TerrainFixture();
@@ -133,7 +151,7 @@ public sealed class DesktopTests : IDisposable
         input.Text = "/mnt/mods/My MO2";
         Assert.Equal(input.Text, window.Settings.Instance);
         string? screenshots = Environment.GetEnvironmentVariable("ANVILLOD_SCREENSHOTS");
-        foreach (var (title, file) in new[] { ("Overview", "overview"), ("Pipeline", "pipeline"), ("Grass cache", "grass-cache"), ("Texture generation", "texture-generation"), ("Terrain", "terrain"), ("Generation settings", "settings"), ("Mesh maker", "meshes"), ("Mod author", "author"), ("Texture tools", "textures"), ("Custom rules", "rules"), ("Preferences", "preferences") })
+        foreach (var (title, file) in new[] { ("Overview", "overview"), ("Pipeline", "pipeline"), ("Grass cache", "grass-cache"), ("Texture generation", "texture-generation"), ("Terrain", "terrain"), ("Generation settings", "settings"), ("Mesh maker", "meshes"), ("Mod author", "author"), ("Texture tools", "textures"), ("Custom rules", "rules"), ("Diagnostics", "diagnostics"), ("Preferences", "preferences") })
         {
             Click(window, title);
             Assert.Contains(window.GetVisualDescendants().OfType<ScrollViewer>(), s => s.Bounds.Width > 0);

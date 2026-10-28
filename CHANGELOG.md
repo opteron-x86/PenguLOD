@@ -5,6 +5,9 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+- Added automatic pipeline preflight and a Diagnostics page with model/texture coverage,
+  stale-cache checks, runtime requirements, asset precedence and metadata-only JSON reports.
+
 - Shared desktop/CLI pipeline with durable checkpoints, dependency invalidation, verified
   output reuse, cancellation recovery and per-stage measured timings.
 - Isolated LOD publication with previous-output backups, concurrent-job locks and retained

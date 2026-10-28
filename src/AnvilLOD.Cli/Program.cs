@@ -17,6 +17,9 @@ public static class Program
           PenguLOD pipeline --request <request.json> [--cache-folder <folder>] [--no-resume] [--verify-source-contents]
                                          Run/resume a saved pipeline plan from the desktop's Open saved job folder.
                                          Completed stages are content-verified before reuse; failures stop dependent stages.
+          PenguLOD diagnose --request <request.json> --report <diagnostics.json>
+                                         Check a pipeline without generating. Optional: --deep-scan --verify-outputs
+                                         --inspect-asset <Data-relative-path>. Export contains metadata, not game assets.
           PenguLOD scan [options]        analyse the load order and show what would be built
           PenguLOD generate [options]    scan, then write the changed LOD blocks (.bto) to --output
           PenguLOD author --plugin <file> --author-out <folder> [options]
@@ -248,6 +251,7 @@ public static class Program
             return args[0].ToLowerInvariant() switch
             {
                 "pipeline" => RunPipeline(options),
+                "diagnose" => RunDiagnose(options),
                 "scan" => RunScan(options, generate: false),
                 "generate" => RunScan(options, generate: true),
                 "author" => RunAuthor(options),
@@ -264,13 +268,25 @@ public static class Program
         finally { Console.CancelKeyPress -= cancel; }
     }
 
+    private static int RunDiagnose(CliArgs options)
+    {
+        var request = JsonSerializer.Deserialize<GenerationPipelineRequest>(File.ReadAllText(options.Get("request") ?? throw new CliArgException("--request is required.")), PersistentPipeline.Json)
+            ?? throw new CliArgException("Pipeline request is empty.");
+        string path = options.Get("report") ?? throw new CliArgException("--report is required.");
+        var report = PipelineDiagnostics.Run(request, options.Has("deep-scan"), options.Has("verify-outputs"), options.Get("inspect-asset"),
+            new Progress<string>(Console.WriteLine), Cancellation);
+        report.Write(path); Console.WriteLine("Diagnostic report: " + path);
+        return report.CanGenerate ? 0 : 1;
+    }
+
     private static int RunPipeline(CliArgs a)
     {
         string file = a.Get("request") ?? throw new CliArgException("pipeline requires --request <request.json>.");
-        var request = JsonSerializer.Deserialize<GenerationPipelineRequest>(File.ReadAllText(file))
+        var request = JsonSerializer.Deserialize<GenerationPipelineRequest>(File.ReadAllText(file), PersistentPipeline.Json)
             ?? throw new CliArgException("The pipeline request is empty.");
         request = request with { Resume = !a.Has("no-resume") && request.Resume,
-            VerifySourceContents = a.Has("verify-source-contents") || request.VerifySourceContents };
+            VerifySourceContents = a.Has("verify-source-contents") || request.VerifySourceContents,
+            Preflight = !a.Has("no-preflight") && request.Preflight };
         string cache = a.Get("cache-folder") ?? Path.Combine(Environment.GetEnvironmentVariable("XDG_CACHE_HOME")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache"), "PenguLOD");
         var result = GenerationPipeline.Run(request, cache, new SyncProgress(Console.WriteLine), Cancellation);

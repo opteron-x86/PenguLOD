@@ -31,6 +31,11 @@ public static class RequestFactory
             GameIniPath: P(s.GameIni), WinePrefix: P(s.WinePrefix));
     }
 
+    public static GenerationPipelineRequest Pipeline(DesktopSettings s) => new(
+        s.PipelineGrass ? Grass(s) : null, s.PipelineTextures ? Textures(s) : null,
+        s.PipelineLod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
+        s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight);
+
     public static TerrainGenerationRequest Terrain(DesktopSettings s)
     {
         int Whole(decimal value) => value == decimal.Truncate(value) ? checked((int)value) : throw new ArgumentException("Terrain sizes must be whole numbers.");
