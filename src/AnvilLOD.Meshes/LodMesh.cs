@@ -18,12 +18,12 @@ public sealed record LodMaterial(
     float EmissiveMultiple,
     LodShaderPassthru? Passthru = null)   // the source shader's own settings, for models that say "passthru"
 {
-    private string? _key;
-
     /// <summary>Stable string key used for grouping and hashing.</summary>
-    public string Key => _key ??= string.Join('|', Textures.Select(t => t.ToLowerInvariant()))
+    // Records are copied with `with` throughout material mapping. Caching this in a field
+    // would copy a stale key into the changed material and merge unrelated texture sets.
+    public string Key => string.Join('|', Textures.Select(t => t.ToLowerInvariant()))
         + $"|{ShaderFlags1:X}|{ShaderFlags2:X}|{ClampMode}|{(HasAlpha ? $"{AlphaFlags:X}/{AlphaThreshold}" : "-")}"
-        + $"|{EmissiveColor.X:F3},{EmissiveColor.Y:F3},{EmissiveColor.Z:F3}x{EmissiveMultiple:F3}"
+        + FormattableString.Invariant($"|{EmissiveColor.X:R},{EmissiveColor.Y:R},{EmissiveColor.Z:R}x{EmissiveMultiple:R}")
         + (Passthru is null ? "" : "|pt" + Passthru.Key);
 
     public bool Equals(LodMaterial? other) => other is not null && Key == other.Key;

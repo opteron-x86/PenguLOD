@@ -1,38 +1,32 @@
 # PenguLOD roadmap
 
-The initial alpha establishes a maintained native Linux generator and the existing grass →
-textures → object/tree/grass LOD workflow. This roadmap describes work still to do; it is
-not a claim of parity with every xLODGen, TexGen or DynDOLOD feature.
+The original roadmap's implementation milestones are included in **0.2.0-alpha.1**.
+The table records what each delivers and where its validation stops. This is not a claim
+of complete xLODGen, TexGen or DynDOLOD feature parity.
 
-## 0.2: All-in-one foundations
+| Milestone | Implemented | Validation and limits |
+| --- | --- | --- |
+| Resumable jobs and reliable outputs | Shared durable stage graph, input fingerprints, verified reuse, dependency invalidation, locks and staged publication. | Fixtures cover cancellation, interruption, corrupted outputs, input changes and preservation of previous output. [Pipeline](PIPELINE.md). |
+| Native terrain and water | Winning LAND/LTEX layers, BTR land/water, diffuse/normal tiles, LOD4/8/16/32, baseline fallback and terrain-shadow heightmaps. | Synthetic formats, orientation and mixed-level seams checked. In-game shorelines, transitions and shader shadows need validation. [Terrain](TERRAIN.md). |
+| Practical 3D trees | Near/far geometry budgets, authored far models, native trunk reduction and conservative foliage/card fallback; coverage/cost reports. | Reduction, UV preservation, fallback and costs tested. Dense alpha geometry may remain billboards. [Trees](TREES.md). |
+| Pipeline diagnostics | Preflight, runtime requirements, stale inputs, asset precedence, texture/model coverage and metadata exports. | Failure paths and fixture workflow tested; repeatable game checklist provided. [Diagnostics](DIAGNOSTICS.md). |
+| Materials and shader consistency | Source normals, UV transforms/clamp, cutout alpha and configurable PBR albedo/AO/light bake. | Numerical fixtures pass. Static bake cannot reproduce the full shader, weather or displacement. [Materials](MATERIALS.md). |
+| Seasonal tree and terrain output | Seasons form swaps produce seasonal terrain, BTT/LST atlases and native 3D tree replacements. | Synthetic seasonal profile exercises terrain and both tree paths. Written swap INIs required; runtime automatic snow is not executed. [Seasons](SEASONS.md). |
+| Native object atlases | Paired diffuse/normal pages, padded mips, UV remapping and compatible material grouping. | Fixture pixels/UVs/grouping checked. Unsupported shaders, repeating UVs and special alpha stay separate. [Atlases](ATLASES.md). |
+| Optional Vulkan | Headless opaque BC7 compute with quality checks, measured Auto selection and CPU fallback. | Actual Mesa software-driver execution passes; physical GPU performance and driver coverage remain unverified. [Compute](COMPUTE.md). |
+| Packaging and compatibility | Portable archive and AppImage, checksums/source/licenses, Ubuntu/Debian/Fedora smoke matrix. Flatpak evaluated. | Startup checks cover packaged applications; they do not establish full modlist/GPU compatibility. No Flatpak is published. [Packaging](PACKAGING.md). |
+| CLI parity | Desktop presets, all persistent generation stages, exported jobs, diagnostics and job inspection. | Shared request tests and a generate/resume CLI fixture pass. UI-only preview/editor interactions remain graphical. [CLI](CLI.md). |
 
-1. **Resumable jobs and reliable outputs.** Persist stage state and input fingerprints;
-   safely reuse completed work after cancellation or failure; show preparation, generation
-   and output-writing time separately. Invalidate dependent stages when inputs change.
-2. **Native terrain and water LOD.** Build BTR meshes and diffuse/normal texture tiles from
-   winning landscape data, with consistent edges, worldspace bounds and water levels.
-   Validate seams and transitions across LOD4/8/16/32. Export compatible terrain heightmaps
-   for shader terrain shadows where supported.
-3. **Practical 3D trees.** Report coverage and geometry budgets per model/level; use distinct
-   near/far models and simpler distant silhouettes. Extend native model generation with
-   tree-specific simplification and validate hybrid textures against their UV layouts.
-4. **Diagnose the entire pipeline.** Explain missing model/texture coverage, stale caches,
-   disabled outputs and runtime dependencies before an expensive generation. Add repeatable
-   small-world fixtures and in-game transition checks.
+## Release validation still needed
 
-Ship these as incremental alpha releases. The first terrain implementation should be explicit
-about supported worldspaces/materials rather than quietly producing incomplete output.
+The next validation work is game-side comparison on representative modlists: mixed-distance
+terrain/water seams, tree silhouettes and UV alignment, seasonal transitions, and shader
+brightness. Follow the [repeatable checks](DIAGNOSTICS.md#repeatable-checks) and attach paired
+screenshots plus diagnostic exports. Automated structure checks do not substitute for this.
 
-## Further milestones
-
-- Improve texture rendering and material baking, including True PBR and Community/Bottled
-  Shaders consistency, alpha-tested foliage, normals and lighting calibration.
-- Complete seasonal tree billboards and terrain, with a dedicated seasonal test profile.
-- Improve native object texture atlasing, UV handling and material grouping.
-- Add optional Vulkan acceleration where it helps measured workloads; retain the portable
-  CPU path and clear capability checks. Acceleration will not solve every source/output I/O bottleneck.
-- Broaden distro packaging and compatibility tests, then evaluate AppImage/Flatpak distribution.
-- Extend CLI coverage to the same persistent pipeline as the desktop.
+Physical AMD/Intel/NVIDIA Vulkan measurements and driver recovery tests are also needed before
+making hardware speed claims. CPU remains the default. Additional shader/material support,
+runtime-generated seasonal swaps and Flatpak profile grants need separate scoped work.
 
 ## Already in the first alpha
 
@@ -41,6 +35,6 @@ caching; texture stitching, tree/grass billboards and hybrid trunk textures; exi
 LOD model consumption; combined generation; upstream occlusion and seasonal object/grass
 support; progress, cancellation, logs, presets and author/repair tools.
 
-Track scoped work and acceptance criteria in [GitHub issues](https://github.com/opteron-x86/PenguLOD/issues).
+Track work in [GitHub issues](https://github.com/opteron-x86/PenguLOD/issues).
 The upstream [AnvilLOD roadmap](https://github.com/CageTV/AnvilLOD/blob/main/docs/ROADMAP.md)
-remains useful context, but PenguLOD tracks its release status independently.
+remains context; PenguLOD tracks its own release status.

@@ -19,4 +19,4 @@ notes = changelog.split(heading, 1)[1].split('\n', 1)[1].split('\n## ', 1)[0].st
 pathlib.Path('dist/RELEASE-NOTES.md').write_text(notes + '\n')
 PY
 cd dist
-sha256sum "PenguLOD-$version-linux-x64.tar.gz" "PenguLOD-$version-source.tar.gz" > SHA256SUMS
+sha256sum "PenguLOD-$version-linux-x64.tar.gz" "PenguLOD-$version-source.tar.gz" "PenguLOD-$version-x86_64.AppImage" > SHA256SUMS

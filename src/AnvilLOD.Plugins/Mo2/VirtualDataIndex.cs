@@ -1,4 +1,5 @@
 using AnvilLOD.Core.Pipeline;
+using AnvilLOD.Core.Paths;
 using System.Diagnostics;
 using AnvilLOD.Core.World;
 
@@ -36,7 +37,8 @@ public sealed class VirtualDataIndex
         MissingModFolders = missing;
     }
 
-    public static VirtualDataIndex Build(Mo2Profile profile, IReadOnlyCollection<string> looseRoots, string? excludeFolder = null)
+    public static VirtualDataIndex Build(Mo2Profile profile, IReadOnlyCollection<string> looseRoots, string? excludeFolder = null,
+        IReadOnlyList<string>? excludeFolders = null)
     {
         string? exclude = string.IsNullOrWhiteSpace(excludeFolder) ? null : Path.GetFullPath(excludeFolder).TrimEnd('\\', '/');
         string? excluded = null;
@@ -48,7 +50,8 @@ public sealed class VirtualDataIndex
         foreach (var mod in profile.EnabledModsLowToHigh)
         {
             var dir = GamePath.ResolveExisting(inst.ModsFolder, mod) ?? Path.Combine(inst.ModsFolder, mod);
-            if (exclude is not null && string.Equals(Path.GetFullPath(dir).TrimEnd('\\', '/'), exclude, StringComparison.OrdinalIgnoreCase))
+            if ((exclude is not null && HostPath.Canonical(dir) == HostPath.Canonical(exclude))
+                || (excludeFolders?.Any(p => HostPath.Canonical(dir) == HostPath.Canonical(p)) ?? false))
             {
                 excluded = dir;
                 continue;

@@ -10,4 +10,5 @@
   </ItemGroup>
   <ItemGroup><Compile Include="../Shared/TextureFixture.cs" Link="TextureFixture.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../Shared/GrassFixture.cs" Link="GrassFixture.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/TerrainFixture.cs" Link="TerrainFixture.cs" /></ItemGroup>
 </Project>

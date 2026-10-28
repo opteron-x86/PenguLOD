@@ -17,26 +17,36 @@ PY
         ;;
     *) echo 'Usage: bash tools/build.sh [--reuse-backend]' >&2; exit 2 ;;
 esac
+bash tools/build-texture-compute.sh
 version="$(python3 tools/version.py)"
-# Only the dedicated package directory is cleared, never user output or settings.
-rm -rf -- dist/linux-x64
-mkdir -p dist/linux-x64
+# Local verification can use a separate candidate folder without replacing an installed build.
+export PENGULOD_PACKAGE_DIR="${PENGULOD_PACKAGE_DIR:-$PWD/dist/linux-x64}"
+python3 - <<'CHECK'
+import os,pathlib
+p=pathlib.Path(os.environ['PENGULOD_PACKAGE_DIR']).resolve()
+dist=pathlib.Path('dist').resolve()
+assert p.name=='linux-x64' and p.is_relative_to(dist), 'Package output must be a linux-x64 folder under dist/'
+CHECK
+rm -rf -- "$PENGULOD_PACKAGE_DIR"
+mkdir -p "$PENGULOD_PACKAGE_DIR"
 "$DOTNET" publish src/AnvilLOD.Cli/AnvilLOD.Cli.csproj -c Release -r linux-x64 \
-    --self-contained true -o dist/linux-x64 --disable-build-servers \
+    --self-contained true -o "$PENGULOD_PACKAGE_DIR" --disable-build-servers \
     -m:1 -nr:false -p:UseSharedCompilation=false "${RESTORE_ARGS[@]}"
 "$DOTNET" publish src/AnvilLOD.Desktop/AnvilLOD.Desktop.csproj -c Release -r linux-x64 \
-    --self-contained true -o dist/linux-x64 --disable-build-servers \
+    --self-contained true -o "$PENGULOD_PACKAGE_DIR" --disable-build-servers \
     -m:1 -nr:false -p:UseSharedCompilation=false "${RESTORE_ARGS[@]}"
-cp LICENSE.txt VERSION UPSTREAM_VERSION dist/linux-x64/
-cp assets/pengulod-256.png dist/linux-x64/pengulod.png
-cp tools/run-pengulod.sh tools/run-anvillod.sh tools/install-desktop.sh tools/repair-pglite-paths.py dist/linux-x64/
-cp docs/LINUX-PORT.md dist/linux-x64/README-LINUX.md
-cp docs/PROVENANCE.md dist/linux-x64/PROVENANCE.md
-mkdir -p dist/linux-x64/backends/fasterngio
-cp -a .tools/fasterngio-runtime/. dist/linux-x64/backends/fasterngio/
-chmod +x dist/linux-x64/run-pengulod.sh dist/linux-x64/run-anvillod.sh dist/linux-x64/install-desktop.sh
+cp LICENSE.txt VERSION UPSTREAM_VERSION "$PENGULOD_PACKAGE_DIR"/
+cp assets/pengulod-256.png "$PENGULOD_PACKAGE_DIR"/pengulod.png
+cp tools/run-pengulod.sh tools/run-anvillod.sh tools/install-desktop.sh tools/repair-pglite-paths.py "$PENGULOD_PACKAGE_DIR"/
+cp packaging/README-LINUX.md "$PENGULOD_PACKAGE_DIR"/README-LINUX.md
+cp docs/PROVENANCE.md "$PENGULOD_PACKAGE_DIR"/PROVENANCE.md
+mkdir -p "$PENGULOD_PACKAGE_DIR/docs"
+cp docs/*.md "$PENGULOD_PACKAGE_DIR/docs/"
+mkdir -p "$PENGULOD_PACKAGE_DIR"/backends/fasterngio
+cp -a .tools/fasterngio-runtime/. "$PENGULOD_PACKAGE_DIR"/backends/fasterngio/
+chmod +x "$PENGULOD_PACKAGE_DIR"/run-pengulod.sh "$PENGULOD_PACKAGE_DIR"/run-anvillod.sh "$PENGULOD_PACKAGE_DIR"/install-desktop.sh
 ANVILLOD_SDK_DIR="$(dirname -- "$(readlink -f "$DOTNET")")" python3 tools/collect-licenses.py
-"$ANVILLOD_ROOT/dist/linux-x64/PenguLOD" --version
-"$ANVILLOD_ROOT/dist/linux-x64/PenguLOD.Desktop" --version
-tar -czf "dist/PenguLOD-$version-linux-x64.tar.gz" -C dist linux-x64
-printf '%s\n' "Desktop: $ANVILLOD_ROOT/dist/linux-x64/run-pengulod.sh" "CLI: $ANVILLOD_ROOT/dist/linux-x64/PenguLOD" "Archive: $ANVILLOD_ROOT/dist/PenguLOD-$version-linux-x64.tar.gz"
+"$PENGULOD_PACKAGE_DIR/PenguLOD" --version
+"$PENGULOD_PACKAGE_DIR/PenguLOD.Desktop" --version
+tar -czf "dist/PenguLOD-$version-linux-x64.tar.gz" -C "$(dirname -- "$PENGULOD_PACKAGE_DIR")" linux-x64
+printf '%s\n' "Desktop: $PENGULOD_PACKAGE_DIR/run-pengulod.sh" "CLI: $PENGULOD_PACKAGE_DIR/PenguLOD" "Archive: $ANVILLOD_ROOT/dist/PenguLOD-$version-linux-x64.tar.gz"

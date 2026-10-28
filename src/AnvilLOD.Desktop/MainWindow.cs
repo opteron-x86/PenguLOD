@@ -45,6 +45,7 @@ public sealed partial class MainWindow : Window
     private readonly ComboBox _profiles = new() { MinWidth = 180, PlaceholderText = "Available profiles" };
     private readonly TextBlock _counts = new() { Text = "Scan your load order to inspect worldspaces and missing assets.", TextWrapping = TextWrapping.Wrap };
     private readonly DataGrid _worlds = Table(("Worldspace", "World"), ("LOD 4", "Lod4"), ("LOD 8", "Lod8"), ("LOD 16", "Lod16"), ("LOD 32", "Lod32"));
+    private readonly DataGrid _treeCoverage = Table(("Model", "Model"), ("Level", "Level"), ("Instances", "Instances"), ("Triangles/model", "OutputTriangles"), ("Placed triangles", "PlacedTriangles"), ("Method", "Method"), ("Fallback", "Fallback"));
     private readonly TextBox _issues = new() { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 220, PlaceholderText = "Scan warnings and missing assets appear here." };
     private readonly DataGrid _textures = Table(("Mod", "Mod"), ("Texture", "Relative"), ("Format", "Format"), ("Width", "Width"), ("Height", "Height"), ("Mips", "Mips"));
     private readonly Dictionary<string, Control> _pages = [];
@@ -124,20 +125,23 @@ public sealed partial class MainWindow : Window
     private void BuildShell()
     {
         _page.Content = null;
-        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary })
+        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary, _pipelineSummary, _pipelineStages, _terrainSummary, _terrainResults, _treeCoverage, _diagnosticSummary, _diagnosticIssues, _diagnosticEstimates })
         {
             if (control.Parent is Panel panel) panel.Children.Remove(control);
             else if (control.Parent is ContentControl content) content.Content = null;
         }
         _pages.Clear(); _navigation.Clear();
         _pages["Overview"] = Overview();
+        _pages["Pipeline"] = PipelinePage();
         _pages["Grass cache"] = GrassGenerationPage();
         _pages["Texture generation"] = TextureGenerationPage();
+        _pages["Terrain"] = TerrainPage();
         _pages["Generation settings"] = GenerationSettings();
         _pages["Mesh maker"] = MeshMaker();
         _pages["Mod author"] = ModAuthor();
         _pages["Texture tools"] = TextureTools();
         _pages["Custom rules"] = RulesPage();
+        _pages["Diagnostics"] = DiagnosticsPage();
         _pages["Preferences"] = Preferences();
         var nav = Stack(6);
         nav.Children.Add(new TextBlock { Text = "PENGULOD", FontSize = 24, FontWeight = FontWeight.Bold, Foreground = Accent, Margin = new Thickness(10, 8, 0, 0) });
@@ -203,7 +207,8 @@ public sealed partial class MainWindow : Window
                 Check("Clear previous AnvilLOD output before generation", nameof(DesktopSettings.CleanOutput)),
                 Text("Incremental generation is the default. Dynamic LOD requires the matching AnvilLOD SKSE DLL installed in the Windows game.", true),
                 Button("Open output", () => Open(_settings.OutputFolder)))),
-            Card("SCAN RESULTS", Stack(12, _counts, _worlds, _issues)));
+            Card("SCAN RESULTS", Stack(12, _counts, _worlds, _issues)),
+            Card("TREE COVERAGE & COST", Stack(12, Text("Measured mesh counts and estimated geometry size, before block merging. Full coverage is saved in scan-report.json.", true), _treeCoverage)));
         return Scroll(s);
     }
 
@@ -298,7 +303,10 @@ public sealed partial class MainWindow : Window
             Text("Save a custom file to activate these rules for generation. The editor writes LODGen entries only; retain your original file if it also contains other settings.", true)));
     }
     private Control Preferences() => Scroll(Stack(16, Heading("Preferences", "Control resource use and keep portable presets for different mod lists."),
-        Card("PROCESSING", Stack(12, Number("Worker threads", nameof(DesktopSettings.MaxThreads), 0, 1024), Text("0 uses available processors minus one. Cancellation waits for active engine operations to finish.", true),
+        Card("PROCESSING", Stack(12, Choice("Texture compute", nameof(DesktopSettings.TextureCompute), ["Cpu", "Auto", "Vulkan"]),
+            Text("Optional Vulkan BC7 encoding for large opaque textures. Auto requires a measured speedup and a passing quality check. Alpha foliage and small images use CPU. Grass collision caching is a separate backend.", true),
+            Button("Check texture acceleration", CheckTextureCompute),
+            Number("Worker threads", nameof(DesktopSettings.MaxThreads), 0, 1024), Text("0 uses available processors minus one. Cancellation waits for active engine operations to finish.", true),
             PathField("Run history and cache folder", nameof(DesktopSettings.CacheFolder), hint: "Blank uses " + SettingsStore.CacheRoot),
             Button("Detect Steam installation", DetectInstall))),
         Card("SETTINGS & PRESETS", Stack(12, Text("Settings file\n" + _store.FilePath, true),
@@ -307,7 +315,7 @@ public sealed partial class MainWindow : Window
         Card("ABOUT PENGULOD", Stack(10, Text(ProductInfo.Description),
             Text("Native Avalonia desktop • managed .NET engine • GPL-3.0-only"),
             Text("Built on CageTV’s AnvilLOD. Maintained by opteron-x86 and PenguLOD contributors.", true),
-            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. The Windows SKSE DLLs are not bundled in the Linux package. Terrain LOD generation and the upstream GPU atlas backend are not implemented.", true),
+            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. Install the matching AnvilLOD game plugin separately. This alpha includes native terrain, tree reduction, seasonal output and object atlases; compare new output in game before replacing a known-good setup.", true),
             Button("Open project on GitHub", () => Open(ProductInfo.Repository))))));
 
     private Border ToolResults(string page)

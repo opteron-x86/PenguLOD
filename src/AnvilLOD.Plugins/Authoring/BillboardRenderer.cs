@@ -23,8 +23,10 @@ public static class BillboardRenderer
     /// <param name="vertexColors">Multiply by the model's vertex colours (trees: baked shading). Grass uses them for wind, so off there.</param>
     /// <param name="minCoverage">Thicken the cut-out until at least this share of the image is opaque (sparse grass blades
     /// otherwise vanish at a distance; 0 = leave as rendered).</param>
-    public static BillboardImage? Render(LodMesh model, TextureLoader loadTexture, int maxPixels = 512, bool vertexColors = true, float minCoverage = 0f, float unitsPerPixel = 0, (Vector3 Min, Vector3 Max)? viewport = null, float brightness = 1, bool shaded = true, (int W, int H)? pixelSize = null)
+    public static BillboardImage? Render(LodMesh model, TextureLoader loadTexture, int maxPixels = 512, bool vertexColors = true, float minCoverage = 0f, float unitsPerPixel = 0, (Vector3 Min, Vector3 Max)? viewport = null, float brightness = 1, bool shaded = true, (int W, int H)? pixelSize = null, MaterialBakeSettings? materials = null)
     {
+        materials ??= new();
+        materials.Validate();
         var (min, max) = viewport ?? Meshes.Authoring.LodMeshAuthor.Bounds(model);
         float worldW = max.X - min.X, worldH = max.Z - min.Z;
         if (!(worldW > 1f) || !(worldH > 1f)) return null;
@@ -52,6 +54,9 @@ public static class BillboardRenderer
         {
             RunLimits.Check();
             var tex = loadTexture(part.Material.Textures[0]);
+            var normalTexture = materials.SourceNormals && part.Material.Textures.Count > 1 ? Optional(part.Material.Textures[1]) : null;
+            bool pbr = materials.PbrAlbedo && part.Material.Textures[0].Replace('/', '\\').Contains(@"\pbr\", StringComparison.OrdinalIgnoreCase);
+            var occlusion = pbr && materials.OcclusionStrength > 0 && part.Material.Textures.Count > 5 ? Optional(part.Material.Textures[5]) : null;
             byte threshold = part.Material.HasAlpha ? (part.Material.AlphaThreshold == 0 ? (byte)128 : part.Material.AlphaThreshold) : (byte)0;
             var p = part.Positions;
             for (int t = 0; t < part.TriangleCount; t++)
@@ -77,15 +82,41 @@ public static class BillboardRenderer
                     if (z >= depth[idx]) continue;
 
                     var uv = part.UVs[i0] * w0 + part.UVs[i1] * w1 + part.UVs[i2] * w2;
-                    var (r, g, bl, al) = Sample(tex, uv);
+                    if (part.Material.Passthru is { } shader)
+                        uv = uv * new Vector2(shader.UvScaleX, shader.UvScaleY) + new Vector2(shader.UvOffsetX, shader.UvOffsetY);
+                    var (r, g, bl, al) = Sample(tex, uv, part.Material.ClampMode);
                     if (al < threshold) continue;
+                    if (pbr)
+                    {
+                        float ao = occlusion is null ? 1 : Sample(occlusion, uv, part.Material.ClampMode).B / 255f;
+                        float factor = materials.PbrScale * (1 - materials.OcclusionStrength * (1 - ao));
+                        r = 255 * MathF.Pow(r / 255, materials.PbrGamma) * factor;
+                        g = 255 * MathF.Pow(g / 255, materials.PbrGamma) * factor;
+                        bl = 255 * MathF.Pow(bl / 255, materials.PbrGamma) * factor;
+                    }
                     if (vertexColors && part.Colors is { } col)
                     {
                         var vc = Unpack(col[i0]) * w0 + Unpack(col[i1]) * w1 + Unpack(col[i2]) * w2;
                         r *= vc.X; g *= vc.Y; bl *= vc.Z;
                     }
                     var n = Vector3.Normalize(part.Normals[i0] * w0 + part.Normals[i1] * w1 + part.Normals[i2] * w2);
-                    float shade = brightness * (shaded ? 0.7f + 0.3f * MathF.Abs(Vector3.Dot(float.IsFinite(n.X) ? n : -Vector3.UnitY, light)) : 1);
+                    if (!float.IsFinite(n.X)) n = -Vector3.UnitY;
+                    if (normalTexture is not null)
+                    {
+                        var ns = Sample(normalTexture, uv, part.Material.ClampMode);
+                        var tangent = part.Tangents[i0] * w0 + part.Tangents[i1] * w1 + part.Tangents[i2] * w2;
+                        tangent -= n * Vector3.Dot(tangent, n);
+                        if (tangent.LengthSquared() > 1e-8f)
+                        {
+                            tangent = Vector3.Normalize(tangent);
+                            var rawB = part.Bitangents[i0] * w0 + part.Bitangents[i1] * w1 + part.Bitangents[i2] * w2;
+                            var bitangent = Vector3.Cross(n, tangent);
+                            if (Vector3.Dot(bitangent, rawB) < 0) bitangent = -bitangent;
+                            var mapped = tangent * ((ns.R - 128) / 127) + bitangent * ((ns.G - 128) / 127) + n * ((ns.B - 128) / 127);
+                            if (mapped.LengthSquared() > 1e-8f) n = Vector3.Normalize(mapped);
+                        }
+                    }
+                    float shade = brightness * (shaded ? materials.Ambient + materials.Directional * MathF.Abs(Vector3.Dot(n, light)) : 1);
                     depth[idx] = z;
                     int o = idx * 4;
                     // The card faces the viewer (looking along +Y): a back-facing normal is turned round, as both sides are drawn.
@@ -123,6 +154,12 @@ public static class BillboardRenderer
         return new BillboardImage(img, iw, ih, worldW, worldH, min.Z, opaque / (float)(iw * ih), nimg);
 
         Vector3 Screen(Vector3 v) => new((v.X - min.X) * sx, (max.Z - v.Z) * sz, v.Y);
+        (byte[] Rgba, int Width, int Height)? Optional(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            try { return loadTexture(path); }
+            catch (FileNotFoundException) { return null; }
+        }
     }
 
     /// <summary>Writes the image as a BC7 DDS with coverage-preserving mips (alpha-tested cutouts stay as thick as on top).</summary>
@@ -254,10 +291,12 @@ public static class BillboardRenderer
 
     private static Vector3 Unpack(uint c) => new((c & 0xFF) / 255f, ((c >> 8) & 0xFF) / 255f, ((c >> 16) & 0xFF) / 255f);
 
-    private static (float R, float G, float B, float A) Sample((byte[] Rgba, int Width, int Height)? tex, Vector2 uv)
+    private static (float R, float G, float B, float A) Sample((byte[] Rgba, int Width, int Height)? tex, Vector2 uv, uint clamp = 3)
     {
         if (tex is not { } t) return (128, 128, 128, 255);
-        float u = uv.X - MathF.Floor(uv.X), v = uv.Y - MathF.Floor(uv.Y);
+        bool wrapU = (clamp & 2) != 0, wrapV = (clamp & 1) != 0;
+        float u = wrapU ? uv.X - MathF.Floor(uv.X) : Math.Clamp(uv.X, 0, 1);
+        float v = wrapV ? uv.Y - MathF.Floor(uv.Y) : Math.Clamp(uv.Y, 0, 1);
         float fx = u * t.Width - 0.5f, fy = v * t.Height - 0.5f;
         int x0 = (int)MathF.Floor(fx), y0 = (int)MathF.Floor(fy);
         float ax = fx - x0, ay = fy - y0;
@@ -266,7 +305,8 @@ public static class BillboardRenderer
         {
             int dx = k & 1, dy = k >> 1;
             float wgt = (dx == 0 ? 1 - ax : ax) * (dy == 0 ? 1 - ay : ay);
-            int px = ((x0 + dx) % t.Width + t.Width) % t.Width, py = ((y0 + dy) % t.Height + t.Height) % t.Height;
+            int px = wrapU ? ((x0 + dx) % t.Width + t.Width) % t.Width : Math.Clamp(x0 + dx, 0, t.Width - 1);
+            int py = wrapV ? ((y0 + dy) % t.Height + t.Height) % t.Height : Math.Clamp(y0 + dy, 0, t.Height - 1);
             int i = (py * t.Width + px) * 4;
             r += t.Rgba[i] * wgt; g += t.Rgba[i + 1] * wgt; b += t.Rgba[i + 2] * wgt; a += t.Rgba[i + 3] * wgt;
         }

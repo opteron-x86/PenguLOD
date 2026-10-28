@@ -51,7 +51,7 @@ public static partial class GrassGeneration
             var locations = (req.Game.Mo2Locations ?? new Mo2Locations()) with { WinePrefix = req.Game.WinePrefix ?? req.Game.Mo2Locations?.WinePrefix };
             var instance = Mo2Instance.Open(req.Game.Mo2InstanceFolder!, locations);
             profile = instance.OpenProfile(req.Game.Mo2Profile);
-            var index = VirtualDataIndex.Build(profile, InputRoots, req.OutputFolder);
+            var index = VirtualDataIndex.Build(profile, InputRoots, req.OutputFolder, req.Game.ExcludeFolders);
             if (index.MissingModFolders > 0) throw new InvalidOperationException($"{index.MissingModFolders} enabled mod folders are missing; fix the selected profile before caching grass.");
             foreach (var name in index.RootFileNames) if (RootInput(name)) files[name] = index.ResolveRootFile(name)!;
             foreach (var root in InputRoots)

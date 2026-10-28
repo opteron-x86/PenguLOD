@@ -45,6 +45,11 @@ public static class GenerationOptions
         new("tree3d8", "Trees & grass", "3D trees at LOD 8", "Extend 3D tree LOD to the next distance band.", false),
         new("treePlain", "Trees & grass", "Allow plain-name tree models", "Use tree models without the source mesh checksum.", false),
         new("treeNamed", "Trees & grass", "Prefer named tree LOD", "Prefer explicitly named LOD meshes over checksum matches.", false),
+        new("treeNative", "Trees & grass", "Build missing 3D tree models", "Reduce full tree models when no matching LOD model is installed; over-budget trees keep billboards.", true),
+        new("treeNearBudget", "Trees & grass", "LOD 4 tree triangle budget", "Per model; 0 disables the cap. Intact foliage that exceeds it uses billboards.", 4000m, 0, 1000000),
+        new("treeFarBudget", "Trees & grass", "LOD 8 tree triangle budget", "Per model. Far models must fit this budget and use simpler geometry.", 1600m, 0, 1000000),
+        new("treeNearError", "Trees & grass", "LOD 4 trunk error", "Maximum simplification deviation in game units. Alpha foliage and UV islands are preserved.", 4m, 0, 1024),
+        new("treeFarError", "Trees & grass", "LOD 8 trunk error", "Maximum simplification deviation for far trunks.", 24m, 0, 4096),
         new("mapTrees", "Trees & grass", "Trees on world map", "Include 3D trees in map LOD.", true),
         new("grass", "Trees & grass", "Grass billboard LOD", "Needs an installed grass cache and grass billboards.", true),
         new("grassDensity", "Trees & grass", "Grass density", "Fraction of cached grass instances retained (0–1).", .08m, 0, 1),
@@ -70,6 +75,8 @@ public static class GenerationOptions
         new("esl", "World & runtime", "ESL record limit", "Auto reads the game version; 4096 requires Skyrim 1.6.1130 or newer.", "Auto", Choices: ["Auto", "2048", "4096"]),
         new("largeRefs", "World & runtime", "Large-reference master", "Write missing large references to AnvilLOD.esm.", false),
         new("largeEsl", "World & runtime", "Flag large-reference master as ESL", "Avoid using a full plugin slot.", true),
+        new("objectAtlas", "Object atlases", "Pack object texture atlases", "Paired diffuse/normal pages; unsupported materials keep their source textures. Rebuilds all blocks when the LOD stage runs.", false),
+        new("atlasCell", "Object atlases", "Atlas cell size", "Includes a padded border to prevent mip bleeding.", "256", Choices: ["64", "128", "256", "512"]),
         new("pbr", "PBR & terrain", "PBR object LOD", "Use matching PBR albedo textures and TexGen twins.", false),
         new("pbrBrightness", "PBR & terrain", "PBR brightness", "Multiplier on the default PBR conversion scale.", 1m, 0, 4),
         new("pbrSize", "PBR & terrain", "PBR texture size", "Maximum side length of converted textures.", "512", Choices: ["128", "256", "512", "1024", "2048"]),
@@ -110,6 +117,7 @@ public static class GenerationOptions
             catch (Exception e) when (e is JsonException or InvalidOperationException or ArgumentException)
             { throw new ArgumentException($"{spec.Label}: {e.Message}", e); }
         }
+        AnvilLOD.Textures.TextureCompute.ValidateMode(settings.TextureCompute);
         if (settings.Edition is not ("SE / AE" or "VR")) throw new ArgumentException("Choose a supported game edition.");
         if (settings.SourceMode is not ("Mod Organizer 2" or "Data folder / Vortex")) throw new ArgumentException("Choose a supported game source.");
         if (settings.MaxThreads < 0 || settings.MaxThreads > 1024 || settings.MaxThreads != decimal.Truncate(settings.MaxThreads))

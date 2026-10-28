@@ -58,7 +58,8 @@ public sealed record ScanRequest(
     AnvilLOD.Core.Occlusion.OcclusionSettings? Occlusion = null,   // work out the occlusion data (Occlusion.esp) ourselves, with these settings (null = off)
     string? OcclusionFolder = null,
     string? GeneratedTextureFolder = null,
-    string? GeneratedGrassFolder = null);
+    string? GeneratedGrassFolder = null,
+    string? GeneratedTerrainFolder = null, bool ObjectAtlas = false, int AtlasCellSize = 256);
 
 public sealed record ScanSummary(
     ScanStats Stats,
@@ -115,6 +116,7 @@ public static class ScanPipeline
     public static ScanSummary Run(ScanRequest req, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+        req.Scan.Tree3D?.Validate();
         if (req.Generate && string.IsNullOrWhiteSpace(req.OutputFolder))
             throw new ArgumentException("Choose an output folder before generating LOD.");
         if (req.Generate) GenerationDestination.Validate(req.Game, req.OutputFolder!);
@@ -146,6 +148,17 @@ public static class ScanPipeline
         }
 
 
+        if (req.GeneratedTerrainFolder is { } terrain)
+        {
+            if (req.OutputFolder is { } lod && (HostPath.IsWithin(lod, terrain) || HostPath.IsWithin(terrain, lod)))
+                throw new ArgumentException("LOD and terrain output folders must be separate.");
+            var manifest = TerrainGeneration.ReadManifest(terrain);
+            manifest.Verify(terrain, progress, ct);
+            req = req with { SettingsFingerprint = req.SettingsFingerprint + "|terrain:" + manifest.Digest };
+        }
+        if (req.OutputFolder is { } terrainOutput && File.Exists(Path.Combine(terrainOutput, TerrainGeneration.ManifestName)))
+            throw new ArgumentException("LOD output must be separate from terrain output.");
+
         // The output folder is made and, unless told not to, emptied before the log is opened in it.
         var prepared = req.Generate ? OutputFolder.Prepare(req.OutputFolder!, req.CleanOutput) : null;
 
@@ -171,6 +184,7 @@ public static class ScanPipeline
 
     private static ScanSummary RunLogged(ScanRequest req, IProgress<string>? progress, CancellationToken ct)
     {
+        using var preparationTiming = WorkTiming.Measure("preparation");
 
         // The same checks the app asks about before it starts; a command-line run (or one the user went ahead with) gets them in the log.
         if (req.Generate)
@@ -202,6 +216,8 @@ public static class ScanPipeline
                  || p.StartsWith("grass\\", StringComparison.Ordinal) || p.StartsWith("seasons\\", StringComparison.Ordinal)
                  || p.StartsWith("textures\\", StringComparison.Ordinal)); // grass model textures (rendered grass billboards), the textures 3D tree LOD models need, and so the texture audit can tell a BSA texture from a missing one
         progress?.Report($"Indexed {assets.ArchivedFileCount:N0} files from {assets.ArchiveCount} archives in {assets.IndexTime.TotalSeconds:F1}s");
+        if (req.GeneratedTerrainFolder is { } terrainFolder)
+            assets.SetOverrides(terrainFolder, TerrainGeneration.ReadManifest(terrainFolder).Files.Keys.Select(p => p.Replace('/', '\\')), ct: ct);
         if (req.GeneratedTextureFolder is { } textures)
         {
             progress?.Report("Indexing generated textures...");
@@ -418,7 +434,7 @@ public static class ScanPipeline
             var t3 = req.Scan.Tree3D ?? Tree3DSettings.Off;
             if (t3.Enabled)
             {
-                tree3d = new Tree3DSource(assets, req.TreeBrightness);
+                tree3d = new Tree3DSource(assets, req.TreeBrightness, t3);
                 var withModel = allTrees.Where(t => t.Model3D is not null).ToList();
                 var reasons = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
                 Parallel.ForEach(withModel.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase), RunLimits.Parallel(ct),
@@ -442,24 +458,23 @@ public static class ScanPipeline
                 int byName = in3d.Where(t => t.Model3DByName).Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 int types = in3d.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 int nameOnly = scanner.Tree3DNameOnlyAvailable;
-                long t3Tris = 0, t3Bytes = 0;
-                foreach (var g in in3d.GroupBy(t => t.Model3D!, StringComparer.OrdinalIgnoreCase))
+                var coverage = tree3d.Report(in3d, t3);
+                long t3Tris = coverage.Sum(r => r.PlacedTriangles);
+                double t3Mb = coverage.Sum(r => r.ApproxMegabytes);
+                int nativeTypes = in3d.Where(t => t.Model3DGenerated).Select(t => t.Model3D).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                int near3d = in3d.Count(t => tree3d.Select(t.Model3D!, 4, t.Model3DGenerated).MeshPath is not null);
+                foreach (var fallback in coverage.Where(r => r.Fallback is not null))
                 {
-                    var (v, tr) = tree3d.Size(g.Key);
-                    t3Tris += (long)tr * g.Count();
-                    t3Bytes += ((long)v * 32 + (long)tr * 6) * g.Count();
+                    string message = $"{fallback.Model} LOD{fallback.Level}: {fallback.Fallback}";
+                    t3Warnings.Add(message); progress?.Report("3D tree fallback: " + message);
                 }
-                int t3Levels = t3.Lod8 ? 2 : 1;
-                tree3dStats = new Tree3DStats(in3d.Count, types, types - byName, byName, skippedTypes.Count, skippedTrees, nameOnly, t3Warnings,
-                    t3Tris, t3Bytes / 1048576.0);
-                progress?.Report($"3D tree LOD: {in3d.Count:N0} of {allTrees.Count:N0} trees use a 3D model ({types} models: {types - byName} matched by CRC32, {byName} by name; "
-                                 + (t3.Lod8 ? "LOD4 and LOD8" : "LOD4 only") + "), billboard cards further out");
+                tree3dStats = new Tree3DStats(near3d, types, types - byName - nativeTypes, byName, skippedTypes.Count, skippedTrees, nameOnly, t3Warnings,
+                    t3Tris, t3Mb, coverage, nativeTypes, allTrees.Count);
+                progress?.Report($"3D tree LOD: {near3d:N0} of {allTrees.Count:N0} trees use near 3D geometry; {nativeTypes} types use native source reduction.");
                 if (scanner.Tree3DPatchedMeshes > 0)
                     progress?.Report($"3D tree LOD: PGPatcher's ParallaxGen_Diff.json lists {scanner.Tree3DPatchedMeshes:N0} patched meshes; {scanner.Tree3DMatchedByOriginalCrc} tree models were found under the checksum from before patching, as DynDOLOD does.");
                 if (in3d.Count > 0)
-                    progress?.Report($"3D tree LOD: the models add about {t3Tris * t3Levels / 1e6:F1} million triangles and {t3Bytes * t3Levels / 1048576.0:F0} MB to the LOD blocks"
-                                     + (t3.Lod8 ? "" : " (turning on LOD8 would roughly double that)")
-                                     + ". Heavy models are the usual cause of huge LOD files; a lighter model set or fewer levels keeps them small.");
+                    progress?.Report($"Tree geometry across selected near levels: {t3Tris / 1e6:F1} million triangles, approximately {t3Mb:F0} MB before block merging. See per-model/level coverage in the scan report.");
                 if (nameOnly > 0)
                     progress?.Report($"3D tree LOD: {nameOnly} tree types have a 3D model under the plain tree name that doesn't match their mesh (changed by a mod or patcher). "
                                      + "Turn on \"accept models by name\" to use them.");
@@ -471,7 +486,7 @@ public static class ScanPipeline
             if (light.Count > 0 || in3d.Count > 0) cards = new TreeCardSource(assets, req.TreeBrightness);
             if (in3d.Count > 0)
             {
-                allRefs = [.. allRefs, .. Tree3DSource.ToReferences(in3d, t3)];
+                allRefs = [.. allRefs, .. tree3d!.ToReferences(in3d, t3)];
                 foreach (var t in in3d) objectLodWorlds.Add(t.Worldspace);
             }
             if (light.Count > 0)
@@ -495,7 +510,7 @@ public static class ScanPipeline
         var hashes = new System.Collections.Concurrent.ConcurrentDictionary<QuadKey, string>();
         Parallel.ForEach(quads, RunLimits.Parallel(ct), kv =>
             hashes[kv.Key] = QuadHasher.Hash(kv.Key, kv.Value, Fingerprint,
-                req.SettingsFingerprint + (mapObjectLevel >= 0 ? $"|map32:{mapObjectLevel}" : "") + (MathF.Abs(req.ObjectBrightness - 1f) > 0.001f ? $"|bright:{req.ObjectBrightness:F2}" : "") + (req.PbrLod ? FormattableString.Invariant($"|pbr:{req.PbrLodBrightness:F2}:{req.PbrLodSize}") : "") + (ruleOptions.Candles ? "|candles" : "") + (ruleOptions.FxGlow ? "|fxglow" : "") + (ruleOptions.CustomFile is { } cf ? $"|rules:{new FileInfo(cf).Length}:{new FileInfo(cf).LastWriteTimeUtc.Ticks}" : "") + (req.SnowShaderMode != 0 ? $"|snowmode:{req.SnowShaderMode}" : "") + (req.SnowCover != 0 ? $"|snowcover:{req.SnowCover}" : "") + (req.MountainFit && req.MountainInset > 0f ? "|mtnfit1" : "") + (req.OpaqueAlpha ? "|opaque1" : "") + (req.DetailedShips ? FormattableString.Invariant($"|ships2:{LodInset.DefaultShip:F1}") : "") + (req.IceInset > 0f ? FormattableString.Invariant($"|iceinset:{req.IceInset:F1}") : "") + (req.MountainInset > 0f ? FormattableString.Invariant($"|mtninset:{req.MountainInset:F1}") : "") + (req.ObjectInset > 0f ? FormattableString.Invariant($"|objinset:{req.ObjectInset:F1}") : "") + (cullTerrain is null ? "|keep-buried"
+                req.SettingsFingerprint + (req.ObjectAtlas ? $"|atlas1:{req.AtlasCellSize}" : "") + (mapObjectLevel >= 0 ? $"|map32:{mapObjectLevel}" : "") + (MathF.Abs(req.ObjectBrightness - 1f) > 0.001f ? $"|bright:{req.ObjectBrightness:F2}" : "") + (req.PbrLod ? FormattableString.Invariant($"|pbr:{req.PbrLodBrightness:F2}:{req.PbrLodSize}") : "") + (ruleOptions.Candles ? "|candles" : "") + (ruleOptions.FxGlow ? "|fxglow" : "") + (ruleOptions.CustomFile is { } cf ? $"|rules:{new FileInfo(cf).Length}:{new FileInfo(cf).LastWriteTimeUtc.Ticks}" : "") + (req.SnowShaderMode != 0 ? $"|snowmode:{req.SnowShaderMode}" : "") + (req.SnowCover != 0 ? $"|snowcover:{req.SnowCover}" : "") + (req.MountainFit && req.MountainInset > 0f ? "|mtnfit1" : "") + (req.OpaqueAlpha ? "|opaque1" : "") + (req.DetailedShips ? FormattableString.Invariant($"|ships2:{LodInset.DefaultShip:F1}") : "") + (req.IceInset > 0f ? FormattableString.Invariant($"|iceinset:{req.IceInset:F1}") : "") + (req.MountainInset > 0f ? FormattableString.Invariant($"|mtninset:{req.MountainInset:F1}") : "") + (req.ObjectInset > 0f ? FormattableString.Invariant($"|objinset:{req.ObjectInset:F1}") : "") + (cullTerrain is null ? "|keep-buried"
                     : "|terrain:" + (cullTerrain.Fingerprints.TryGetValue(kv.Key.Worldspace, out var tf) ? tf : "none") + (req.RemoveUnderwater ? "|water:" + cullTerrain.Heights.WaterFingerprint(kv.Key.Worldspace) : "")),
                 id => scan.TextureVariants is { } tv && tv.TryGetValue(id, out var v) ? Fingerprint(v.FullModel) : null));
         sw.Stop();
@@ -508,6 +523,8 @@ public static class ScanPipeline
             && scopeWorldspaces.Contains(ws)
             && (req.Levels is not { Count: > 0 } || req.Levels.Contains((LodLevel)lv));
         var plan = manifest.Plan(hashes, req.OutputFolder, InScope);
+        if (req.ObjectAtlas) plan = new BuildPlan(hashes.Keys.ToArray(),[],plan.StaleFiles); // atlas layout can affect every block
+        if(req.AtlasCellSize is <64 or >512 || (req.AtlasCellSize&(req.AtlasCellSize-1))!=0)throw new ArgumentException("Atlas cell size must be a power of two from 64 to 512.");
 
         GenerateStats? gen = null;
         TreeGenerateStats? trees = null;
@@ -532,7 +549,9 @@ public static class ScanPipeline
                 Warn($"{real.Count} {what} types ({real.Sum(kv => kv.Value):N0} placed) have no billboard, and TexGen hasn't seen them. {fix} First: "
                      + string.Join(", ", real.OrderByDescending(kv => kv.Value).Take(5).Select(kv => kv.Key)) + ".");
         }
-        Classify(scan.MissingBillboards, "tree", "Re-run TexGen with the current load order.");
+        Classify(scan.MissingBillboards, "tree", "Re-run texture generation with the current load order.");
+        preparationTiming.Dispose();
+        using var generationTiming = WorkTiming.Measure("generation");
         if (req.Generate)
         {
             var output = req.OutputFolder!;
@@ -540,6 +559,18 @@ public static class ScanPipeline
             var pbrLod = req.PbrLod ? new PbrLodTextures(assets) : null;
             var opaqueLod = req.OpaqueAlpha ? new OpaqueLodTextures(assets, OpaqueLodStage.IsTranslucent) : null;
             var generator = new LodGenerator(assets, cullTerrain?.Heights, new CompositeSyntheticSource(grass, cards, tree3d, ships)) { RemoveUnderwater = req.RemoveUnderwater, Brightness = req.ObjectBrightness, SnowShaderMode = req.SnowShaderMode, SnowCover = req.SnowCover, FitMountains = req.MountainFit && req.MountainInset > 0f, Pbr = pbrLod, Opaque = opaqueLod, Categorize = SizeBreakdown.Categorize, Inset = req.IceInset > 0f || req.MountainInset > 0f || req.ObjectInset > 0f || req.DetailedShips ? path => LodInset.For(path, req.IceInset, req.MountainInset, req.DetailedShips ? LodInset.DefaultShip : 0f, req.ObjectInset) : null, TextureVariants = scan.TextureVariants };
+            if (req.ObjectAtlas)
+            {
+                var models=quads.Values.SelectMany(v=>v).SelectMany(r=>new[]{r.Meshes.Lod4,r.Meshes.Lod8,r.Meshes.Lod16,r.Meshes.Lod32})
+                    .OfType<string>().Where(p=>!p.StartsWith('~')).Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(p=>{ct.ThrowIfCancellationRequested();return generator.GetMesh(p);}).OfType<LodMesh>().ToArray();
+                // Mapping above discovers converted PBR/opaque inputs. Materialize them before packing paired pages.
+                if(pbrLod is not null && PbrLodStage.Run(assets,pbrLod,output,req.PbrLodSize,req.PbrLodBrightness,progress,ct) is {Failed:>0} pbrFailure)
+                    throw new InvalidDataException("Cannot atlas failed PBR inputs: "+string.Join("; ",pbrFailure.Errors));
+                if(opaqueLod is not null && OpaqueLodStage.Run(assets,opaqueLod,output,progress,ct) is {Failed:>0} opaqueFailure)
+                    throw new InvalidDataException("Cannot atlas failed opaque inputs: "+string.Join("; ",opaqueFailure.Errors));
+                generator.ObjectAtlasTransform=ObjectAtlasStage.Build(models,assets,output,req.AtlasCellSize,progress,ct).Transform;
+            }
             gen = generator.Generate(quads, plan.Rebuild, output, progress, ct);
             if (ships is not null && ships.Built() is { Count: > 0 } builtShips)
                 progress?.Report($"Detailed ships: {builtShips.Count} ship models drawn from their real models ("
@@ -572,7 +603,7 @@ public static class ScanPipeline
             if (req.Seasons)
             {
                 progress?.Report("Seasons: building seasonal object LOD from Data\\Seasons\\*_WIN/_SPR/_SUM/_AUT.ini...");
-                var seasonal = SeasonalLod.Build(game, assets, assets.EnumeratePaths, resolver, quads, generator, output, progress, ct, grass);
+                var seasonal = SeasonalLod.Build(game, assets, assets.EnumeratePaths, resolver, quads, generator, output, progress, ct, grass, sceneTrees, tree3d, req.Scan.Tree3D);
                 if (seasonal.Seasons == 0 && seasonal.Messages.Count == 0)
                     progress?.Report("Seasons: no season INI files found in Data\\Seasons; nothing written.");
             }
@@ -580,8 +611,17 @@ public static class ScanPipeline
 
             if (req.Scan.TreeLod && bttTrees is { } treeRefs)
             {
+                var treeSeasons = req.Seasons ? SeasonalAssets.Read(game,assets,"Trees") : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
+                TreeLodGenerator.RemoveInactiveSeasons(output,scan.Grids.Keys,treeSeasons.Keys.ToHashSet(),manifest);
                 trees = TreeLodGenerator.Generate(scan.Grids, treeRefs, assets, output, manifest, progress, ct, req.TreeBrightness, objectLodWorlds);
                 foreach (var w in trees.Warnings) Warn(w);
+                if (req.Seasons)
+                    foreach (var (season, swaps) in treeSeasons)
+                    {
+                        var seasonalRefs = treeRefs.Select(t=>SeasonalAssets.SwapTree(game,assets,t,swaps,req.Scan.Tree3D??Tree3DSettings.Off)).ToArray();
+                        var seasonalResult = TreeLodGenerator.Generate(scan.Grids,seasonalRefs,assets,output,manifest,progress,ct,req.TreeBrightness,objectLodWorlds,season);
+                        foreach (var warning in seasonalResult.Warnings) Warn(season + ": " + warning);
+                    }
                 progress?.Report($"Tree LOD: {trees.Instances:N0} trees, {trees.TreeTypes} types, {trees.Blocks:N0} blocks"
                                  + $" ({trees.WorldspacesWritten} worldspaces written, {trees.WorldspacesUnchanged} unchanged) in {trees.Elapsed.TotalSeconds:F1}s");
             }

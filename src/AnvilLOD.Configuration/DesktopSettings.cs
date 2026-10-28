@@ -57,6 +57,44 @@ public sealed class DesktopSettings : ObservableObject
     public string AuthorPlugin { get => _authorPlugin; set => Set(ref _authorPlugin, value ?? ""); }
     private string _authorOutput = "";
     public string AuthorOutput { get => _authorOutput; set => Set(ref _authorOutput, value ?? ""); }
+    private bool _pipelinePreflight = true;
+    public bool PipelinePreflight { get => _pipelinePreflight; set => Set(ref _pipelinePreflight, value); }
+    private bool _diagnosticDeepScan;
+    public bool DiagnosticDeepScan { get => _diagnosticDeepScan; set => Set(ref _diagnosticDeepScan, value); }
+    private bool _diagnosticVerifyFiles;
+    public bool DiagnosticVerifyFiles { get => _diagnosticVerifyFiles; set => Set(ref _diagnosticVerifyFiles, value); }
+    private string _diagnosticAsset = "";
+    public string DiagnosticAsset { get => _diagnosticAsset; set => Set(ref _diagnosticAsset, value); }
+    private string _terrainOutput = "";
+    public string TerrainOutput { get => _terrainOutput; set => Set(ref _terrainOutput, value); }
+    private bool _pipelineTerrain = false;
+    public bool PipelineTerrain { get => _pipelineTerrain; set => Set(ref _pipelineTerrain, value); }
+    private bool _useGeneratedTerrain = false;
+    public bool UseGeneratedTerrain { get => _useGeneratedTerrain; set => Set(ref _useGeneratedTerrain, value); }
+    private decimal _terrainTextureSize = 512;
+    public decimal TerrainTextureSize { get => _terrainTextureSize; set => Set(ref _terrainTextureSize, value); }
+    private decimal _terrainBrightness = 1;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Seasons
+    {
+        get => GenerationOptions.Get<bool>(this, "seasons");
+        set { Options["seasons"] = JsonSerializer.SerializeToElement(value); Changed(); }
+    }
+    public decimal TerrainBrightness { get => _terrainBrightness; set => Set(ref _terrainBrightness, value); }
+    private decimal _terrainVertexColor = 1;
+    public decimal TerrainVertexColor { get => _terrainVertexColor; set => Set(ref _terrainVertexColor, value); }
+    private decimal _terrainRepeats = 24;
+    public decimal TerrainRepeats { get => _terrainRepeats; set => Set(ref _terrainRepeats, value); }
+    private decimal _terrainSkirt = 512;
+    public decimal TerrainSkirt { get => _terrainSkirt; set => Set(ref _terrainSkirt, value); }
+    private bool _terrainWater = true;
+    public bool TerrainWater { get => _terrainWater; set => Set(ref _terrainWater, value); }
+    private bool _terrainFallback = true;
+    public bool TerrainFallback { get => _terrainFallback; set => Set(ref _terrainFallback, value); }
+    private bool _terrainHeightmaps = true;
+    public bool TerrainHeightmaps { get => _terrainHeightmaps; set => Set(ref _terrainHeightmaps, value); }
+    private decimal _terrainHeightmapSize = 8192;
+    public decimal TerrainHeightmapSize { get => _terrainHeightmapSize; set => Set(ref _terrainHeightmapSize, value); }
     private string _textureGenOutput = "";
     public string TextureGenOutput { get => _textureGenOutput; set => Set(ref _textureGenOutput, value ?? ""); }
     private string _textureGenFilter = "";
@@ -80,6 +118,15 @@ public sealed class DesktopSettings : ObservableObject
     private decimal _textureGenUnitsPerPixel = 12m;
     public decimal TextureGenUnitsPerPixel { get => _textureGenUnitsPerPixel; set => Set(ref _textureGenUnitsPerPixel, value); }
     private decimal _textureGenBrightness = 1m;
+    private bool _bakeSourceNormals = true, _bakePbr = true;
+    private decimal _bakePbrScale = .65m, _bakePbrGamma = 1.15m, _bakeAo = .5m, _bakeAmbient = .7m, _bakeDirectional = .3m;
+    public bool BakeSourceNormals { get => _bakeSourceNormals; set => Set(ref _bakeSourceNormals, value); }
+    public bool BakePbr { get => _bakePbr; set => Set(ref _bakePbr, value); }
+    public decimal BakePbrScale { get => _bakePbrScale; set => Set(ref _bakePbrScale, value); }
+    public decimal BakePbrGamma { get => _bakePbrGamma; set => Set(ref _bakePbrGamma, value); }
+    public decimal BakeAo { get => _bakeAo; set => Set(ref _bakeAo, value); }
+    public decimal BakeAmbient { get => _bakeAmbient; set => Set(ref _bakeAmbient, value); }
+    public decimal BakeDirectional { get => _bakeDirectional; set => Set(ref _bakeDirectional, value); }
     public decimal TextureGenBrightness { get => _textureGenBrightness; set => Set(ref _textureGenBrightness, value); }
     private decimal _textureGenMinTreeHeight = 256m;
     public decimal TextureGenMinTreeHeight { get => _textureGenMinTreeHeight; set => Set(ref _textureGenMinTreeHeight, value); }
@@ -147,6 +194,8 @@ public sealed class DesktopSettings : ObservableObject
     public bool ConvertAllMeshes { get => _convertAllMeshes; set => Set(ref _convertAllMeshes, value); }
     private bool _convertOverwrite = false;
     public bool ConvertOverwrite { get => _convertOverwrite; set => Set(ref _convertOverwrite, value); }
+    private string _textureCompute = "Cpu";
+    public string TextureCompute { get => _textureCompute; set => Set(ref _textureCompute, value ?? "Cpu"); }
     private decimal _maxThreads = 0m;
     public decimal MaxThreads { get => _maxThreads; set => Set(ref _maxThreads, value); }
     private decimal _makerDetail = 1m;
@@ -157,6 +206,17 @@ public sealed class DesktopSettings : ObservableObject
     public decimal AuthorMinSize { get => _authorMinSize; set => Set(ref _authorMinSize, value); }
     private decimal _authorTreeHeight = 256m;
     public decimal AuthorTreeHeight { get => _authorTreeHeight; set => Set(ref _authorTreeHeight, value); }
+
+    private bool _resumeCompletedStages = true;
+    public bool ResumeCompletedStages { get => _resumeCompletedStages; set => Set(ref _resumeCompletedStages, value); }
+    private bool _verifySourceContents;
+    public bool VerifySourceContents { get => _verifySourceContents; set => Set(ref _verifySourceContents, value); }
+    private bool _pipelineGrass = true;
+    public bool PipelineGrass { get => _pipelineGrass; set => Set(ref _pipelineGrass, value); }
+    private bool _pipelineTextures = true;
+    public bool PipelineTextures { get => _pipelineTextures; set => Set(ref _pipelineTextures, value); }
+    private bool _pipelineLod = true;
+    public bool PipelineLod { get => _pipelineLod; set => Set(ref _pipelineLod, value); }
 
     public DesktopSettings Snapshot() => JsonSerializer.Deserialize<DesktopSettings>(JsonSerializer.Serialize(this))!;
 }

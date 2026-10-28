@@ -15,7 +15,7 @@ public static class OutputFolder
     private static readonly string[] Kept = ["meta.ini"];
 
     /// <summary>Files that only AnvilLOD writes: a folder holding one of them is its output.</summary>
-    private static readonly string[] OwnMarkers = ["AnvilLOD.manifest.json", "AnvilLOD.log", TextureGenerationManifest.FileName, GrassGenerationManifest.FileName];
+    private static readonly string[] OwnMarkers = ["AnvilLOD.manifest.json", "AnvilLOD.log", TextureGenerationManifest.FileName, GrassGenerationManifest.FileName, TerrainGeneration.ManifestName];
 
     /// <summary>Names that show a folder is a game, mod manager or mods folder, never somewhere to empty.</summary>
     private static readonly string[] ProtectedMarkers =

@@ -31,6 +31,23 @@ public static class RequestFactory
             GameIniPath: P(s.GameIni), WinePrefix: P(s.WinePrefix));
     }
 
+    public static GenerationPipelineRequest Pipeline(DesktopSettings s) => new(
+        s.PipelineGrass ? Grass(s) : null, s.PipelineTextures ? Textures(s) : null,
+        s.PipelineLod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
+        s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute);
+
+    public static TerrainGenerationRequest Terrain(DesktopSettings s)
+    {
+        int Whole(decimal value) => value == decimal.Truncate(value) ? checked((int)value) : throw new ArgumentException("Terrain sizes must be whole numbers.");
+        var worlds = s.Worldspaces.Split([',', ';', ' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var request = new TerrainGenerationRequest(Game(s), RequiredPath(s.TerrainOutput, "a terrain output folder", s), worlds.Length == 0 ? null : worlds,
+            TextureSize: Whole(s.TerrainTextureSize), Brightness: (float)s.TerrainBrightness, VertexColorStrength: (float)s.TerrainVertexColor,
+            TextureRepeatsPerCell: (float)s.TerrainRepeats, SkirtDepth: (float)s.TerrainSkirt, Water: s.TerrainWater,
+            UseExistingTerrain: s.TerrainFallback, ExportHeightmaps: s.TerrainHeightmaps, HeightmapMaximumSize: Whole(s.TerrainHeightmapSize), Seasons: s.Seasons);
+        TerrainGeneration.Validate(request);
+        return request;
+    }
+
     public static TextureGenerationRequest Textures(DesktopSettings s)
     {
         if (s.TextureGenBaseSize != decimal.Truncate(s.TextureGenBaseSize) || s.TextureGenMaxSize != decimal.Truncate(s.TextureGenMaxSize))
@@ -39,7 +56,8 @@ public static class RequestFactory
             Optional(s.DynDolodFolder) is { } d ? PathValue(d, s) : null,
             s.TextureGenStitched, s.TextureGenTrees, s.TextureGenGrass, s.TextureGenObjects,
             (int)s.TextureGenBaseSize, (int)s.TextureGenMaxSize, (float)s.TextureGenUnitsPerPixel, (float)s.TextureGenBrightness,
-            (float)s.TextureGenMinTreeHeight, (float)s.TextureGenMinGrassHeight, s.TextureGenFilter.Trim(), TreeTrunks: s.TextureGenTrunks);
+            (float)s.TextureGenMinTreeHeight, (float)s.TextureGenMinGrassHeight, s.TextureGenFilter.Trim(), TreeTrunks: s.TextureGenTrunks, Materials: new AnvilLOD.Plugins.Authoring.MaterialBakeSettings(s.BakeSourceNormals, s.BakePbr,
+                (float)s.BakePbrScale, (float)s.BakePbrGamma, (float)s.BakeAo, (float)s.BakeAmbient, (float)s.BakeDirectional));
         TextureGeneration.Validate(request);
         if (Optional(s.GrassOutput) is { } grassOutput)
         {
@@ -101,7 +119,7 @@ public static class RequestFactory
         if (generate) GenerationDestination.Validate(game, output!);
         return new ScanRequest(game, new ScanOptions(Worldspaces: worlds.Length == 0 ? null : worlds,
             IncludeInitiallyDisabled: B("disabled"), IncludeEnableParented: B("parented"), TreeLod: B("trees"),
-            DynamicLod: B("dynamic"), GridObjects: B("grid"), Tree3D: new Tree3DSettings(B("tree3d"), B("tree3d8"), B("treePlain"), B("mapTrees"), B("treeNamed")),
+            DynamicLod: B("dynamic"), GridObjects: B("grid"), Tree3D: new Tree3DSettings(B("tree3d"), B("tree3d8"), B("treePlain"), B("mapTrees"), B("treeNamed"), I("treeNearBudget"), I("treeFarBudget"), F("treeNearError"), F("treeFarError"), B("treeNative")),
             MatchTextures: B("matchTextures"), ParentCopies: B("parentCopies"), GlowWindows: B("glowWindows"), PbrWaterfalls: B("pbrWaterfalls"), RenderTreeBillboards: B("renderBillboards")),
             OutputFolder: output, Levels: levels, Generate: generate,
             DynDolodFolder: Optional(s.DynDolodFolder) is { } d ? PathValue(d, s) : null,
@@ -118,6 +136,8 @@ public static class RequestFactory
             CsGrassLod: B("csGrass"), MapObjectLevel: I("mapLevel"),
             Occlusion: generate && B("occlusion") ? new OcclusionSettings(I("occRadius"), F("occClearance"), I("occSamples"), F("occEye"), F("occParent"), I("occParentTargets"), I("occBlockTargets"), I("occEyes")) : null,
             GeneratedTextureFolder: s.UseGeneratedTextures ? RequiredPath(s.TextureGenOutput, "a texture output folder", s) : null,
-            GeneratedGrassFolder: s.UseGeneratedGrass ? RequiredPath(s.GrassOutput, "a grass cache output folder", s) : null);
+            GeneratedGrassFolder: s.UseGeneratedGrass ? RequiredPath(s.GrassOutput, "a grass cache output folder", s) : null,
+            ObjectAtlas: B("objectAtlas"), AtlasCellSize: int.Parse(C("atlasCell")),
+            GeneratedTerrainFolder: s.UseGeneratedTerrain ? RequiredPath(s.TerrainOutput, "a terrain output folder", s) : null);
     }
 }

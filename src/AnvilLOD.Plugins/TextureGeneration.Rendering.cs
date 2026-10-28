@@ -97,7 +97,7 @@ public static partial class TextureGeneration
             {
                 var bytes = read(path);
                 if (bytes is null) { Skip("Model file missing"); warn("Billboard model missing: " + path); continue; }
-                var mesh = NifGeometryReader.Read(path, bytes);
+                var mesh = NifGeometryReader.Read(path, bytes, passthru: true);
                 foreach (var warning in mesh.Warnings) warn(path + ": " + warning);
                 if (mesh.Warnings.Any(w => w.Contains("skipped", StringComparison.OrdinalIgnoreCase)))
                 { Skip("Unsupported model shapes; retain an existing billboard instead of rendering an incomplete tree or plant"); continue; }
@@ -107,16 +107,21 @@ public static partial class TextureGeneration
                 { Skip("Below minimum model height"); continue; }
 
                 // Alternate texture sets belong to the winning plugin record, not the base NIF.
-                var replacements = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var replacements = new Dictionary<string, ITextureSetGetter>(StringComparer.OrdinalIgnoreCase);
                 foreach (var alt in model.AlternateTextures ?? [])
-                    if (game.LinkCache.TryResolve<ITextureSetGetter>(alt.NewTexture.FormKey, out var set) && set.Diffuse is { IsNull: false } diffuse)
-                        replacements[alt.Name] = GamePath.NormalizeTexture(diffuse.DataRelativePath.Path);
+                    if (game.LinkCache.TryResolve<ITextureSetGetter>(alt.NewTexture.FormKey, out var set)) replacements[alt.Name] = set;
                 if (replacements.Count > 0)
-                    mesh = new LodMesh { Path = path, Parts = mesh.Parts.Select(p => replacements.TryGetValue(p.Name ?? "", out var texture)
-                        ? CopyPart(p, p.Material with { Textures = new[] { texture }.Concat(p.Material.Textures.Skip(1)).ToArray() }) : p).ToArray() };
+                    mesh = new LodMesh { Path = path, Parts = mesh.Parts.Select(p =>
+                    {
+                        if (!replacements.TryGetValue(p.Name ?? "", out var set)) return p;
+                        var textures = p.Material.Textures.Concat(Enumerable.Repeat("", Math.Max(0, 2 - p.Material.Textures.Count))).ToArray();
+                        if (set.Diffuse is { IsNull: false } diffuse) textures[0] = GamePath.NormalizeTexture(diffuse.DataRelativePath.Path);
+                        if (set.NormalOrGloss is { IsNull: false } normal) textures[1] = GamePath.NormalizeTexture(normal.DataRelativePath.Path);
+                        return CopyPart(p, p.Material with { Textures = textures });
+                    }).ToArray() };
                 float scale = rule?.Scale ?? 1;
                 var img = BillboardRenderer.Render(mesh, loader, request.BillboardMaxSize, vertexColors: !isGrass,
-                    unitsPerPixel: request.UnitsPerPixel / scale, brightness: request.Brightness)
+                    unitsPerPixel: request.UnitsPerPixel / scale, brightness: request.Brightness, materials: request.Materials)
                     ?? throw new InvalidDataException("The model rendered no visible pixels.");
                 var diffuseBytes = TextureImages.Encode(new(img.Rgba, img.Width, img.Height), alpha: true);
                 write(target + ".dds", diffuseBytes); write(target + "_1.dds", diffuseBytes);
@@ -144,6 +149,9 @@ public static partial class TextureGeneration
             path = GamePath.NormalizeTexture(path);
             if (cache.TryGetValue(path, out var cached)) return cached;
             var image = TextureImages.Decode(read(path) ?? throw new FileNotFoundException("Diffuse texture missing: " + path));
+            // Normal alpha is gloss/specular, not opacity. Do not let it weight RGB filtering.
+            if (path.EndsWith("_n.dds", StringComparison.OrdinalIgnoreCase))
+                for (int i = 3; i < image.Pixels.Length; i += 4) image.Pixels[i] = 255;
             while (image.Width > 1024 || image.Height > 1024)
             {
                 var smaller = TreeAtlasBuilder.Downsample(image.Pixels, image.Width, image.Height);
@@ -193,7 +201,7 @@ public static partial class TextureGeneration
                     items.Add(new("Rendered object", path, destination, "Skipped", "Optional resource has no matching installed LOD texture"));
                     continue;
                 }
-                var mesh = NifGeometryReader.Read(path, model.Load(), includeTexGenPlane: true);
+                var mesh = NifGeometryReader.Read(path, model.Load(), includeTexGenPlane: true, passthru: true);
                 foreach (var warning in mesh.Warnings) warn(path + ": " + warning);
                 if (mesh.Warnings.Any(w => w.Contains("skipped", StringComparison.OrdinalIgnoreCase)))
                     throw new NotSupportedException("The render model contains unsupported shapes; incomplete object textures were not generated.");
@@ -207,12 +215,12 @@ public static partial class TextureGeneration
                 int outW = TextureImages.Size(plane.TexGenScale * Math.Max(1, MathF.Round(width / height)), request.BaseSize);
                 int outH = TextureImages.Size(plane.TexGenScale * Math.Max(1, MathF.Round(height / width)), request.BaseSize);
                 var image = BillboardRenderer.Render(visible, TextureLoader(read), request.BaseSize * 4,
-                    unitsPerPixel: 1024f / request.BaseSize, viewport: viewport, brightness: request.Brightness, shaded: false, pixelSize: (outW, outH))
+                    unitsPerPixel: 1024f / request.BaseSize, viewport: viewport, brightness: request.Brightness, shaded: false, pixelSize: (outW, outH), materials: request.Materials)
                     ?? throw new InvalidDataException("The object rendered no visible pixels.");
                 if (!plane.Material.HasAlpha) for (int i = 3; i < image.Rgba.Length; i += 4) image.Rgba[i] = 255;
                 write(destination, TextureImages.Encode(new(image.Rgba, image.Width, image.Height), alpha: plane.Material.HasAlpha));
                 write(destination[..^4] + "_n.dds", TextureImages.Encode(new(image.NormalRgba!, image.Width, image.Height), normal: true));
-                items.Add(new("Rendered object", path, destination, "Written", "Geometry normals; no PBR material baking", image.Width, image.Height));
+                items.Add(new("Rendered object", path, destination, "Written", "Source normals and calibrated albedo; view-dependent PBR lighting is not baked", image.Width, image.Height));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

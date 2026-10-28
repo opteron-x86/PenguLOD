@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Shared preset schema and request validation. No dependency on Avalonia. Namespaces retain compatibility. -->
+  <ItemGroup>
+    <ProjectReference Include="../AnvilLOD.Plugins/AnvilLOD.Plugins.csproj" />
+    <InternalsVisibleTo Include="AnvilLOD.Desktop.Tests" />
+  </ItemGroup>
+</Project>

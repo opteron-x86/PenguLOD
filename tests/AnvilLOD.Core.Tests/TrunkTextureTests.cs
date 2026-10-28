@@ -54,7 +54,7 @@ public sealed class TrunkTextureTests
         Assert.Null(source.Validate(Hybrid));
         var tree = new TreeReference("000123:Skyrim.esm", "Tamriel", new(100, 100, 0), .4f, 1, 0x123,
             new("unused.dds", 200, 400, 0), Model3D: Hybrid);
-        var references = Tree3DSource.ToReferences([tree], new Tree3DSettings(Enabled: true)).ToArray();
+        var references = source.ToReferences([tree], new Tree3DSettings(Enabled: true)).ToArray();
         var quad = new QuadKey("Tamriel", LodLevel.Lod4, 0, 0);
         string lod = Path.Combine(f.Root, "LOD");
         var emitted = new LodGenerator(assets, synthetic: source).Generate(

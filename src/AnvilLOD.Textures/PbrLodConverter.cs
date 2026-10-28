@@ -71,7 +71,7 @@ public static class PbrLodConverter
     }
 
     /// <summary>Share of texels whose alpha, times <paramref name="scale"/>, passes the alpha test.</summary>
-    private static float Coverage(byte[] rgba, float scale)
+    internal static float Coverage(byte[] rgba, float scale)
     {
         int count = 0, total = rgba.Length / 4;
         for (int i = 3; i < rgba.Length; i += 4)
@@ -79,7 +79,7 @@ public static class PbrLodConverter
         return total == 0 ? 0f : (float)count / total;
     }
 
-    private static void KeepCoverage(byte[] rgba, float target)
+    internal static void KeepCoverage(byte[] rgba, float target)
     {
         float lo = 0.25f, hi = 8f;
         for (int i = 0; i < 12; i++)

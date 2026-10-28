@@ -1,8 +1,11 @@
 using System.Diagnostics;
+using System.Text.Json;
 using AnvilLOD.Core;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.World;
 using AnvilLOD.Plugins;
+using AnvilLOD.Desktop.Models;
+using AnvilLOD.Desktop.Services;
 
 namespace AnvilLOD.Cli;
 
@@ -13,6 +16,20 @@ public static class Program
         PenguLOD — native Linux LOD generator for Skyrim SE/AE
 
         Usage:
+          PenguLOD pipeline --settings <preset.json> [--stages grass,textures,terrain,lod]
+                                         Uses exactly the desktop preset schema and validation.
+          PenguLOD grass|texgen|terrain|generate --settings <preset.json>
+                                         Run one selected stage with persistent checkpoints.
+          PenguLOD export-job --settings <preset.json> --output <request.json> [--stages ...]
+          PenguLOD job-status --job-folder <saved-job-folder>
+          PenguLOD compute-info [--allow-software] [--report <compute.json>]
+          PenguLOD pipeline --request <request.json> [--cache-folder <folder>] [--no-resume] [--verify-source-contents]
+                                         Run/resume a saved pipeline plan from the desktop's Open saved job folder.
+                                         Completed stages are content-verified before reuse; failures stop dependent stages.
+                                         Optional: --texture-compute Cpu|Auto|Vulkan --no-preflight --report <run.json>
+          PenguLOD diagnose --request <request.json> --report <diagnostics.json>
+                                         Check a pipeline without generating. Optional: --deep-scan --verify-outputs
+                                         --inspect-asset <Data-relative-path>. Export contains metadata, not game assets.
           PenguLOD scan [options]        analyse the load order and show what would be built
           PenguLOD generate [options]    scan, then write the changed LOD blocks (.bto) to --output
           PenguLOD author --plugin <file> --author-out <folder> [options]
@@ -124,7 +141,12 @@ public static class Program
           --tree-3d              Use 3D tree LOD models (DynDOLOD passthru_lod.nif, matched by the CRC32 of the
                                  tree's mesh) in object LOD: 3D at LOD4, billboard cards from LOD8 on.
                                  Trees without a model keep billboard tree LOD.
-          --tree-3d-lod8         With --tree-3d: use the 3D model at LOD8 too (bigger files)
+          --tree-3d-lod8         With --tree-3d: use a distinct/simpler model at LOD8 when it fits the budget
+          --tree-near-budget N  Triangles per near tree model, default 4000; 0 removes the cap
+          --tree-far-budget N   Triangles per far tree model, default 1600
+          --tree-near-error N   Maximum trunk simplification deviation, default 4 game units
+          --tree-far-error N    Maximum far-trunk deviation, default 24 game units
+          --no-native-trees     Do not build missing 3D tree models from full tree meshes
           --tree-3d-crc-only     With --tree-3d: only use models whose file name carries the tree mesh's CRC32.
                                  Default: when none matches, the model stored under the plain tree name is used
                                  (how DynDOLOD Resources ships almost all of its models, and how DynDOLOD matches)
@@ -202,11 +224,18 @@ public static class Program
     {
         if (!a.Has("tree-3d"))
         {
-            if (a.Has("tree-3d-lod8") || a.Has("tree-3d-by-name") || a.Has("tree-3d-crc-only") || a.Has("tree-3d-own-lod") || a.Has("tree-3d-dyndolod-first"))
+            if (a.Has("tree-3d-lod8") || a.Has("tree-3d-by-name") || a.Has("tree-3d-crc-only") || a.Has("tree-3d-own-lod") || a.Has("tree-3d-dyndolod-first") || a.Has("no-native-trees") || a.Has("no-map-trees") || a.Has("tree-near-budget") || a.Has("tree-far-budget") || a.Has("tree-near-error") || a.Has("tree-far-error"))
                 throw new CliArgException("--tree-3d-lod8, --tree-3d-by-name, --tree-3d-crc-only and --tree-3d-dyndolod-first only apply together with --tree-3d.");
             return null;
         }
-        return new Tree3DSettings(Enabled: true, Lod8: a.Has("tree-3d-lod8"), PlainNameFallback: !a.Has("tree-3d-crc-only"), MapTrees: !a.Has("no-map-trees"), PreferNamedLod: !a.Has("tree-3d-dyndolod-first"));   // --tree-3d-own-lod (0.2.62) is still accepted: it is the default now   // --tree-3d-by-name is still accepted: it is the default now
+        int Budget(string key, int fallback) => a.Get(key) is { } value && int.TryParse(value, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int result) ? result : a.Has(key) ? throw new CliArgException("Invalid --" + key) : fallback;
+        float Error(string key, float fallback) => a.Get(key) is { } value && float.TryParse(value, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float result) ? result : a.Has(key) ? throw new CliArgException("Invalid --" + key) : fallback;
+        var settings = new Tree3DSettings(Enabled: true, Lod8: a.Has("tree-3d-lod8"), PlainNameFallback: !a.Has("tree-3d-crc-only"),
+            MapTrees: !a.Has("no-map-trees"), PreferNamedLod: !a.Has("tree-3d-dyndolod-first"), NearTriangleBudget: Budget("tree-near-budget", 4000),
+            FarTriangleBudget: Budget("tree-far-budget", 1600), NearMaxError: Error("tree-near-error", 4), FarMaxError: Error("tree-far-error", 24), GenerateMissing: !a.Has("no-native-trees"));
+        settings.Validate(); return settings;
     }
 
     public static int Main(string[] args)
@@ -231,8 +260,16 @@ public static class Program
             using var limits = RunLimits.Enter(threads, Cancellation, options.Get("cache-folder"));
             return args[0].ToLowerInvariant() switch
             {
+                "compute-info" => RunComputeInfo(options),
+                "pipeline" => RunPipeline(options),
+                "grass" => RunPipeline(options,"grass"),
+                "texgen" or "textures" => RunPipeline(options,"textures"),
+                "terrain" => RunPipeline(options,"terrain"),
+                "export-job" => ExportJob(options),
+                "job-status" => JobStatus(options),
+                "diagnose" => RunDiagnose(options),
                 "scan" => RunScan(options, generate: false),
-                "generate" => RunScan(options, generate: true),
+                "generate" => options.Has("request") || options.Has("settings") ? RunPipeline(options,"lod") : RunScan(options, generate: true),
                 "author" => RunAuthor(options),
                 "lodmaker" => RunLodMaker(options),
                 "convert-lod" => RunConvertLod(options),
@@ -245,6 +282,93 @@ public static class Program
         catch (CliArgException e) { return Fail(e.Message + "\n\n" + Usage); }
         catch (Exception e) { return Fail(e.GetBaseException().Message); }
         finally { Console.CancelKeyPress -= cancel; }
+    }
+
+    private static int RunComputeInfo(CliArgs options)
+    {
+        var report = AnvilLOD.Textures.TextureCompute.Benchmark(options.Has("allow-software"));
+        var json = JsonSerializer.Serialize(report, PersistentPipeline.Json);
+        Console.WriteLine(json);
+        if (options.Get("report") is { } file) { Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!); File.WriteAllText(file,json); }
+        return options.Has("allow-software") && !report.QualityPassed ? 1 : 0;
+    }
+
+    private static int RunDiagnose(CliArgs options)
+    {
+        var request = LoadPipelineRequest(options);
+        string path = options.Get("report") ?? throw new CliArgException("--report is required.");
+        var report = PipelineDiagnostics.Run(request, options.Has("deep-scan"), options.Has("verify-outputs"), options.Get("inspect-asset"),
+            new Progress<string>(Console.WriteLine), Cancellation);
+        report.Write(path); Console.WriteLine("Diagnostic report: " + path);
+        return report.CanGenerate ? 0 : 1;
+    }
+
+    private static GenerationPipelineRequest LoadPipelineRequest(CliArgs a, string? stage = null)
+    {
+        if (a.Has("request") == a.Has("settings")) throw new CliArgException("Choose exactly one of --request or --settings.");
+        var selected = (stage ?? a.Get("stages"))?.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
+        if(selected is not null && (selected.Length==0 || selected.Any(s=>s is not ("grass" or "textures" or "terrain" or "lod"))))
+            throw new CliArgException("--stages accepts grass,textures,terrain,lod.");
+        GenerationPipelineRequest request;
+        if(a.Get("settings") is { } preset)
+        {
+            var settings=SettingsStore.Read(preset);
+            if(selected is not null)
+            {settings.PipelineGrass=selected.Contains("grass");settings.PipelineTextures=selected.Contains("textures");settings.PipelineTerrain=selected.Contains("terrain");settings.PipelineLod=selected.Contains("lod");}
+            request=RequestFactory.Pipeline(settings);
+        }
+        else
+        {
+            request=JsonSerializer.Deserialize<GenerationPipelineRequest>(File.ReadAllText(a.Get("request")!),PersistentPipeline.Json)
+                ?? throw new CliArgException("The pipeline request is empty.");
+            if(selected is not null)
+            {
+                foreach(var name in selected)
+                    if(name switch {"grass"=>request.Grass is null,"textures"=>request.Textures is null,"terrain"=>request.Terrain is null,_=>request.Lod is null})
+                        throw new CliArgException("The request does not define stage: "+name);
+                request=request with {Grass=selected.Contains("grass")?request.Grass:null,Textures=selected.Contains("textures")?request.Textures:null,
+                    Terrain=selected.Contains("terrain")?request.Terrain:null,Lod=selected.Contains("lod")?request.Lod:null};
+            }
+        }
+        return request with {Resume=!a.Has("no-resume")&&request.Resume,VerifySourceContents=a.Has("verify-source-contents")||request.VerifySourceContents,
+            Preflight=!a.Has("no-preflight")&&request.Preflight,TextureCompute=a.Get("texture-compute")??request.TextureCompute};
+    }
+
+    private static string CacheFolder(CliArgs a)
+    {
+        if(a.Get("cache-folder") is { } explicitCache)return explicitCache;
+        if(a.Get("settings") is { } preset && SettingsStore.Read(preset) is {CacheFolder.Length:>0} settings)
+            return RequestFactory.PathValue(settings.CacheFolder,settings);
+        return SettingsStore.CacheRoot;
+    }
+    private static int RunPipeline(CliArgs a,string? stage=null)
+    {
+        var request=LoadPipelineRequest(a,stage);
+        int threads=a.Has("threads")?int.Parse(a.Get("threads")!):a.Get("settings") is { } preset?(int)SettingsStore.Read(preset).MaxThreads:0;
+        using var limits=RunLimits.Enter(threads,Cancellation,CacheFolder(a));
+        var result=GenerationPipeline.Run(request,CacheFolder(a),new SyncProgress(Console.WriteLine),Cancellation);
+        if(a.Get("report") is { } file)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
+            File.WriteAllText(file,JsonSerializer.Serialize(new{result.Success,result.FailedStage,result.Error,result.JobFolder,result.Journal,result.LodReceipt,result.Diagnostics},PersistentPipeline.Json));
+        }
+        Console.WriteLine("Saved job: "+result.JobFolder);
+        return result.Success?0:Fail(result.Error!);
+    }
+    private static int ExportJob(CliArgs a)
+    {
+        var request=LoadPipelineRequest(a);
+        string file=a.Get("output")??throw new CliArgException("--output <request.json> is required.");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
+        File.WriteAllText(file,JsonSerializer.Serialize(request,PersistentPipeline.Json));
+        Console.WriteLine("Pipeline request: "+file);return 0;
+    }
+    private static int JobStatus(CliArgs a)
+    {
+        string folder=a.Get("job-folder")??throw new CliArgException("--job-folder is required.");
+        var journal=JsonSerializer.Deserialize<PipelineJournal>(File.ReadAllText(Path.Combine(folder,"job.json")),PersistentPipeline.Json)
+            ??throw new InvalidDataException("Empty pipeline journal.");
+        Console.WriteLine(JsonSerializer.Serialize(journal,PersistentPipeline.Json));return 0;
     }
 
     private static int RunScan(CliArgs a, bool generate)
@@ -309,7 +433,8 @@ public static class Program
             MountainFit: !a.Has("no-mountain-fit"),
             MountainInset: a.Get("mountain-inset") is { } mi && float.TryParse(mi, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mip) ? Math.Clamp(mip, 0f, 64f) : 12f,
             Occlusion: a.Has("occlusion") ? new AnvilLOD.Core.Occlusion.OcclusionSettings(Clearance: a.Get("occlusion-clearance") is { } oc && float.TryParse(oc, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv) ? Math.Max(0f, ocv) : 3072f, ParentClearance: a.Get("occlusion-clearance") is { } oc2 && float.TryParse(oc2, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv2) ? Math.Max(0f, ocv2) : 3072f) : null,
-            OcclusionFolder: a.Get("occlusion-folder"),
+            OcclusionFolder: a.Get("occlusion-folder"), ObjectAtlas: a.Has("object-atlas"),
+            AtlasCellSize: a.Get("atlas-cell") is { } cell && int.TryParse(cell,out var size) ? size : a.Has("atlas-cell") ? throw new CliArgException("Invalid --atlas-cell.") : 256,
             MapObjectLevel: a.Get("map-objects")?.ToLowerInvariant() switch { null or "auto" => -2, "rules" => -1, "0" => 0, "1" => 1, "2" => 2, var bad => throw new CliArgException($"--map-objects must be auto, rules, 0, 1 or 2 (got '{bad}').") },
             SnowCover: a.Get("snow-cover") switch { "off" => 0, "bright" => 2, _ => 1 },
             SnowShaderMode: a.Get("snow-shader") switch { "plain" => 1, "hd" => 2, _ => 0 },
@@ -323,7 +448,19 @@ public static class Program
 
         // Progress<T> posts asynchronously; a synchronous reporter keeps console output ordered.
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
-        var s = ScanPipeline.Run(req, sync, Cancellation);
+        if(a.Get("settings") is { } scanPreset) req=RequestFactory.Scan(SettingsStore.Read(scanPreset),generate);
+        ScanSummary s;
+        if(generate)
+        {
+            var generated=GenerationPipeline.Run(new(Lod:req,Resume:!a.Has("no-resume"),VerifySourceContents:a.Has("verify-source-contents"),Preflight:!a.Has("no-preflight"),TextureCompute:a.Get("texture-compute")??"Cpu"),
+                CacheFolder(a),sync,Cancellation);
+            Console.WriteLine("Saved job: "+generated.JobFolder);
+            if(!generated.Success)return Fail(generated.Error!);
+            if(generated.Lod is null){Console.WriteLine("Reused verified LOD output.");return 0;}
+            s=generated.Lod;
+        }
+        else s=ScanPipeline.Run(req,sync,Cancellation);
+
         total.Stop();
 
         Console.WriteLine();

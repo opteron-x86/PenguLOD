@@ -102,14 +102,14 @@ public static partial class TextureGeneration
                 if (card.Error is not null) throw new NotSupportedException(card.Error);
                 if (!card.Views.ContainsKey(1) || !card.Views.ContainsKey(2))
                     throw new InvalidDataException("Both front and side cards are required in the installed hybrid model.");
-                var source = NifGeometryReader.Read(resource.Source, resource.Load());
+                var source = NifGeometryReader.Read(resource.Source, resource.Load(), passthru: true);
                 if (source.Warnings.Count > 0 || source.Parts.Count == 0)
                     throw new NotSupportedException("Incomplete trunk geometry: " + string.Join("; ", source.Warnings.DefaultIfEmpty("no supported shapes")));
                 var metadata = new StringBuilder("[LOD]\r\nScale=1.000000\r\n");
                 foreach (var (view, frame) in card.Views.OrderBy(p => p.Key))
                 {
                     ct.ThrowIfCancellationRequested();
-                    var image = frame.Render(source, loader, request.BillboardMaxSize, request.UnitsPerPixel, request.Brightness);
+                    var image = frame.Render(source, loader, request.BillboardMaxSize, request.UnitsPerPixel, request.Brightness, request.Materials);
                     string output = stem + $"_{view}.dds";
                     write(output, TextureImages.Encode(new(image.Rgba, image.Width, image.Height), alpha: true));
                     write(stem + $"_{view}_n.dds", TextureImages.Encode(new(image.NormalRgba!, image.Width, image.Height), normal: true));

@@ -50,6 +50,50 @@ public sealed class DesktopTests : IDisposable
             .Children.OfType<T>().Single();
 
     [AvaloniaFact]
+    public async Task DiagnosticsShowRuntimeRequirementsAndExportMetadataOnly()
+    {
+        using var fixture = new TextureFixture(); var window = Window();
+        window.ReplaceSettings(new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = fixture.Data, PluginsFile = fixture.Plugins,
+            OutputFolder = Path.Combine(fixture.Root, "lod"), CacheFolder = Path.Combine(fixture.Root, "cache"),
+            PipelineGrass = false, PipelineTextures = false, PipelineLod = true });
+        window.Show();
+        try
+        {
+            Click(window, "Diagnostics"); await window.RunDiagnostics(); Assert.Equal("Diagnostics complete", window.Status);
+            var report = Assert.Single(Directory.GetFiles(window.Settings.CacheFolder, "diagnostics.json", SearchOption.AllDirectories));
+            var json = File.ReadAllText(report); Assert.Contains("runtime-plugin-missing", json); Assert.DoesNotContain(fixture.Root, json);
+            Assert.False(Directory.Exists(window.Settings.OutputFolder));
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task TerrainPipelineGeneratesAndResumesFromDesktop()
+    {
+        using var fixture = new TerrainFixture();
+        var window = Window(); window.ReplaceSettings(new DesktopSettings
+        {
+            SourceMode = "Data folder / Vortex", GameFolder = fixture.Textures.Data, PluginsFile = fixture.Textures.Plugins,
+            Worldspaces = "FixtureWorld", TerrainOutput = fixture.Output, TerrainTextureSize = 64,
+            CacheFolder = Path.Combine(fixture.Root, "cache"), PipelineGrass = false, PipelineTextures = false,
+            PipelineLod = false, PipelineTerrain = true
+        });
+        window.Show();
+        try
+        {
+            Click(window, "Pipeline"); await window.RunSelectedPipeline();
+            Assert.Equal("Completed", window.Status);
+            Assert.True(window.Settings.UseGeneratedTerrain);
+            Assert.True(File.Exists(Path.Combine(fixture.Output, TerrainGeneration.ManifestName)));
+            await window.RunSelectedPipeline();
+            Assert.Equal("Completed", window.Status);
+            Click(window, "Terrain");
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("1 terrain tiles") == true);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task GenerationSettingsRemainEditableAndPersistAfterGarbageCollection()
     {
         var window = Window(); window.Show();
@@ -107,7 +151,7 @@ public sealed class DesktopTests : IDisposable
         input.Text = "/mnt/mods/My MO2";
         Assert.Equal(input.Text, window.Settings.Instance);
         string? screenshots = Environment.GetEnvironmentVariable("ANVILLOD_SCREENSHOTS");
-        foreach (var (title, file) in new[] { ("Overview", "overview"), ("Grass cache", "grass-cache"), ("Texture generation", "texture-generation"), ("Generation settings", "settings"), ("Mesh maker", "meshes"), ("Mod author", "author"), ("Texture tools", "textures"), ("Custom rules", "rules"), ("Preferences", "preferences") })
+        foreach (var (title, file) in new[] { ("Overview", "overview"), ("Pipeline", "pipeline"), ("Grass cache", "grass-cache"), ("Texture generation", "texture-generation"), ("Terrain", "terrain"), ("Generation settings", "settings"), ("Mesh maker", "meshes"), ("Mod author", "author"), ("Texture tools", "textures"), ("Custom rules", "rules"), ("Diagnostics", "diagnostics"), ("Preferences", "preferences") })
         {
             Click(window, title);
             Assert.Contains(window.GetVisualDescendants().OfType<ScrollViewer>(), s => s.Bounds.Width > 0);
@@ -275,7 +319,7 @@ public sealed class DesktopTests : IDisposable
             TextureGenBaseSize = 64, OutputFolder = Path.Combine(fixture.Root, "LOD"), CacheFolder = Path.Combine(fixture.Root, "Cache") });
         window.Show(); await window.RunGrassGeneration(true);
         Assert.True(window.Settings.UseGeneratedGrass); Assert.True(window.Settings.UseGeneratedTextures);
-        Assert.Equal("Grass and textures complete; review LOD results", window.Status); // Fixture has no LOD grids.
+        Assert.Equal("No matching worldspaces; previous LOD preserved", window.Status); // Fixture has no LOD grids.
         GrassGenerationManifest.Read(fixture.Output, true)!.Verify(fixture.Output);
         TextureGenerationManifest.Read(fixture.Textures.Output, true)!.Verify(fixture.Textures.Output);
         window.Close();
@@ -305,10 +349,10 @@ public sealed class DesktopTests : IDisposable
             Assert.Single(Directory.GetFiles(cache, "grass-report.json", SearchOption.AllDirectories));
             var report = Assert.Single(Directory.GetFiles(cache, "texture-report.json", SearchOption.AllDirectories));
             Assert.False(JsonSerializer.Deserialize<TextureGenerationResult>(File.ReadAllText(report))!.Published);
-            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("resume without rebuilding grass") == true);
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("resume without rebuilding verified stages") == true);
             var manifest = File.ReadAllText(Path.Combine(fixture.Output, GrassGenerationManifest.FileName));
             File.WriteAllText(fixture.Textures.RuleFile, rule);
-            await window.RunTextureGeneration(true);
+            await window.RunGrassGeneration(true);
             Assert.Contains("no matching worldspaces", window.Status, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(manifest, File.ReadAllText(Path.Combine(fixture.Output, GrassGenerationManifest.FileName)));
             Assert.True(TextureGenerationManifest.Read(fixture.Textures.Output, true)!.Complete);
@@ -360,7 +404,8 @@ public sealed class DesktopTests : IDisposable
         await window.RunTextureGeneration(true);
         // The tiny fixture has no worldspaces; reaching the scan and its report proves the second stage ran.
         Assert.Contains("no matching worldspaces", window.Status, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Using generated textures", File.ReadAllText(Path.Combine(settings.OutputFolder, "AnvilLOD.log")));
+        Assert.False(Directory.Exists(settings.OutputFolder)); // Failed/empty LOD is never published.
+        Assert.Contains("Using generated textures", File.ReadAllText(Assert.Single(Directory.GetFiles(settings.CacheFolder, "lod.log", SearchOption.AllDirectories))));
         Assert.NotEmpty(Directory.GetFiles(settings.CacheFolder, "scan-report.json", SearchOption.AllDirectories));
         window.Close();
         Assert.True(new SettingsStore(Path.Combine(_root, "settings.json")).Load().TextureGenTrunks);

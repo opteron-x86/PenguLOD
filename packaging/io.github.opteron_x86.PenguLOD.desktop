@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PenguLOD
+Comment=Native Skyrim landscape, object, tree and grass LOD generator
+Exec=PenguLOD.Desktop
+Icon=pengulod
+Terminal=false
+Categories=Utility;
+StartupWMClass=PenguLOD.Desktop

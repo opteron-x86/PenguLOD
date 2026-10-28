@@ -3,6 +3,46 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
+## Unreleased
+
+## [0.2.0-alpha.1] - 2026-10-27
+
+- Portable archive and AppImage packages, isolated candidate builds, and compatibility checks
+  for Ubuntu 24.04, Debian 13 and Fedora 43. Flatpak evaluated; no Flatpak release claimed.
+
+- Shared desktop/CLI presets and validation, per-stage CLI commands, request export,
+  saved-job inspection and compact reports. Legacy CLI generation now uses safe publication.
+
+- Optional headless Vulkan BC7 encoding with device/quality checks, a measured automatic
+  speed gate, CPU fallback and desktop/CLI benchmark reports. Software-driver validation
+  passes; hardware performance validation remains pending.
+
+- Native paired object texture atlases with UV remapping, material grouping, padded mips,
+  conservative eligibility checks and coverage reports; replaced the unused atlas placeholder.
+
+- Seasonal terrain, tree atlases/BTT/LST and native 3D tree replacements, using Seasons of
+  Skyrim form swaps. Added a synthetic seasonal profile and end-to-end regression checks.
+
+- Billboard/trunk/object rendering now bakes source normals, UV transforms and clamp modes,
+  with configurable PBR albedo/AO and light calibration. Fixed stale material grouping keys
+  after texture replacement.
+
+- Added automatic pipeline preflight and a Diagnostics page with model/texture coverage,
+  stale-cache checks, runtime requirements, asset precedence and metadata-only JSON reports.
+
+- Shared desktop/CLI pipeline with durable checkpoints, dependency invalidation, verified
+  output reuse, cancellation recovery and per-stage measured timings.
+- Isolated LOD publication with previous-output backups, concurrent-job locks and retained
+  failure logs; a failed or empty generation preserves the installed output.
+- Native terrain/water stage with landscape layer baking, model-space normals, existing-BTR
+  fallback, terrain-shadow heightmap export and desktop controls. Automated format/fixture
+  validation passes; in-game visual validation remains pending.
+- Per-level tree budgets, authored far-model selection, native trunk reduction and optional
+  full-model fallback. Foliage geometry and UVs are preserved; over-budget levels use
+  billboards with explicit coverage/cost reports in the desktop and scan JSON.
+- Native fallback preserves record-specific alternate tree textures by retaining their
+  generated billboards, including seasonal replacements.
+
 ## [0.1.0-alpha.1] - 2026-10-27
 
 Initial PenguLOD Linux release, based on CageTV/AnvilLOD 0.2.70.

@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="src/AnvilLOD.Configuration/AnvilLOD.Configuration.csproj" />
   <Folder Name="/src/">
     <Project Path="src/AnvilLOD.Core/AnvilLOD.Core.csproj" />
     <Project Path="src/AnvilLOD.Meshes/AnvilLOD.Meshes.csproj" />
