@@ -140,6 +140,10 @@ public sealed class Mo2Profile
     /// uses local INIs) or the user's Documents INI; falls back to the SSE defaults.
     /// </summary>
     public IReadOnlyList<string> IniArchives(string? overrideIni = null, bool vr = false)
+        => SkyrimArchives.ReadIniLists(IniPaths(overrideIni, vr));
+
+    /// <summary>Game INIs in priority order, highest first, honoring profile-local settings.</summary>
+    internal IReadOnlyList<string> IniPaths(string? overrideIni = null, bool vr = false)
     {
         var candidates = new List<string>();
         if (UsesLocalInis)
@@ -154,6 +158,6 @@ public sealed class Mo2Profile
         }
         candidates.Add(Path.Combine(Instance.GamePath, "Skyrim_Default.ini"));
         if (overrideIni is not null) candidates.Insert(0, overrideIni);
-        return SkyrimArchives.ReadIniLists(candidates);
+        return candidates;
     }
 }

@@ -15,7 +15,7 @@ public sealed class TerrainFixture : IDisposable
     public string Output => Path.Combine(Root, "Terrain output");
     public GameContextOptions Game => Textures.Game;
     public TerrainGenerationRequest Request => new(Game, Output, ["FixtureWorld"], TextureSize:64);
-    public TerrainFixture(bool missingCell=false, bool seasons=false, bool treeAlternates=false)
+    public TerrainFixture(bool missingCell=false, bool seasons=false, bool treeAlternates=false, Action<Landscape>? editLandscape=null)
     {
         var mod = new SkyrimMod(ModKey.FromNameAndExtension("Skyrim.esm"), SkyrimRelease.SkyrimSE);
         var water = mod.Waters.AddNew(); water.EditorID="FixtureWater";
@@ -47,6 +47,7 @@ public sealed class TerrainFixture : IDisposable
             var cell=new Cell(mod.GetNextFormKey(),SkyrimRelease.SkyrimSE) { Grid=new CellGrid { Point=new P2Int(x,y) },Flags=Cell.Flag.HasWater,WaterHeight=64 };
             var land=new Landscape(mod.GetNextFormKey(),SkyrimRelease.SkyrimSE) { VertexHeightMap=new LandscapeVertexHeightMap { Offset=0,HeightMap=new Array2d<sbyte>(new P2Int(33,33),0) } };
             for(int q=0;q<4;q++) { var layer=new BaseLayer { Header=new LayerHeader { Quadrant=(Quadrant)q } };layer.Header.Texture.SetTo(ltex);land.Layers.Add(layer); }
+            editLandscape?.Invoke(land);
             if (tree is not null && x==-3 && y==-3)
             {
                 var placed=new PlacedObject(mod.GetNextFormKey(),SkyrimRelease.SkyrimSE) {Placement=new Placement {Position=new P3Float(-10000,-10000,0)}};

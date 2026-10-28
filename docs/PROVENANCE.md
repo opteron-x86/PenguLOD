@@ -8,7 +8,7 @@ not a clean-room rewrite. Upstream history and copyright notices are retained.
 | Initial Linux port base | AnvilLOD 0.2.68, `84531ba648ed588835776786c3fe528457861e37` |
 | Native Linux baseline commit | `90d2e30` |
 | Integrated upstream release | AnvilLOD 0.2.70, `e10cb46219727d819a298b2c4a0c23e6f6228d20` |
-| PenguLOD application version | Root `VERSION`; current `0.2.0-alpha.1` |
+| PenguLOD application version | Root `VERSION`; current `0.2.0-alpha.2` |
 | AnvilLOD game-plugin version | Root `UPSTREAM_VERSION`; currently `0.2.70` |
 | FasterNGIO | `5a1bff6ad3e44b5b9c4b5acdd0663ae20860ca40` |
 

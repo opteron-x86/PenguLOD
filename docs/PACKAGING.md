@@ -21,8 +21,8 @@ Updating the package does not move a mod output folder or change its profile pri
 
 ```sh
 chmod +x PenguLOD-*-x86_64.AppImage
-./PenguLOD-0.2.0-alpha.1-x86_64.AppImage
-./PenguLOD-0.2.0-alpha.1-x86_64.AppImage --cli --help
+./PenguLOD-0.2.0-alpha.2-x86_64.AppImage
+./PenguLOD-0.2.0-alpha.2-x86_64.AppImage --cli --help
 ```
 
 Where mounting is unavailable, use `--appimage-extract-and-run` or extract with
