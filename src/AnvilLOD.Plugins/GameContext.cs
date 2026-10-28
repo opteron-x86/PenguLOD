@@ -181,7 +181,7 @@ public sealed class GameContext : IDisposable
         return ctx;
     }
 
-    private static IReadOnlyList<string> IniPaths(GameContextOptions o, string data)
+    internal static IReadOnlyList<string> IniPaths(GameContextOptions o, string data)
     {
         var paths = new List<string>();
         if (o.GameIniPath is not null) paths.Add(o.GameIniPath);

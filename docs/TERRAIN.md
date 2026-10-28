@@ -10,6 +10,15 @@ colours and water levels. LOD settings determine each world's grid origin and su
 levels. Tiles share world-space height samples, including negative coordinates and the
 outermost LAND edges. Skirts cover fine/coarse boundary interpolation differences.
 
+Unpainted quadrants and null base layers use Skyrim's `textures/landscape/dirt02.dds`
+unless `[Landscape] sDefaultLandDiffuseTexture` overrides it. The selected explicit INI
+takes priority, followed by the profile's local `SkyrimCustom.ini`/`Skyrim.ini` when enabled,
+then available game INIs. Paths in this setting are relative to `textures/landscape`;
+`landscape/` and `textures/landscape/` prefixes are also accepted. The resolved default is
+logged. Fully covered base textures are not loaded. See the
+[Terrain Helper default-texture notes](https://github.com/hakasapl/TerrainHelper#mod-authors)
+for Skyrim's diffuse/normal defaults; PenguLOD currently derives terrain normals from heights.
+
 Skyrim plugins omit landscape in some distant areas. **Fill missing landscape from existing
 terrain LOD** samples installed BTR meshes and terrain diffuse textures in these areas.
 The report identifies how many existing tiles were used. It cannot recover full-resolution

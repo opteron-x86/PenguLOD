@@ -18,6 +18,7 @@ internal sealed class TerrainSource
         internal Layer[][] Alpha { get; } = Enumerable.Range(0, 4).Select(q => Layers.Where(l => l.Quadrant == q && l.Opacity is not null).ToArray()).ToArray();
     }
     private readonly string? _season;
+    private readonly string _defaultDiffuse;
     private readonly AssetIndex _assets;
     private readonly string _world;
     private readonly LodGrid _grid;
@@ -35,9 +36,9 @@ internal sealed class TerrainSource
     public IReadOnlyCollection<QuadKey> FallbackUsed => _fallbackUsed;
     internal bool HasLodWater { get; }
 
-    internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null)
+    internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null, string defaultDiffuse = TerrainDefaultTexture.SkyrimDefault)
     {
-        _season = season; _assets = assets; _world = grid.Worldspace; _grid = grid; _fallback = fallback; _ct = ct;
+        _season = season; _defaultDiffuse = defaultDiffuse; _assets = assets; _world = grid.Worldspace; _grid = grid; _fallback = fallback; _ct = ct;
         HasLodWater = world.LodWater.FormKeyNullable is { IsNull: false };
         foreach (var ctx in game.LoadOrder.PriorityOrder.Landscape().WinningContextOverrides(game.LinkCache))
         {
@@ -53,7 +54,7 @@ internal sealed class TerrainSource
             foreach (var layer in ctx.Record.Layers)
             {
                 var header = layer.Header ?? throw new InvalidDataException("Missing landscape layer header.");
-                string diffuse = @"textures\landscape\default.dds"; string? normal = null;
+                string diffuse = _defaultDiffuse; string? normal = null;
                 if (!header.Texture.IsNull)
                 {
                     if (!game.LinkCache.TryResolve<ILandscapeTextureGetter>(swaps?.GetValueOrDefault(header.Texture.FormKey,header.Texture.FormKey) ?? header.Texture.FormKey, out var ltex)
@@ -188,7 +189,8 @@ internal sealed class TerrainSource
             float weight=Bilinear(layer.Opacity!,17,qx,qy);
             if(weight>0) { total+=weight; color+=Material(layer.Texture)*weight; }
         }
-        color += Material(baseLayer?.Texture ?? @"textures\landscape\default.dds")*Math.Max(0,1-total);
+        float baseWeight = Math.Max(0, 1 - total);
+        if (baseWeight > 0) color += Material(baseLayer?.Texture ?? _defaultDiffuse) * baseWeight;
         color/=Math.Max(1,total);
         if(cell.Colors is {} colors)
         {
@@ -197,7 +199,11 @@ internal sealed class TerrainSource
             color*=Vector3.Lerp(Vector3.One,v,colorStrength);
         }
         return color;
-        Vector3 Material(string path) { var original=Image(path,0); int lod=Math.Max(0,(int)MathF.Floor(MathF.Log2(Math.Max(1,footprint*repeats*original.Width/4096))));
+        Vector3 Material(string path) {
+            TextureImage original;
+            try { original = Image(path, 0); }
+            catch (FileNotFoundException e) { throw new FileNotFoundException($"Missing landscape texture: {path} (world {_world}, cell {coord.X},{coord.Y}, quadrant {quadrant}).", path, e); }
+            int lod=Math.Max(0,(int)MathF.Floor(MathF.Log2(Math.Max(1,footprint*repeats*original.Width/4096))));
             return SrgbToLinear(Sample(Image(path,lod),x/4096*repeats,-y/4096*repeats,true)); }
     }
     private TextureImage Image(string path,int lod)

@@ -5,6 +5,17 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.2.0-alpha.2] - 2026-10-27
+
+- Fixed terrain generation failing on unpainted LAND by using Skyrim's `landscape/dirt02.dds`
+  default instead of `landscape/default.dds`. Honor `sDefaultLandDiffuseTexture` from the
+  selected profile/explicit INI with case-insensitive Linux path lookup.
+- Skip the base texture when alpha layers fully cover it; genuinely missing painted textures
+  still stop publication and now identify the world, cell and quadrant.
+- Added regression coverage for omitted/null base layers, INI precedence and opaque paint.
+  Rebuilt the previously failing 512×512 Tamriel tile against a real profile without changing
+  installed game or generated output. A complete Tamriel regeneration remains a user-side check.
+
 ## [0.2.0-alpha.1] - 2026-10-27
 
 - Portable archive and AppImage packages, isolated candidate builds, and compatibility checks

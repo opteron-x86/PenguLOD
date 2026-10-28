@@ -49,6 +49,8 @@ public static class TerrainGeneration
         if(game.MissingPlugins.Count>0)throw new InvalidDataException("Resolve missing plugins before terrain generation: "+string.Join(", ",game.MissingPlugins.Take(5)));
         var assets=game.BuildAssets(p=>p.StartsWith("textures\\") || p.StartsWith("meshes\\terrain\\") || p.StartsWith("lodsettings\\") || p.StartsWith("seasons\\"));
         if(assets.SkippedArchives.Count>0)throw new InvalidDataException("Terrain generation cannot read required archives: "+string.Join(", ",assets.SkippedArchives));
+        string defaultDiffuse = TerrainDefaultTexture.Resolve(request.Game, game.DataFolder);
+        progress?.Report("Default landscape diffuse: " + defaultDiffuse);
         var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures") : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         var wanted=request.Worldspaces is {Count:>0}?new HashSet<string>(request.Worldspaces,StringComparer.OrdinalIgnoreCase):null;
         var worlds=game.LoadOrder.PriorityOrder.Worldspace().WinningOverrides().Where(w=>!w.IsDeleted && w.EditorID is {} id && (wanted is null||wanted.Contains(id))).ToArray();
@@ -65,7 +67,7 @@ public static class TerrainGeneration
             LodSettings settings;using(s){var bytes=new byte[16];s.ReadExactly(bytes);settings=LodSettings.Parse(bytes);}
             if(settings.Stride is <4 or >4096 || (settings.Stride&(settings.Stride-1))!=0)throw new InvalidDataException(name+": invalid LOD grid bounds.");
             var levels=(request.Levels??new[]{LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32}).Where(settings.Supports).Distinct().ToArray();
-            var grid=new LodGrid(name,settings);var source=new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct);
+            var grid=new LodGrid(name,settings);var source=new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,defaultDiffuse:defaultDiffuse);
             var planned=source.Tiles(levels).ToArray();
             if(planned.Length==0){Warn(name+": no landscape or existing terrain in the selected grid/levels; skipped.");continue;}
             if(request.Water && !source.HasLodWater) Warn(name+": no worldspace LOD-water record; water meshes are omitted to avoid invalid engine references.");
@@ -82,7 +84,7 @@ public static class TerrainGeneration
             }
             foreach (var (season, swaps) in seasons)
             {
-                var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season);
+                var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season,defaultDiffuse);
                 foreach (var tile in planned)
                 {
                     ct.ThrowIfCancellationRequested();
