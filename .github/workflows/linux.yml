@@ -124,6 +124,7 @@ jobs:
           timeout 30s ./linux-x64/PenguLOD.Desktop --settings "$PWD/smoke-settings.json" --smoke-test
           chmod +x artifacts/*.AppImage
           artifacts/PenguLOD-*-x86_64.AppImage --appimage-extract-and-run --cli --version
+          timeout 30s artifacts/PenguLOD-*-x86_64.AppImage --appimage-extract-and-run --settings "$PWD/appimage-smoke-settings.json" --smoke-test
   release:
     name: Publish tagged release
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'opteron-x86/PenguLOD'

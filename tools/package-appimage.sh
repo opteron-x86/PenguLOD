@@ -29,7 +29,7 @@ mkdir -p "$appdir/usr/bin" "$appdir/usr/lib/PenguLOD" "$appdir/usr/share/metainf
 cp -a "$payload/." "$appdir/usr/lib/PenguLOD/"
 cp packaging/AppRun "$appdir/AppRun"
 cp packaging/io.github.opteron_x86.PenguLOD.desktop "$appdir/"
-cp packaging/io.github.opteron_x86.PenguLOD.metainfo.xml "$appdir/usr/share/metainfo/"
+cp packaging/io.github.opteron_x86.PenguLOD.metainfo.xml "$appdir/usr/share/metainfo/io.github.opteron_x86.PenguLOD.appdata.xml"
 cp assets/pengulod-256.png "$appdir/pengulod.png"
 chmod +x "$appdir/AppRun"
 ln -s ../../AppRun "$appdir/usr/bin/PenguLOD.Desktop"
