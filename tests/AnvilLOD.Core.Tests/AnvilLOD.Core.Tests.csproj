@@ -10,6 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <ProjectReference Include="../../src/AnvilLOD.Cli/AnvilLOD.Cli.csproj" />
     <ProjectReference Include="..\..\src\AnvilLOD.Core\AnvilLOD.Core.csproj" />
     <ProjectReference Include="..\..\src\AnvilLOD.Meshes\AnvilLOD.Meshes.csproj" />
     <ProjectReference Include="..\..\src\AnvilLOD.Textures\AnvilLOD.Textures.csproj" />

@@ -5,6 +5,9 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+- Shared desktop/CLI presets and validation, per-stage CLI commands, request export,
+  saved-job inspection and compact reports. Legacy CLI generation now uses safe publication.
+
 - Optional headless Vulkan BC7 encoding with device/quality checks, a measured automatic
   speed gate, CPU fallback and desktop/CLI benchmark reports. Software-driver validation
   passes; hardware performance validation remains pending.

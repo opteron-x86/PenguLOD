@@ -117,6 +117,7 @@ public static class GenerationOptions
             catch (Exception e) when (e is JsonException or InvalidOperationException or ArgumentException)
             { throw new ArgumentException($"{spec.Label}: {e.Message}", e); }
         }
+        AnvilLOD.Textures.TextureCompute.ValidateMode(settings.TextureCompute);
         if (settings.Edition is not ("SE / AE" or "VR")) throw new ArgumentException("Choose a supported game edition.");
         if (settings.SourceMode is not ("Mod Organizer 2" or "Data folder / Vortex")) throw new ArgumentException("Choose a supported game source.");
         if (settings.MaxThreads < 0 || settings.MaxThreads > 1024 || settings.MaxThreads != decimal.Truncate(settings.MaxThreads))

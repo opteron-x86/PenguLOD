@@ -6,6 +6,7 @@
     <AssemblyName>PenguLOD</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../AnvilLOD.Configuration/AnvilLOD.Configuration.csproj" />
     <ProjectReference Include="..\AnvilLOD.Core\AnvilLOD.Core.csproj" />
     <ProjectReference Include="..\AnvilLOD.Plugins\AnvilLOD.Plugins.csproj" />
   </ItemGroup>

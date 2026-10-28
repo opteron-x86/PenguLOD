@@ -19,6 +19,8 @@ public static class PipelineInputs
         { "meshes", "textures", "lodsettings", "dyndolod", "grass", "seasons", "skse" };
     private static readonly HashSet<string> ContentExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".esp", ".esm", ".esl", ".ini", ".json", ".txt", ".toml", ".lod", ".ccc" };
+    private static readonly HashSet<string> ProfileFiles = new(StringComparer.OrdinalIgnoreCase)
+        { "plugins.txt", "loadorder.txt", "modlist.txt", "archives.txt", "lockedorder.txt" };
 
     public static string ExternalFingerprint(IEnumerable<string?> paths, bool strict, CancellationToken ct)
     {
@@ -117,7 +119,8 @@ public static class PipelineInputs
                         if (mode == 2 || mode == 1 && (!item.Top || AssetRoots.Contains(Path.GetFileName(path)))) pending.Push((path, false));
                     }
                     else if (!path.EndsWith(".mohidden", StringComparison.OrdinalIgnoreCase)
-                        && (mode != 0 || ContentExtensions.Contains(Path.GetExtension(path)))) FileEntry(path);
+                        && (mode != 0 || ProfileFiles.Contains(Path.GetFileName(path))
+                            || Path.GetExtension(path).ToLowerInvariant() is ".ini" or ".toml")) FileEntry(path);
                 }
             }
         }

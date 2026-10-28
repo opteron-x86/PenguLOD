@@ -9,6 +9,14 @@ namespace AnvilLOD.Desktop;
 
 public sealed partial class MainWindow
 {
+    private async Task ExportPipelineRequest()
+    {
+        var request = RequestFactory.Pipeline(_settings.Snapshot());
+        var file = await SavePath("Export pipeline request", "PenguLOD-pipeline.json", "json");
+        if (file is null) return;
+        File.WriteAllText(file, JsonSerializer.Serialize(request, PersistentPipeline.Json));
+        Notice("Exported the selected pipeline stages for the CLI: " + file);
+    }
     private readonly TextBlock _pipelineSummary = Text("No pipeline job has completed in this session. Rerun the same selection to resume a saved job.", true);
     private readonly DataGrid _pipelineStages = Table(("Stage", "Stage"), ("Status", "Status"), ("Reused", "Reused"),
         ("Prepare s", "Preparation"), ("Process s", "Processing"), ("Write worker s", "Writing"), ("Verify s", "Verification"));
@@ -26,7 +34,7 @@ public sealed partial class MainWindow
             Check("Verify all source asset contents", nameof(DesktopSettings.VerifySourceContents)),
             Text("Plugins and configuration are always content-checked. The normal input check uses file size and timestamps for large assets. Full verification hashes every source asset and can take longer on large lists. Published outputs are always content-verified before reuse.", true),
             Text("Changed settings or inputs invalidate the affected stage and its dependents. LOD is built in a separate folder and published only when successful; the previous output is retained alongside it.", true))),
-        Row(Primary("Run / resume pipeline", RunSelectedPipeline), Button("Open saved job", () => Open(_lastPipelineFolder))),
+        Row(Primary("Run / resume pipeline", RunSelectedPipeline), Button("Export pipeline request", ExportPipelineRequest), Button("Open saved job", () => Open(_lastPipelineFolder))),
         Card("STAGE RESULTS", Stack(12, _pipelineSummary, _pipelineStages,
             Text("Times are measured, not estimates. Process time includes generation and its I/O. Write worker time is the sum of instrumented file writes across workers and may overlap process time. The external grass backend includes writing in its process time.", true)))));
 
