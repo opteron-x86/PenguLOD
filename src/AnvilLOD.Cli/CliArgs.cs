@@ -5,8 +5,8 @@ public sealed class CliArgException(string message) : Exception(message);
 /// <summary>Minimal "--key value" / "--flag" parser. Keys may repeat.</summary>
 public sealed class CliArgs
 {
-    private static readonly HashSet<string> Flags = ["include-disabled", "no-enable-parented", "keep-buried", "keep-underwater", "no-trees", "no-grass", "water-standins", "no-dynamic", "no-child-worlds", "no-grid-objects", "parent-copies", "glow-windows", "no-match-textures", "seasons", "tree-3d", "render-trees", "tree-3d-lod8", "tree-3d-by-name", "tree-3d-crc-only", "underside", "native-grid-objects", "native-effects", "no-detailed-ships", "no-mountain-fit", "no-animated-ships", "no-cs-grass", "pbr-lod", "no-meshes", "no-billboards", "all-meshes", "tree-stand-ins", "no-rules", "overwrite", "large-refs", "large-refs-no-esl", "candles", "fxglow", "keep-output", "occlusion", "apply", "in-place"];
-    private static readonly HashSet<string> Valued = ["cache-folder", "wine-prefix", "game-ini", "threads", "occlusion-clearance", "occlusion-folder", "data", "source", "plugins", "mo2", "profile", "worldspace", "output", "report", "dyndolod", "preset", "grass-density", "grass-top", "grass-bottom", "tree-brightness", "object-brightness", "skse-dll", "underside-detail", "pbr-lod-brightness", "pbr-lod-size", "mo2-game", "mo2-mods", "mo2-profiles", "mo2-overwrite", "plugin", "author-out", "min-size", "min-tree-height", "input", "group", "levels", "detail", "new-mod", "budget", "rules", "texconv", "backup"];
+    private static readonly HashSet<string> Flags = ["no-resume", "verify-source-contents", "include-disabled", "no-enable-parented", "keep-buried", "keep-underwater", "no-trees", "no-grass", "water-standins", "no-dynamic", "no-child-worlds", "no-grid-objects", "parent-copies", "glow-windows", "no-match-textures", "seasons", "tree-3d", "render-trees", "tree-3d-lod8", "tree-3d-by-name", "tree-3d-crc-only", "underside", "native-grid-objects", "native-effects", "no-detailed-ships", "no-mountain-fit", "no-animated-ships", "no-cs-grass", "pbr-lod", "no-meshes", "no-billboards", "all-meshes", "tree-stand-ins", "no-rules", "overwrite", "large-refs", "large-refs-no-esl", "candles", "fxglow", "keep-output", "occlusion", "apply", "in-place"];
+    private static readonly HashSet<string> Valued = ["request", "cache-folder", "wine-prefix", "game-ini", "threads", "occlusion-clearance", "occlusion-folder", "data", "source", "plugins", "mo2", "profile", "worldspace", "output", "report", "dyndolod", "preset", "grass-density", "grass-top", "grass-bottom", "tree-brightness", "object-brightness", "skse-dll", "underside-detail", "pbr-lod-brightness", "pbr-lod-size", "mo2-game", "mo2-mods", "mo2-profiles", "mo2-overwrite", "plugin", "author-out", "min-size", "min-tree-height", "input", "group", "levels", "detail", "new-mod", "budget", "rules", "texconv", "backup"];
 
     private readonly Dictionary<string, List<string>> _values = new(StringComparer.OrdinalIgnoreCase);
 
@@ -36,7 +36,7 @@ public sealed class CliArgs
     public void ResolvePaths()
     {
         var prefix = Get("wine-prefix");
-        foreach (var key in new[] { "cache-folder", "data", "plugins", "mo2", "output", "report", "dyndolod", "rules", "author-out", "input", "source", "backup", "texconv", "game-ini", "wine-prefix", "mo2-game", "mo2-mods", "mo2-profiles", "mo2-overwrite", "occlusion-folder" })
+        foreach (var key in new[] { "request", "cache-folder", "data", "plugins", "mo2", "output", "report", "dyndolod", "rules", "author-out", "input", "source", "backup", "texconv", "game-ini", "wine-prefix", "mo2-game", "mo2-mods", "mo2-profiles", "mo2-overwrite", "occlusion-folder" })
             if (_values.TryGetValue(key, out var values))
                 for (int i = 0; i < values.Count; i++) values[i] = AnvilLOD.Core.Paths.HostPath.Resolve(values[i], winePrefix: prefix);
     }

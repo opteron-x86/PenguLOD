@@ -36,7 +36,8 @@ public sealed record GameContextOptions(
     IReadOnlyList<string>? ExtraLooseRoots = null, // MO2 mode: more loose folders to index (e.g. "textures" for the author tools)
     Mo2Locations? Mo2Locations = null,             // MO2 mode: folders typed in, which win over ModOrganizer.ini (empty = auto-detect)
     string? GameIniPath = null,
-    string? WinePrefix = null);
+    string? WinePrefix = null,
+    IReadOnlyList<string>? ExcludeFolders = null);
 
 /// <summary>
 /// Load order + link cache + asset access, regardless of where they come from.
@@ -237,7 +238,7 @@ public sealed class GameContext : IDisposable
         progress?.Report("Building virtual Data folder from mods (plugins, BSAs, meshes, LOD settings)...");
         var roots = Mo2LooseRoots.Concat(o.ExtraLooseRoots ?? []).Select(r => r.Trim('\\').ToLowerInvariant()).Distinct().ToList();
         roots = roots.Where(r => !roots.Any(other => other != r && r.StartsWith(other + "\\", StringComparison.Ordinal))).ToList();
-        var vdi = VirtualDataIndex.Build(profile, roots, o.ExcludeFolder);
+        var vdi = VirtualDataIndex.Build(profile, roots, o.ExcludeFolder, o.ExcludeFolders);
         progress?.Report($"Virtual Data: {vdi.Layers.Count:N0} layers, {vdi.LooseFileCount:N0} loose files indexed in {vdi.BuildTime.TotalSeconds:F1}s");
         if (vdi.ExcludedLayer is not null)
             progress?.Report($"Skipping AnvilLOD's own output folder as input: {vdi.ExcludedLayer}");

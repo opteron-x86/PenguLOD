@@ -171,6 +171,7 @@ public static class ScanPipeline
 
     private static ScanSummary RunLogged(ScanRequest req, IProgress<string>? progress, CancellationToken ct)
     {
+        using var preparationTiming = WorkTiming.Measure("preparation");
 
         // The same checks the app asks about before it starts; a command-line run (or one the user went ahead with) gets them in the log.
         if (req.Generate)
@@ -532,7 +533,9 @@ public static class ScanPipeline
                 Warn($"{real.Count} {what} types ({real.Sum(kv => kv.Value):N0} placed) have no billboard, and TexGen hasn't seen them. {fix} First: "
                      + string.Join(", ", real.OrderByDescending(kv => kv.Value).Take(5).Select(kv => kv.Key)) + ".");
         }
-        Classify(scan.MissingBillboards, "tree", "Re-run TexGen with the current load order.");
+        Classify(scan.MissingBillboards, "tree", "Re-run texture generation with the current load order.");
+        preparationTiming.Dispose();
+        using var generationTiming = WorkTiming.Measure("generation");
         if (req.Generate)
         {
             var output = req.OutputFolder!;

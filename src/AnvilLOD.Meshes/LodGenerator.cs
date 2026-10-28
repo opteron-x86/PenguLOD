@@ -564,8 +564,11 @@ public sealed class LodGenerator
                     var path = Path.Combine(outputFolder, rel.Replace('\\', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                     var tmp = path + ".tmp";
-                    File.WriteAllBytes(tmp, result.Bytes);
-                    File.Move(tmp, path, overwrite: true);
+                    using (WorkTiming.Measure("file-write-worker"))
+                    {
+                        File.WriteAllBytes(tmp, result.Bytes);
+                        File.Move(tmp, path, overwrite: true);
+                    }
 
                     bytesByLevel.AddOrUpdate((int)quad.Level, result.Bytes.Length, (_, v) => v + result.Bytes.Length);
                     if (result.ByCategory is not null)

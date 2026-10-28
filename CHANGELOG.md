@@ -3,6 +3,13 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
+## Unreleased
+
+- Shared desktop/CLI pipeline with durable checkpoints, dependency invalidation, verified
+  output reuse, cancellation recovery and per-stage measured timings.
+- Isolated LOD publication with previous-output backups, concurrent-job locks and retained
+  failure logs; a failed or empty generation preserves the installed output.
+
 ## [0.1.0-alpha.1] - 2026-10-27
 
 Initial PenguLOD Linux release, based on CageTV/AnvilLOD 0.2.70.

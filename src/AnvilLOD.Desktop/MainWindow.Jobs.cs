@@ -60,6 +60,8 @@ public sealed partial class MainWindow
     internal Task RunScan(bool generate)
     {
         var s = _settings.Snapshot();
+        if (generate) return RunPersistentPipeline("LOD generation", s, state => new GenerationPipelineRequest(
+            Lod: RequestFactory.Scan(state, true), Resume: state.ResumeCompletedStages, VerifySourceContents: state.VerifySourceContents));
         return RunJob(generate ? "LOD generation" : "Load order scan", s,
             (progress, ct) =>
             {

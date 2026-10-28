@@ -158,5 +158,16 @@ public sealed class DesktopSettings : ObservableObject
     private decimal _authorTreeHeight = 256m;
     public decimal AuthorTreeHeight { get => _authorTreeHeight; set => Set(ref _authorTreeHeight, value); }
 
+    private bool _resumeCompletedStages = true;
+    public bool ResumeCompletedStages { get => _resumeCompletedStages; set => Set(ref _resumeCompletedStages, value); }
+    private bool _verifySourceContents;
+    public bool VerifySourceContents { get => _verifySourceContents; set => Set(ref _verifySourceContents, value); }
+    private bool _pipelineGrass = true;
+    public bool PipelineGrass { get => _pipelineGrass; set => Set(ref _pipelineGrass, value); }
+    private bool _pipelineTextures = true;
+    public bool PipelineTextures { get => _pipelineTextures; set => Set(ref _pipelineTextures, value); }
+    private bool _pipelineLod = true;
+    public bool PipelineLod { get => _pipelineLod; set => Set(ref _pipelineLod, value); }
+
     public DesktopSettings Snapshot() => JsonSerializer.Deserialize<DesktopSettings>(JsonSerializer.Serialize(this))!;
 }

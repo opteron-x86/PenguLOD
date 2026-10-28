@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using AnvilLOD.Core;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.World;
@@ -13,6 +14,9 @@ public static class Program
         PenguLOD — native Linux LOD generator for Skyrim SE/AE
 
         Usage:
+          PenguLOD pipeline --request <request.json> [--cache-folder <folder>] [--no-resume] [--verify-source-contents]
+                                         Run/resume a saved pipeline plan from the desktop's Open saved job folder.
+                                         Completed stages are content-verified before reuse; failures stop dependent stages.
           PenguLOD scan [options]        analyse the load order and show what would be built
           PenguLOD generate [options]    scan, then write the changed LOD blocks (.bto) to --output
           PenguLOD author --plugin <file> --author-out <folder> [options]
@@ -231,6 +235,7 @@ public static class Program
             using var limits = RunLimits.Enter(threads, Cancellation, options.Get("cache-folder"));
             return args[0].ToLowerInvariant() switch
             {
+                "pipeline" => RunPipeline(options),
                 "scan" => RunScan(options, generate: false),
                 "generate" => RunScan(options, generate: true),
                 "author" => RunAuthor(options),
@@ -245,6 +250,20 @@ public static class Program
         catch (CliArgException e) { return Fail(e.Message + "\n\n" + Usage); }
         catch (Exception e) { return Fail(e.GetBaseException().Message); }
         finally { Console.CancelKeyPress -= cancel; }
+    }
+
+    private static int RunPipeline(CliArgs a)
+    {
+        string file = a.Get("request") ?? throw new CliArgException("pipeline requires --request <request.json>.");
+        var request = JsonSerializer.Deserialize<GenerationPipelineRequest>(File.ReadAllText(file))
+            ?? throw new CliArgException("The pipeline request is empty.");
+        request = request with { Resume = !a.Has("no-resume") && request.Resume,
+            VerifySourceContents = a.Has("verify-source-contents") || request.VerifySourceContents };
+        string cache = a.Get("cache-folder") ?? Path.Combine(Environment.GetEnvironmentVariable("XDG_CACHE_HOME")
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache"), "PenguLOD");
+        var result = GenerationPipeline.Run(request, cache, new SyncProgress(Console.WriteLine), Cancellation);
+        Console.WriteLine("Saved job: " + result.JobFolder);
+        return result.Success ? 0 : Fail(result.Error!);
     }
 
     private static int RunScan(CliArgs a, bool generate)

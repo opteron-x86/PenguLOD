@@ -55,6 +55,7 @@ public static partial class GrassGeneration
         if (req.Executable is null && req.Rejection == "gpu")
             throw new ArgumentException("The bundled backend uses CPU BVH. Choose Auto / CPU, or select a GPU-enabled FasterNGIO executable in Advanced.");
         var watch = Stopwatch.StartNew();
+        using var preparationTiming = WorkTiming.Measure("preparation");
         var output = HostPath.Canonical(req.OutputFolder);
         var parent = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(parent);
@@ -78,6 +79,8 @@ public static partial class GrassGeneration
                 log.WriteLine("Executable: " + exe);
                 log.WriteLine("Arguments: " + JsonSerializer.Serialize(args));
                 log.WriteLine("Source: " + input.Source);
+                preparationTiming.Dispose();
+                using var generationTiming = WorkTiming.Measure("generation");
                 RunProcess(exe, args, work, line =>
                 {
                     lock (log)
@@ -89,6 +92,7 @@ public static partial class GrassGeneration
                 }, ct);
             }
             ct.ThrowIfCancellationRequested();
+            using var outputTiming = WorkTiming.Measure("output-verification-publication");
             progress?.Report("Validating grass cache files...");
             var manifest = GrassGenerationManifest.Create(payload, input.Source, input.LoadOrderFingerprint, req, ct);
             if (manifest.Files.Count == 0) throw new InvalidOperationException("FasterNGIO produced no cache files. Check the selected worldspace/cells and NGIO settings. Previous output was preserved.");

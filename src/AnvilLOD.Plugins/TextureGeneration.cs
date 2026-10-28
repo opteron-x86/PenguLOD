@@ -54,6 +54,7 @@ public static partial class TextureGeneration
     public static TextureGenerationResult Run(TextureGenerationRequest request, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         Validate(request); ct.ThrowIfCancellationRequested();
+        using var preparationTiming = WorkTiming.Measure("preparation");
         using var limits = RunLimits.Enter(RunLimits.Parallel(ct).MaxDegreeOfParallelism, ct, RunLimits.CacheDirectory);
         var timer = Stopwatch.StartNew();
         var items = new List<TextureGenerationItem>();
@@ -93,7 +94,8 @@ public static partial class TextureGeneration
                 relative = GamePath.Normalize(relative); GamePath.ValidateRelative(relative);
                 if (!(relative.StartsWith("textures\\") || relative.StartsWith("dyndolod-temp\\textures\\"))) throw new InvalidDataException("Output must be under textures: " + relative);
                 string path = GamePath.ToFileSystemPath(stage, relative);
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllBytes(path, bytes);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                using (WorkTiming.Measure("file-write-worker")) File.WriteAllBytes(path, bytes);
                 if (relative.StartsWith("textures\\")) files[relative] = Convert.ToHexString(SHA256.HashData(bytes));
                 else temporary.Add(relative);
             }
@@ -104,6 +106,8 @@ public static partial class TextureGeneration
                 if (!assets.TryOpen(relative, out var stream)) return null;
                 using (stream) { using var bytes = new MemoryStream(); stream.CopyTo(bytes); return bytes.ToArray(); }
             }
+            preparationTiming.Dispose();
+            using var generationTiming = WorkTiming.Measure("generation");
             if (request.Stitched) Stitch(request, rules, Read, Write, items, Warn, progress, ct);
             if (request.Trees || request.Grass) GenerateBillboards(request, game, assets, rules.Billboards, Read, Write, items, Warn, progress, ct);
             if (request.TreeTrunks) GenerateTrunks(request, assets, resources, Read, Write, items, Warn, progress, ct);
@@ -112,6 +116,8 @@ public static partial class TextureGeneration
             progress?.Report($"Texture results: {items.Count(i => i.Status == "Written"):N0} generated, " +
                 $"{items.Count(i => i.Status == "Retained"):N0} retained, {items.Count(i => i.Status == "Skipped"):N0} skipped, " +
                 $"{items.Count(i => i.Status == "Failed"):N0} failed.");
+            generationTiming.Dispose();
+            using var publicationTiming = WorkTiming.Measure("publication");
             bool publish = files.Count > 0 && items.All(i => i.Status != "Failed");
             string fingerprint = "";
             if (publish)
