@@ -112,6 +112,15 @@ public sealed class DesktopSettings : ObservableObject
     private decimal _textureGenUnitsPerPixel = 12m;
     public decimal TextureGenUnitsPerPixel { get => _textureGenUnitsPerPixel; set => Set(ref _textureGenUnitsPerPixel, value); }
     private decimal _textureGenBrightness = 1m;
+    private bool _bakeSourceNormals = true, _bakePbr = true;
+    private decimal _bakePbrScale = .65m, _bakePbrGamma = 1.15m, _bakeAo = .5m, _bakeAmbient = .7m, _bakeDirectional = .3m;
+    public bool BakeSourceNormals { get => _bakeSourceNormals; set => Set(ref _bakeSourceNormals, value); }
+    public bool BakePbr { get => _bakePbr; set => Set(ref _bakePbr, value); }
+    public decimal BakePbrScale { get => _bakePbrScale; set => Set(ref _bakePbrScale, value); }
+    public decimal BakePbrGamma { get => _bakePbrGamma; set => Set(ref _bakePbrGamma, value); }
+    public decimal BakeAo { get => _bakeAo; set => Set(ref _bakeAo, value); }
+    public decimal BakeAmbient { get => _bakeAmbient; set => Set(ref _bakeAmbient, value); }
+    public decimal BakeDirectional { get => _bakeDirectional; set => Set(ref _bakeDirectional, value); }
     public decimal TextureGenBrightness { get => _textureGenBrightness; set => Set(ref _textureGenBrightness, value); }
     private decimal _textureGenMinTreeHeight = 256m;
     public decimal TextureGenMinTreeHeight { get => _textureGenMinTreeHeight; set => Set(ref _textureGenMinTreeHeight, value); }

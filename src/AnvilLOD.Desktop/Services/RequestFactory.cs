@@ -56,7 +56,8 @@ public static class RequestFactory
             Optional(s.DynDolodFolder) is { } d ? PathValue(d, s) : null,
             s.TextureGenStitched, s.TextureGenTrees, s.TextureGenGrass, s.TextureGenObjects,
             (int)s.TextureGenBaseSize, (int)s.TextureGenMaxSize, (float)s.TextureGenUnitsPerPixel, (float)s.TextureGenBrightness,
-            (float)s.TextureGenMinTreeHeight, (float)s.TextureGenMinGrassHeight, s.TextureGenFilter.Trim(), TreeTrunks: s.TextureGenTrunks);
+            (float)s.TextureGenMinTreeHeight, (float)s.TextureGenMinGrassHeight, s.TextureGenFilter.Trim(), TreeTrunks: s.TextureGenTrunks, Materials: new AnvilLOD.Plugins.Authoring.MaterialBakeSettings(s.BakeSourceNormals, s.BakePbr,
+                (float)s.BakePbrScale, (float)s.BakePbrGamma, (float)s.BakeAo, (float)s.BakeAmbient, (float)s.BakeDirectional));
         TextureGeneration.Validate(request);
         if (Optional(s.GrassOutput) is { } grassOutput)
         {

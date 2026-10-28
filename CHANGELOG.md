@@ -5,6 +5,10 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+- Billboard/trunk/object rendering now bakes source normals, UV transforms and clamp modes,
+  with configurable PBR albedo/AO and light calibration. Fixed stale material grouping keys
+  after texture replacement.
+
 - Added automatic pipeline preflight and a Diagnostics page with model/texture coverage,
   stale-cache checks, runtime requirements, asset precedence and metadata-only JSON reports.
 

@@ -60,7 +60,7 @@ internal sealed record TrunkView(Vector3 Right, Vector3 Up, Vector3 Depth,
     }
 
     public BillboardImage Render(LodMesh source, BillboardRenderer.TextureLoader loader, int maxSize,
-        float unitsPerPixel, float brightness)
+        float unitsPerPixel, float brightness, MaterialBakeSettings? materials = null)
     {
         Vector3 Project(Vector3 p) => new(Vector3.Dot(p, Right), Vector3.Dot(p, Depth), Vector3.Dot(p, Up));
         var projected = new LodMesh { Path = source.Path, Parts = source.Parts.Select(p => new LodMeshPart
@@ -70,7 +70,7 @@ internal sealed record TrunkView(Vector3 Right, Vector3 Up, Vector3 Depth,
             Bitangents = p.Bitangents.Select(Project).ToArray(), UVs = p.UVs, Colors = p.Colors, Triangles = p.Triangles
         }).ToArray() };
         return BillboardRenderer.Render(projected, loader, maxSize, unitsPerPixel: unitsPerPixel,
-            viewport: (new(Left, 0, Bottom), new(Left + Width, 0, Bottom + Height)), brightness: brightness)
+            viewport: (new(Left, 0, Bottom), new(Left + Width, 0, Bottom + Height)), brightness: brightness, materials: materials)
             ?? throw new InvalidDataException("The trunk rendered no visible pixels inside the hybrid card's crop.");
     }
 }
