@@ -3,6 +3,7 @@ using AnvilLOD.Core.World;
 using AnvilLOD.Meshes.Nif;
 using AnvilLOD.Textures;
 using Mutagen.Bethesda;
+using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 
 namespace AnvilLOD.Plugins;
@@ -16,6 +17,7 @@ internal sealed class TerrainSource
         internal Layer?[] Bases { get; } = Enumerable.Range(0, 4).Select(q => Layers.FirstOrDefault(l => l.Quadrant == q && l.Opacity is null)).ToArray();
         internal Layer[][] Alpha { get; } = Enumerable.Range(0, 4).Select(q => Layers.Where(l => l.Quadrant == q && l.Opacity is not null).ToArray()).ToArray();
     }
+    private readonly string? _season;
     private readonly AssetIndex _assets;
     private readonly string _world;
     private readonly LodGrid _grid;
@@ -33,9 +35,9 @@ internal sealed class TerrainSource
     public IReadOnlyCollection<QuadKey> FallbackUsed => _fallbackUsed;
     internal bool HasLodWater { get; }
 
-    internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct)
+    internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null)
     {
-        _assets = assets; _world = grid.Worldspace; _grid = grid; _fallback = fallback; _ct = ct;
+        _season = season; _assets = assets; _world = grid.Worldspace; _grid = grid; _fallback = fallback; _ct = ct;
         HasLodWater = world.LodWater.FormKeyNullable is { IsNull: false };
         foreach (var ctx in game.LoadOrder.PriorityOrder.Landscape().WinningContextOverrides(game.LinkCache))
         {
@@ -54,7 +56,7 @@ internal sealed class TerrainSource
                 string diffuse = @"textures\landscape\default.dds"; string? normal = null;
                 if (!header.Texture.IsNull)
                 {
-                    if (!game.LinkCache.TryResolve<ILandscapeTextureGetter>(header.Texture.FormKey, out var ltex)
+                    if (!game.LinkCache.TryResolve<ILandscapeTextureGetter>(swaps?.GetValueOrDefault(header.Texture.FormKey,header.Texture.FormKey) ?? header.Texture.FormKey, out var ltex)
                         || ltex.TextureSet?.FormKeyNullable is not { } txKey
                         || !game.LinkCache.TryResolve<ITextureSetGetter>(txKey, out var tx))
                         throw new InvalidDataException($"Unresolved landscape texture {header.Texture.FormKey} in {_world} {coord}.");
@@ -170,6 +172,7 @@ internal sealed class TerrainSource
             if(_fallback) foreach(var level in new[]{LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32})
             {
                 var tile=_grid.QuadFor(coord,level); string path=$@"textures\terrain\{_world}\{_world}.{(int)level}.{tile.X}.{tile.Y}.dds";
+                if (_season is not null && _assets.Exists(path[..^4] + "." + _season + ".dds")) path = path[..^4] + "." + _season + ".dds";
                 if(!_assets.Exists(path))continue;
                 var im=Image(path,0); return SrgbToLinear(Sample(im,(x/4096-tile.X)/(int)level,1-(y/4096-tile.Y)/(int)level,false));
             }

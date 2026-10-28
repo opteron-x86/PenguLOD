@@ -15,6 +15,7 @@ public sealed partial class MainWindow
             PathField("Terrain output", nameof(DesktopSettings.TerrainOutput), hint: "Use a separate new mod folder. Previous generations are backed up when replaced."),
             Text("Uses the source and worldspace selection on Overview. Incomplete terrain coverage stops publication. Review the report before enabling the output in your profile.", true),
             Check("Fill missing landscape from existing terrain LOD", nameof(DesktopSettings.TerrainFallback)),
+            Check("Generate seasonal terrain from Seasons of Skyrim swaps", nameof(DesktopSettings.Seasons)),
             Check("Generate water LOD", nameof(DesktopSettings.TerrainWater)),
             Check("Use generated terrain in object LOD generation", nameof(DesktopSettings.UseGeneratedTerrain)))),
         Card("TEXTURES & EDGES", Stack(12,

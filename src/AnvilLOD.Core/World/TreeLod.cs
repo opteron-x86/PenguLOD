@@ -46,7 +46,7 @@ public sealed record TreeReference(
     bool ObjectLod = false,   // copied from a child worldspace: never loads here, so it goes into object LOD as cards
     string? Model3D = null,   // data-relative path of its 3D tree LOD model (…passthru_lod.nif), when the 3D option found one
     bool Model3DByName = false,
-    bool Model3DGenerated = false) // that model was found by plain name, not by the CRC32 of the tree's mesh
+    bool Model3DGenerated = false, string? BaseFormKey = null)
 {
     public CellCoord Cell => CellCoord.FromWorld(Position.X, Position.Y);
 }

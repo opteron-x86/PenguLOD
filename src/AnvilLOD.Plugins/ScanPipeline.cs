@@ -589,7 +589,7 @@ public static class ScanPipeline
             if (req.Seasons)
             {
                 progress?.Report("Seasons: building seasonal object LOD from Data\\Seasons\\*_WIN/_SPR/_SUM/_AUT.ini...");
-                var seasonal = SeasonalLod.Build(game, assets, assets.EnumeratePaths, resolver, quads, generator, output, progress, ct, grass);
+                var seasonal = SeasonalLod.Build(game, assets, assets.EnumeratePaths, resolver, quads, generator, output, progress, ct, grass, sceneTrees, tree3d, req.Scan.Tree3D);
                 if (seasonal.Seasons == 0 && seasonal.Messages.Count == 0)
                     progress?.Report("Seasons: no season INI files found in Data\\Seasons; nothing written.");
             }
@@ -597,8 +597,17 @@ public static class ScanPipeline
 
             if (req.Scan.TreeLod && bttTrees is { } treeRefs)
             {
+                var treeSeasons = req.Seasons ? SeasonalAssets.Read(game,assets,"Trees") : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
+                TreeLodGenerator.RemoveInactiveSeasons(output,scan.Grids.Keys,treeSeasons.Keys.ToHashSet(),manifest);
                 trees = TreeLodGenerator.Generate(scan.Grids, treeRefs, assets, output, manifest, progress, ct, req.TreeBrightness, objectLodWorlds);
                 foreach (var w in trees.Warnings) Warn(w);
+                if (req.Seasons)
+                    foreach (var (season, swaps) in treeSeasons)
+                    {
+                        var seasonalRefs = treeRefs.Select(t=>SeasonalAssets.SwapTree(game,assets,t,swaps,req.Scan.Tree3D??Tree3DSettings.Off)).ToArray();
+                        var seasonalResult = TreeLodGenerator.Generate(scan.Grids,seasonalRefs,assets,output,manifest,progress,ct,req.TreeBrightness,objectLodWorlds,season);
+                        foreach (var warning in seasonalResult.Warnings) Warn(season + ": " + warning);
+                    }
                 progress?.Report($"Tree LOD: {trees.Instances:N0} trees, {trees.TreeTypes} types, {trees.Blocks:N0} blocks"
                                  + $" ({trees.WorldspacesWritten} worldspaces written, {trees.WorldspacesUnchanged} unchanged) in {trees.Elapsed.TotalSeconds:F1}s");
             }

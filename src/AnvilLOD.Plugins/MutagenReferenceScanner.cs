@@ -557,7 +557,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
                     var tr = new TreeReference(r.FormKey.ToString(), wsId,
                         new Vector3(tp.Position.X, tp.Position.Y, tp.Position.Z), tp.Rotation.Z, r.Scale ?? 1f,
                         runtimeIds.Resolve(r.FormKey), bb, ObjectLod: copy is not null,
-                        Model3D: m3?.Path, Model3DByName: m3?.Kind is Tree3DModels.MatchKind.PlainName or Tree3DModels.MatchKind.NamedLod, Model3DGenerated: m3?.Kind is Tree3DModels.MatchKind.Native);
+                        Model3D: m3?.Path, Model3DByName: m3?.Kind is Tree3DModels.MatchKind.PlainName or Tree3DModels.MatchKind.NamedLod, Model3DGenerated: m3?.Kind is Tree3DModels.MatchKind.Native, BaseFormKey: baseKey.Value.ToString());
                     if (copy is not null)
                     {
                         copiedTrees.Add(tr);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using AnvilLOD.Core.Incremental;
+using AnvilLOD.Core.Lod;
 using AnvilLOD.Core.World;
 using AnvilLOD.Textures;
 
@@ -40,8 +41,10 @@ public static class TreeLodGenerator
         IProgress<string>? progress = null,
         CancellationToken ct = default,
         float brightness = 1f,
-        IReadOnlySet<string>? objectLodWorlds = null)   // worldspaces whose trees are (partly) in object LOD: vanilla tree LOD must be emptied there even if no billboard tree is left
+        IReadOnlySet<string>? objectLodWorlds = null, string? season = null)   // worldspaces whose trees are (partly) in object LOD: vanilla tree LOD must be emptied there even if no billboard tree is left
     {
+        if (season is not null && !SeasonSwaps.Seasons.Any(s => s.Suffix == season)) throw new ArgumentException("Invalid season.");
+        string Seasonal(string path) => season is null ? path : SeasonSwaps.SeasonalPath(path, season);
         var sw = Stopwatch.StartNew();
         var warnings = new List<string>();
         int written = 0, unchanged = 0, types = 0, instances = 0, blocks = 0, empty = 0, deleted = 0;
@@ -51,6 +54,7 @@ public static class TreeLodGenerator
         foreach (var (ws, grid) in grids.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
         {
             ct.ThrowIfCancellationRequested();
+            string manifestKey = ws + (season is null ? "" : "." + season);
             var list = byWs.TryGetValue(ws, out var l)
                 ? l.Where(t => grid.IsInsideGrid(t.Cell)).OrderBy(t => t.FormKey, StringComparer.Ordinal).ToList()
                 : [];
@@ -63,11 +67,11 @@ public static class TreeLodGenerator
                 if (objectLodWorlds is not null && objectLodWorlds.Contains(ws))
                 {
                     var vanillaBlocks = assets.EnumeratePaths(GamePath.Join("meshes", "terrain", ws, "trees") + "\\")
-                        .Where(p => p.EndsWith(".btt", StringComparison.Ordinal))
-                        .Select(p => GamePath.GetFileName(p))
+                        .Where(p => p.EndsWith(".btt", StringComparison.Ordinal) && GamePath.GetFileName(p).Split('.').Length == 5)
+                        .Select(p => Seasonal(GamePath.GetFileName(p)))
                         .ToList();
                     var emptyHash = "empty v" + Version + "|" + string.Join("|", vanillaBlocks.Order(StringComparer.OrdinalIgnoreCase));
-                    if (!manifest.Trees.TryGetValue(ws, out var prev) || prev != emptyHash
+                    if (!manifest.Trees.TryGetValue(manifestKey, out var prev) || prev != emptyHash
                         || vanillaBlocks.Any(n => !File.Exists(Path.Combine(treeFolder, n))))
                     {
                         var keepEmpty = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -77,13 +81,13 @@ public static class TreeLodGenerator
                             keepEmpty.Add(name);
                         }
                         empty += vanillaBlocks.Count;
-                        deleted += DeleteOurFiles(outputFolder, ws, keepEmpty);
-                        foreach (var rel in new[] { TreeLodFiles.ListPath(ws), TreeLodFiles.AtlasPath(ws) })
+                        deleted += DeleteOurFiles(outputFolder, ws, keepEmpty, season);
+                        foreach (var rel in new[] { Seasonal(TreeLodFiles.ListPath(ws)), Seasonal(TreeLodFiles.AtlasPath(ws)) })
                         {
                             var f = BuildManifest.FullPath(outputFolder, rel);
                             try { if (File.Exists(f)) { File.Delete(f); deleted++; } } catch (IOException) { } catch (UnauthorizedAccessException) { }
                         }
-                        manifest.Trees[ws] = emptyHash;
+                        manifest.Trees[manifestKey] = emptyHash;
                         written++;
                         progress?.Report($"Tree LOD {ws}: all trees are in object LOD; {vanillaBlocks.Count:N0} vanilla tree LOD blocks emptied");
                     }
@@ -91,21 +95,21 @@ public static class TreeLodGenerator
                     continue;
                 }
                 // Nothing to do; clean up what an earlier build wrote for this worldspace.
-                if (manifest.Trees.Remove(ws))
-                    deleted += DeleteOurFiles(outputFolder, ws, keep: null);
+                if (manifest.Trees.Remove(manifestKey))
+                    deleted += DeleteOurFiles(outputFolder, ws, keep: null, season);
                 continue;
             }
 
             // Vanilla / other mods' .btt files for this worldspace (our own output folder is not an input).
             var foreignBlocks = assets.EnumeratePaths(GamePath.Join("meshes", "terrain", ws, "trees") + "\\")
-                .Where(p => p.EndsWith(".btt", StringComparison.Ordinal))
-                .Select(p => GamePath.GetFileName(p))
+                .Where(p => p.EndsWith(".btt", StringComparison.Ordinal) && GamePath.GetFileName(p).Split('.').Length == 5)
+                .Select(p => Seasonal(GamePath.GetFileName(p)))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var hash = Hash(list, foreignBlocks, assets, brightness);
-            var listFile = BuildManifest.FullPath(outputFolder, TreeLodFiles.ListPath(ws));
-            var atlasFile = BuildManifest.FullPath(outputFolder, TreeLodFiles.AtlasPath(ws));
-            if (manifest.Trees.TryGetValue(ws, out var old) && old == hash && File.Exists(listFile) && File.Exists(atlasFile))
+            var listFile = BuildManifest.FullPath(outputFolder, Seasonal(TreeLodFiles.ListPath(ws)));
+            var atlasFile = BuildManifest.FullPath(outputFolder, Seasonal(TreeLodFiles.AtlasPath(ws)));
+            if (manifest.Trees.TryGetValue(manifestKey, out var old) && old == hash && File.Exists(listFile) && File.Exists(atlasFile))
             {
                 unchanged++;
                 continue;
@@ -172,7 +176,7 @@ public static class TreeLodGenerator
             var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var ((x, y), inst) in perBlock)
             {
-                var rel = TreeLodFiles.BlockPath(ws, x, y);
+                var rel = Seasonal(TreeLodFiles.BlockPath(ws, x, y));
                 Write(BuildManifest.FullPath(outputFolder, rel), TreeLodFiles.WriteBlock(inst));
                 keep.Add(GamePath.GetFileName(rel));
                 blocks++;
@@ -186,9 +190,9 @@ public static class TreeLodGenerator
                 emptyHere++;
             }
             empty += emptyHere;
-            deleted += DeleteOurFiles(outputFolder, ws, keep);
+            deleted += DeleteOurFiles(outputFolder, ws, keep, season);
 
-            manifest.Trees[ws] = hash;
+            manifest.Trees[manifestKey] = hash;
             written++;
             types += typeList.Count;
             instances += placed;
@@ -207,19 +211,33 @@ public static class TreeLodGenerator
         File.Move(tmp, path, overwrite: true);
     }
 
-    /// <summary>Removes .btt files in our output for <paramref name="ws"/> that aren't in <paramref name="keep"/> (null = all, plus .lst and atlas).</summary>
-    private static int DeleteOurFiles(string outputFolder, string ws, HashSet<string>? keep)
+    public static void RemoveInactiveSeasons(string output, IEnumerable<string> worlds, IReadOnlySet<string> active, BuildManifest manifest)
     {
+        foreach (string world in worlds)
+        foreach (var (season, _) in SeasonSwaps.Seasons)
+        {
+            if (active.Contains(season)) continue;
+            DeleteOurFiles(output,world,null,season);
+            manifest.Trees.Remove(world + "." + season);
+        }
+    }
+
+    /// <summary>Removes .btt files in our output for <paramref name="ws"/> that aren't in <paramref name="keep"/> (null = all, plus .lst and atlas).</summary>
+    private static int DeleteOurFiles(string outputFolder, string ws, HashSet<string>? keep, string? season = null)
+    {
+        string Seasonal(string path) => season is null ? path : SeasonSwaps.SeasonalPath(path, season);
         int n = 0;
         var dir = Path.Combine(outputFolder, "meshes", "terrain", ws, "trees");
         if (Directory.Exists(dir))
             foreach (var f in Directory.EnumerateFiles(dir, "*.btt"))
             {
+                var pieces = Path.GetFileName(f).Split('.');
+                if (season is null ? pieces.Length != 5 : pieces.Length != 6 || !pieces[^2].Equals(season,StringComparison.OrdinalIgnoreCase)) continue;
                 if (keep is not null && keep.Contains(Path.GetFileName(f))) continue;
                 try { File.Delete(f); n++; } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
         if (keep is null)
-            foreach (var rel in new[] { TreeLodFiles.ListPath(ws), TreeLodFiles.AtlasPath(ws) })
+            foreach (var rel in new[] { Seasonal(TreeLodFiles.ListPath(ws)), Seasonal(TreeLodFiles.AtlasPath(ws)) })
             {
                 var f = BuildManifest.FullPath(outputFolder, rel);
                 try { if (File.Exists(f)) { File.Delete(f); n++; } } catch (IOException) { } catch (UnauthorizedAccessException) { }

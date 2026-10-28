@@ -57,7 +57,7 @@ public static class TerrainTileBuilder
     }
 
     public static Result Build(QuadKey tile, Func<float, float, float?> sample, Func<int, int, float?> water,
-        float skirtDepth = 512, CancellationToken ct = default)
+        float skirtDepth = 512, CancellationToken ct = default, string? season = null)
     {
         var land = Surface(tile, sample, skirtDepth, ct);
         int level = (int)tile.Level;
@@ -99,6 +99,7 @@ public static class TerrainTileBuilder
         w.Set(textures, b =>
         {
             string prefix = $"textures\\terrain\\{tile.Worldspace}\\{tile.Worldspace}.{level}.{tile.X}.{tile.Y}";
+            if (season is not null) prefix += "." + season;
             b.Write(2u); NifWriter.WriteSizedString(b, prefix + ".dds"); NifWriter.WriteSizedString(b, prefix + "_n.dds");
         });
         return new(w.ToBytes(root), land, wp.Count / 4);

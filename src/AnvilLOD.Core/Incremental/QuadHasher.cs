@@ -16,7 +16,7 @@ namespace AnvilLOD.Core.Incremental;
 public static class QuadHasher
 {
     /// <summary>Bump when the output format/algorithm changes so every block rebuilds once.</summary>
-    public const int AlgorithmVersion = 9; // 9: normalize absolute texture paths before lookup and NIF output; 8: mountain LOD fitted to the full model; 7: LOD8 inset is twice the LOD4 one; 6: grass density tiers (own node per tier); 5: snow/ash LOD shader shape names; 4: LOD textures follow the full model (texture variants); 3: per-cell LOD4 segments, enable-parent state
+    public const int AlgorithmVersion = 10; // 10: material grouping after texture replacement; 9: normalize absolute texture paths
 
     public static string Hash(
         QuadKey quad,

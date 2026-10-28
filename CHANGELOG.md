@@ -5,6 +5,9 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+- Seasonal terrain, tree atlases/BTT/LST and native 3D tree replacements, using Seasons of
+  Skyrim form swaps. Added a synthetic seasonal profile and end-to-end regression checks.
+
 - Billboard/trunk/object rendering now bakes source normals, UV transforms and clamp modes,
   with configurable PBR albedo/AO and light calibration. Fixed stale material grouping keys
   after texture replacement.

@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AnvilLOD.Core;
+using AnvilLOD.Core.Lod;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.World;
 using AnvilLOD.Meshes;
@@ -16,7 +17,7 @@ public sealed record TerrainGenerationRequest(GameContextOptions Game, string Ou
     IReadOnlyCollection<string>? Worldspaces = null, IReadOnlyCollection<LodLevel>? Levels = null,
     int TextureSize = 512, float Brightness = 1, float VertexColorStrength = 1, float TextureRepeatsPerCell = 24,
     float SkirtDepth = 512, bool Water = true, bool UseExistingTerrain = true, bool ExportHeightmaps = true,
-    int HeightmapMaximumSize = 8192);
+    int HeightmapMaximumSize = 8192, bool Seasons = false);
 public sealed record TerrainTileResult(string Worldspace, int Level, int X, int Y, int Triangles, int WaterCells);
 public sealed record TerrainWorldResult(string Worldspace, int LandscapeCells, int ExistingTilesUsed, int Tiles, string? Heightmap);
 public sealed record TerrainGenerationResult(string OutputFolder, IReadOnlyList<TerrainWorldResult> Worlds,
@@ -44,10 +45,11 @@ public static class TerrainGeneration
         Validate(request);ct.ThrowIfCancellationRequested();var watch=Stopwatch.StartNew();
         using var limits=RunLimits.Enter(RunLimits.Parallel(ct).MaxDegreeOfParallelism,ct,RunLimits.CacheDirectory);
         using var preparation=WorkTiming.Measure("preparation");
-        using var game=GameContext.Open(request.Game with{ExcludeFolder=request.OutputFolder,ExtraLooseRoots=["textures","meshes","lodsettings"]},progress);
+        using var game=GameContext.Open(request.Game with{ExcludeFolder=request.OutputFolder,ExtraLooseRoots=["textures","meshes","lodsettings","seasons"]},progress);
         if(game.MissingPlugins.Count>0)throw new InvalidDataException("Resolve missing plugins before terrain generation: "+string.Join(", ",game.MissingPlugins.Take(5)));
-        var assets=game.BuildAssets(p=>p.StartsWith("textures\\") || p.StartsWith("meshes\\terrain\\") || p.StartsWith("lodsettings\\"));
+        var assets=game.BuildAssets(p=>p.StartsWith("textures\\") || p.StartsWith("meshes\\terrain\\") || p.StartsWith("lodsettings\\") || p.StartsWith("seasons\\"));
         if(assets.SkippedArchives.Count>0)throw new InvalidDataException("Terrain generation cannot read required archives: "+string.Join(", ",assets.SkippedArchives));
+        var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures") : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         var wanted=request.Worldspaces is {Count:>0}?new HashSet<string>(request.Worldspaces,StringComparer.OrdinalIgnoreCase):null;
         var worlds=game.LoadOrder.PriorityOrder.Worldspace().WinningOverrides().Where(w=>!w.IsDeleted && w.EditorID is {} id && (wanted is null||wanted.Contains(id))).ToArray();
         var owned = new OutputSnapshot();
@@ -77,6 +79,22 @@ public static class TerrainGeneration
                 Write($@"textures\terrain\{name}\{stem}.dds",TextureImages.Encode(diffuse));
                 Write($@"textures\terrain\{name}\{stem}_n.dds",TextureImages.Encode(normal,normal:true));
                 tiles.Add(new(name,(int)tile.Level,tile.X,tile.Y,mesh.Land.Indices.Length/3,mesh.WaterCells));
+            }
+            foreach (var (season, swaps) in seasons)
+            {
+                var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season);
+                foreach (var tile in planned)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    progress?.Report($"Terrain {name} {season}: LOD{(int)tile.Level} ({tile.X},{tile.Y})");
+                    var mesh=TerrainTileBuilder.Build(tile,seasonal.Height,(x,y)=>request.Water&&seasonal.HasLodWater?seasonal.Water(x,y):null,request.SkirtDepth,ct,season);
+                    string stem=$"{name}.{(int)tile.Level}.{tile.X}.{tile.Y}.{season}";
+                    Write($@"meshes\terrain\{name}\{stem}.btr",mesh.Bytes);
+                    var (diffuse,normal)=Bake(tile,seasonal,request,ct);
+                    Write($@"textures\terrain\{name}\{stem}.dds",TextureImages.Encode(diffuse));
+                    Write($@"textures\terrain\{name}\{stem}_n.dds",TextureImages.Encode(normal,normal:true));
+                }
+                if (seasonal.FallbackUsed.Count>0) Warn($"{name} {season}: missing LAND uses installed seasonal terrain textures where present, otherwise the installed default terrain. Check these areas in game.");
             }
             string? heightmap=null;
             if(request.ExportHeightmaps)

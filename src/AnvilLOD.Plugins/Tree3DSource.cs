@@ -199,7 +199,7 @@ public sealed class Tree3DSource : ISyntheticMeshSource
             var meshes = t.ObjectLod ? new LodMeshSet(model, near8, null, null) : new LodMeshSet(model, near8, card, settings.MapTrees ? card : null);
             yield return new LodReference(
                 FormKey: t.FormKey,
-                BaseFormKey: "tree",
+                BaseFormKey: t.BaseFormKey ?? "tree",
                 BaseEditorId: "3D tree LOD",
                 Worldspace: t.Worldspace,
                 WinningPlugin: "tree LOD",

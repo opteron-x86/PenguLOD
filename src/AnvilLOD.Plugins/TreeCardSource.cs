@@ -37,7 +37,7 @@ public sealed class TreeCardSource : ISyntheticMeshSource
             var mesh = Prefix + t.Billboard.TexturePath;
             yield return new LodReference(
                 FormKey: t.FormKey,
-                BaseFormKey: "tree",
+                BaseFormKey: t.BaseFormKey ?? "tree",
                 BaseEditorId: "Tree LOD card",
                 Worldspace: t.Worldspace,
                 WinningPlugin: "tree LOD",
