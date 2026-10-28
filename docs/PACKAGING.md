@@ -29,7 +29,8 @@ Where mounting is unavailable, use `--appimage-extract-and-run` or extract with
 `--appimage-extract` and launch `squashfs-root/AppRun`. AppImage does not backport glibc or
 replace the host graphics/Vulkan driver.
 
-`bash tools/package-appimage.sh` packages an existing portable build. The AppImage tool
+`bash tools/package-appimage.sh` packages an existing portable build and validates its installed
+metadata, desktop entry and icon with `appstreamcli` (`appstream` on Ubuntu). The AppImage tool
 is pinned to version 1.9.1 and SHA-256 checked. Its embedded runtime is extracted from that
 verified tool (runtime source commit `caf24f9`), avoiding an unpinned runtime download.
 Runtime licensing notices are included. Package source, backend source and dependency

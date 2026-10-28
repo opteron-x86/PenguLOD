@@ -5,6 +5,7 @@
   <summary>Native Skyrim landscape, object, tree and grass LOD generator</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-only</project_license>
+  <developer id="io.github.opteron-x86"><name>opteron-x86 and contributors</name></developer>
   <launchable type="desktop-id">io.github.opteron_x86.PenguLOD.desktop</launchable>
   <url type="homepage">https://github.com/opteron-x86/PenguLOD</url>
   <url type="bugtracker">https://github.com/opteron-x86/PenguLOD/issues</url>

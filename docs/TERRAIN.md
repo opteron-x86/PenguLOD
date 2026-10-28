@@ -17,10 +17,11 @@ detail that was absent from those files. Missing coverage or unresolved landscap
 stops publication and preserves the previous output. Missing LOD-water records are reported;
 the affected world's water shapes are omitted rather than referencing an invalid water type.
 
-The initial bake supports diffuse layers, vertex colours and height-derived normals. True
-PBR material conversion, terrain normal-detail baking and seasonal terrain are separate
-roadmap work. Brightness scales linear colour; vertex colour strength controls the landscape's
-painted shading. Texture repeats per cell is configurable (24 by default).
+The initial bake supports diffuse layers, vertex colours and height-derived normals.
+[Seasonal terrain](SEASONS.md) uses written Seasons of Skyrim LTEX swaps and available
+seasonal baseline textures. True PBR terrain conversion and source normal-detail baking
+remain unsupported. Brightness scales linear colour; vertex colour strength controls the
+landscape's painted shading. Texture repeats per cell is configurable (24 by default).
 
 Terrain-shadow exports are loose R16_UNORM DDS files with the bounds and height range in
 the filename. Keep the `Terrain.HeightMap` filename case and keep the files loose. Export
@@ -35,6 +36,6 @@ tile seams and the world map in a small test profile before replacing an establi
 
 Format references: [NifTools schema](https://github.com/niftools/nifxml/blob/develop/nif.xml),
 [terrain conversion format observations](https://github.com/bryantmh/tes4skyrim/blob/master/docs/commentary/asset_convert_terrain.md),
-[Bottled Shaders heightmap reader](https://github.com/InTheBottle/Bottled-Shaders/blob/main/src/Features/TerrainShadows.cpp).
+[Bottled Shaders heightmap reader](https://github.com/InTheBottle/Bottled-Shaders/blob/f0deaabe1f5d8c675bce06927a5c257f4af4e94d/src/Features/TerrainShadows.cpp).
 The writer was also compared with locally installed xLODGen SSE BTR structures. No game assets
 are included in the tests or repository.
