@@ -148,15 +148,15 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: .tools/vcpkg-cache
-          key: windows-vs2026-static-${{ hashFiles('tools/windows/vcpkg.json') }}
+          key: windows-vs2026-static-v2-${{ hashFiles('tools/windows/vcpkg.json') }}
       - name: Build and test Windows native backends
         run: ./tools/build-native-windows.ps1
       - name: Save compiled native dependencies
-        if: always() && steps.native-cache.outputs.cache-hit != 'true'
+        if: success() && steps.native-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: .tools/vcpkg-cache
-          key: windows-vs2026-static-${{ hashFiles('tools/windows/vcpkg.json') }}
+          key: windows-vs2026-static-v2-${{ hashFiles('tools/windows/vcpkg.json') }}
       - name: Engine and rendered UI tests
         run: ./tools/test-windows.ps1
       - name: Publish self-contained Windows applications
