@@ -102,13 +102,14 @@ public sealed class TextureGenerationTests
     }
 
     [Fact]
-    public void ShaderConversionRulesAreReportedAsUnsupportedWithoutGuessingTheirMeaning()
+    public void ConversionRulesGenerateNativeMipsAndPersistTheirProgram()
     {
         using var f = new TextureFixture(); using var limits = RunLimits.Enter(2);
         File.AppendAllText(f.RuleFile, "\n0\t1\t1\t1\ttextures\\green.dds\tx\t7\t12\t0\ttextures\\special.dds\t2\tx");
         var result = TextureGeneration.Run(f.Request);
-        Assert.True(result.Published); Assert.Contains(result.Items, i => i.Status == "Skipped" && i.Detail.Contains("not implemented"));
-        Assert.False(File.Exists(GamePath.ToFileSystemPath(f.Output, @"textures\special.dds")));
+        Assert.True(result.Published); Assert.Contains(result.Items, i => i.Kind == "Conversion" && i.Status == "Written");
+        Assert.True(File.Exists(GamePath.ToFileSystemPath(f.Output, @"textures\special.dds")));
+        Assert.Contains(TextureGenerationManifest.Read(f.Output, true)!.Recipes!.Entries, e => e.Conversion is not null);
     }
 
     [Fact]
@@ -118,7 +119,7 @@ public sealed class TextureGenerationTests
         Assert.True(TextureGeneration.Run(f.Request).Published);
         string before = File.ReadAllText(Path.Combine(f.Output, TextureGenerationManifest.FileName));
         using var cts = new CancellationTokenSource();
-        Assert.Throws<OperationCanceledException>(() => TextureGeneration.Run(f.Request, new Callback(p => { if (p.StartsWith("Stitching")) cts.Cancel(); }), cts.Token));
+        Assert.Throws<OperationCanceledException>(() => TextureGeneration.Run(f.Request, new Callback(p => { if (p.StartsWith("Preparing texture")) cts.Cancel(); }), cts.Token));
         Assert.Equal(before, File.ReadAllText(Path.Combine(f.Output, TextureGenerationManifest.FileName)));
         File.WriteAllText(f.RuleFile, TextureFixture.Tile(@"textures\missing.dds", @"textures\lod\atlas.dds", 0));
         var failed = TextureGeneration.Run(f.Request);

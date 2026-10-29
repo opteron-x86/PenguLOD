@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AnvilLOD.Core.Textures;
 using AnvilLOD.Core.World;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.Paths;
@@ -17,8 +18,11 @@ public sealed class TextureGenerationManifest
     public string ModelFilter { get; set; } = "";
     public DateTimeOffset GeneratedAt { get; set; }
     public Dictionary<string, string> Files { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public TextureRecipeSet? Recipes { get; set; }
+    public Dictionary<string, string> RecipeInputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string Fingerprint => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',
-        Files.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value)))));
+        Files.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value)) + (Recipes is null ? "" : "\nrecipes=" + Recipes.Fingerprint)
+        + (RecipeInputs.Count == 0 ? "" : "\ninputs=" + JsonSerializer.Serialize(RecipeInputs.OrderBy(p => p.Key, StringComparer.Ordinal))))));
 
     public static TextureGenerationManifest? Read(string folder, bool requireComplete = false)
     {
@@ -33,6 +37,14 @@ public sealed class TextureGenerationManifest
         if (result.Version != 1 || result.Files is null) throw new InvalidDataException("Unsupported texture manifest: " + path);
         result.Files = new(result.Files, StringComparer.OrdinalIgnoreCase);
         result.ModelFilter ??= "";
+        result.Recipes?.Compile();
+        if (result.RecipeInputs is null) throw new InvalidDataException("Invalid saved recipe inputs.");
+        result.RecipeInputs = new(result.RecipeInputs, StringComparer.OrdinalIgnoreCase);
+        foreach (var (original, saved) in result.RecipeInputs)
+        {
+            TextureRecipe.AssetPath(original); TextureRecipe.AssetPath(saved);
+            if (!result.Files.ContainsKey(saved)) throw new InvalidDataException("Saved recipe input is not owned by the texture manifest: " + saved);
+        }
         foreach (var file in result.Files.Keys)
         {
             GamePath.ValidateRelative(file);

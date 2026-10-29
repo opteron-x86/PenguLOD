@@ -46,6 +46,8 @@ public sealed class LodGenerator
     /// <summary>When set, textures that the full models replace with PBR ones are swapped for matching LOD textures.</summary>
     public PbrLodTextures? Pbr { get; init; }
     public Func<LodMesh,LodMesh>? ObjectAtlasTransform { get; set; }
+    public Func<LodMeshPart, IReadOnlyList<TextureMatchInput>, LodMeshPart?>? RecipeMapper { get; init; }
+    private readonly ConcurrentDictionary<string, Lazy<LodMesh?>> _rawMeshes = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>When set, shapes without an alpha property whose diffuse texture has a translucent alpha channel point at an opaque copy.</summary>
     public OpaqueLodTextures? Opaque { get; init; }
@@ -181,7 +183,7 @@ public sealed class LodGenerator
         return changed ? new LodMesh { Path = mesh.Path, Parts = parts, Warnings = mesh.Warnings, NoShapesInFile = mesh.NoShapesInFile } : mesh;
     }
 
-    private LodMesh? Load(string path)
+    private LodMesh? Load(string path, bool mapTextures = true)
     {
         try
         {
@@ -200,9 +202,7 @@ public sealed class LodGenerator
             }
             var mesh = Tidy(NifGeometryReader.Read(path, bytes));
             if (FitMountains) mesh = FitToFullModel(path, mesh);
-            mesh = ApplyMissingPbr(mesh);
-            if (Pbr is not null) mesh = ApplyPbr(mesh, Pbr);
-            if (Opaque is not null) mesh = ApplyOpaque(mesh, Opaque);
+            if (mapTextures) mesh = MapMaterials(mesh);
             if (mesh.Parts.Count == 0 && !mesh.NoShapesInFile)
                 _meshErrors[path] = mesh.Warnings.Count > 0 ? string.Join("; ", mesh.Warnings.Distinct()) : "no usable shapes";
             return mesh;
@@ -214,73 +214,73 @@ public sealed class LodGenerator
         }
     }
 
-    /// <summary>
-    /// The LOD mesh with its textures made to follow the base record's full model. LOD models are cut from full models and keep their
-    /// shape names, so a shape whose texture differs from the full model's (a snow variant of a rock, an ice or dirt texture set)
-    /// gets the full model's texture, with the alternate textures of the base record applied. Shapes that use stitched LOD
-    /// textures (textures\lod\...) can't be compared with the full texture and are left as they are.
-    /// </summary>
+    private LodMesh MapMaterials(LodMesh mesh)
+    {
+        mesh = ApplyMissingPbr(mesh);
+        if (Pbr is not null) mesh = ApplyPbr(mesh, Pbr);
+        if (Opaque is not null) mesh = ApplyOpaque(mesh, Opaque);
+        return mesh;
+    }
+
+    /// <summary>Match every contributing full shape, then apply recipe layouts and record-specific atlas replacements.</summary>
     private LodMesh? MatchTextures(string path, TextureVariant variant)
     {
-        var lod = GetMesh(path);
+        var lod = _rawMeshes.GetOrAdd(path, p => new Lazy<LodMesh?>(() => Load(p, false), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
         if (lod is null || lod.Parts.Count == 0) return lod;
         Interlocked.Increment(ref Matching.Meshes);
-
         var full = _fullShapes.GetOrAdd(variant.FullModel, p => new Lazy<IReadOnlyList<FullShape>?>(() => ReadFullShapes(p), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
-        if (full is null || full.Count == 0) return lod;
-
+        if (full is null || full.Count == 0) return MapMaterials(lod);
         bool changed = false;
         var parts = new List<LodMeshPart>(lod.Parts.Count);
         foreach (var p in lod.Parts)
         {
             Interlocked.Increment(ref Matching.Shapes);
             var part = p;
-            var m = p.Material;
-            var shape = FindShape(full, p.Name);
-            if (shape is not null && m.Textures.Count > 0)
+            var shapes = FindShapes(full, p.Name);
+            if (shapes.Count > 0 && p.Material.Textures.Count > 0)
             {
-                if (IsStitchedLodTexture(m.Textures[0])) Interlocked.Increment(ref Matching.ShapesStitched);
-                else
+                var inputs = new List<TextureMatchInput>();
+                if (shapes.GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1 && variant.Alternates.Any(a => ShapeNameMatches(a.ShapeName, g.Key))))
+                    throw new InvalidDataException("Alternate texture is ambiguous because full-model shape names are duplicated: " + p.Name);
+                foreach (var shape in shapes.Where(s => !string.IsNullOrWhiteSpace(s.Diffuse)))
                 {
-                    string? diffuse = shape.Diffuse, normal = shape.Normal;
+                    string diffuse = shape.Diffuse!; string? normal = shape.Normal; bool alternate = false;
                     foreach (var alt in variant.Alternates)
                     {
                         if (!ShapeNameMatches(alt.ShapeName, shape.Name)) continue;
                         if (!string.IsNullOrEmpty(alt.Diffuse)) diffuse = alt.Diffuse;
                         if (!string.IsNullOrEmpty(alt.Normal)) normal = alt.Normal;
+                        alternate = true;
                     }
-                    // A texture the full model or its texture set names but that exists nowhere (a PBR path from a patch whose textures
-                    // aren't installed) would draw purple on the LOD mesh: use its non-PBR twin, or leave the LOD mesh as it is.
-                    diffuse = ExistingTexture(diffuse);
-                    normal = ExistingTexture(normal);
-                    // Same texture mapping the LOD mesh went through (a full texture that has a PBR twin points at the converted copy).
-                    if (!string.IsNullOrWhiteSpace(diffuse) && Pbr?.MapDiffuse(diffuse) is { } mapped)
+                    inputs.Add(new(shape.Name, GamePath.NormalizeTexture(shape.Diffuse!),
+                        string.IsNullOrWhiteSpace(shape.Normal) ? null : GamePath.NormalizeTexture(shape.Normal),
+                        GamePath.NormalizeTexture(diffuse), string.IsNullOrWhiteSpace(normal) ? null : GamePath.NormalizeTexture(normal), alternate));
+                }
+                bool stitched = IsStitchedLodTexture(p.Material.Textures[0]);
+                if (stitched) Interlocked.Increment(ref Matching.ShapesStitched);
+                if (RecipeMapper?.Invoke(p, inputs) is { } mapped) part = mapped;
+                else if (!stitched && inputs.Count > 0)
+                {
+                    var choices = inputs.Select(i => (i.DesiredDiffuse, i.DesiredNormal)).Distinct().ToArray();
+                    if (choices.Length > 1) throw new InvalidDataException("Merged LOD shape has conflicting full textures: " + p.Name);
+                    var (diffuse, normal) = choices[0];
+                    diffuse = ExistingTexture(diffuse); normal = ExistingTexture(normal);
+                    if (diffuse is not null && (!SamePath(diffuse, p.Material.Textures[0])
+                        || normal is not null && !SamePath(normal, p.Material.Textures.ElementAtOrDefault(1))))
                     {
-                        if (!string.IsNullOrWhiteSpace(normal) && Pbr.MapNormal(diffuse, normal) is { } mappedNormal) normal = mappedNormal;
-                        diffuse = mapped;
-                    }
-                    // A shape without an alpha property is drawn opaque-or-holey by its texture's alpha: same opaque copy the LOD mesh got.
-                    if (!m.HasAlpha && !string.IsNullOrWhiteSpace(diffuse) && Opaque?.MapDiffuse(diffuse) is { } opaque) diffuse = opaque;
-                    if (!string.IsNullOrWhiteSpace(diffuse) && !SamePath(diffuse, m.Textures[0]))
-                    {
-                        var tex = m.Textures.ToList();
-                        tex[0] = diffuse;
-                        if (tex.Count > 1 && !string.IsNullOrWhiteSpace(normal)) tex[1] = normal;
-                        part = new LodMeshPart
-                        {
-                            Name = p.Name, Material = m with { Textures = tex }, Positions = p.Positions, UVs = p.UVs, Normals = p.Normals,
-                            Tangents = p.Tangents, Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles,
-                        };
-                        changed = true;
-                        Interlocked.Increment(ref Matching.ShapesChanged);
+                        var textures = p.Material.Textures.ToList(); textures[0] = diffuse;
+                        if (normal is not null) { while (textures.Count < 2) textures.Add(""); textures[1] = normal; }
+                        part = new LodMeshPart { Name = p.Name, TexGenScale = p.TexGenScale, Tier = p.Tier,
+                            Material = p.Material with { Textures = textures }, Positions = p.Positions, UVs = p.UVs, Normals = p.Normals,
+                            Tangents = p.Tangents, Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles };
                     }
                 }
             }
+            if (!ReferenceEquals(part, p)) { changed = true; Interlocked.Increment(ref Matching.ShapesChanged); }
             parts.Add(part);
         }
-        if (!changed) return lod;
-        Interlocked.Increment(ref Matching.MeshesChanged);
-        return new LodMesh { Path = lod.Path, Parts = parts, Warnings = lod.Warnings, NoShapesInFile = lod.NoShapesInFile };
+        if (changed) Interlocked.Increment(ref Matching.MeshesChanged);
+        return MapMaterials(changed ? new LodMesh { Path = lod.Path, Parts = parts, Warnings = lod.Warnings, NoShapesInFile = lod.NoShapesInFile } : lod);
     }
 
     private IReadOnlyList<FullShape>? ReadFullShapes(string modelPath)
@@ -320,15 +320,13 @@ public sealed class LodGenerator
     private static bool ShapeNameMatches(string? a, string? b) =>
         !string.IsNullOrEmpty(a) && !string.IsNullOrEmpty(b) && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The full model's shape with the LOD shape's name; merged LOD shapes are named "a - b", so any of their parts will do.</summary>
-    private static FullShape? FindShape(IReadOnlyList<FullShape> full, string? name)
+    private static IReadOnlyList<FullShape> FindShapes(IReadOnlyList<FullShape> full, string? name)
     {
-        if (string.IsNullOrEmpty(name)) return null;
-        foreach (var f in full) if (ShapeNameMatches(f.Name, name)) return f;
-        if (name.Contains(" - ", StringComparison.Ordinal))
-            foreach (var piece in name.Split(" - ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                foreach (var f in full) if (ShapeNameMatches(f.Name, piece)) return f;
-        return null;
+        if (string.IsNullOrEmpty(name)) return [];
+        var exact = full.Where(f => ShapeNameMatches(f.Name, name)).ToArray();
+        if (exact.Length > 0) return exact;
+        var names = name.Split(" - ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return full.Where(f => names.Any(n => ShapeNameMatches(f.Name, n))).ToArray();
     }
 
     /// <summary>textures\lod\..., or a file named like xxx_lod / xxxlod: stitched or reduced LOD textures that have no full-texture twin to compare with.</summary>

@@ -5,6 +5,25 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.1] - 2026-10-29
+
+- Native TexGen `x` recipes retain source dimensions and apply the specified mipmap
+  filter, progressive contrast/brightness and alpha handling. Copy and conversion
+  dependencies support source alternatives, intermediates and in-place conversions.
+- Object LOD follows recipe UV layouts, including repeated/cropped tiles and nested
+  copy/stitch chains. Record and seasonal texture overrides rebuild isolated atlas
+  variants, preserving unrelated tiles, normals and original atlas UVs.
+- Normal-only overrides work on full textures and stitched atlases. Normal-map reduction
+  averages directions independently of gloss alpha. Native authoring preserves shape
+  names needed for subsequent material matching.
+- Texture manifests retain validated recipes and original in-place conversion inputs.
+  LOD fingerprints include recipe/source content; reports explain mapped, variant,
+  retained and failed materials. Ambiguous full-texture layouts retain the full texture;
+  conflicting atlas replacements stop the combined pipeline and preserve previous output.
+- Synthetic tests cover conversions, merged shapes, UV coverage, seasonal output,
+  object atlasing, changed sources, reuse and recovery. Full HD billboard/render parity
+  and broad in-game compatibility remain separate work.
+
 ## [0.3.0-alpha.1] - 2026-10-28
 
 - Native 3D trees and automatic billboards preserve record-specific texture variants.

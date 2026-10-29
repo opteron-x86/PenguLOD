@@ -109,7 +109,7 @@ public static class OldrimLodConverter
 
             var stem = GamePath.GetFileNameWithoutExtension(key);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.WriteAllBytes(target, LodNifWriter.Write(stem, mesh.Parts, "AnvilLOD Oldrim converter"));
+            File.WriteAllBytes(target, LodNifWriter.Write(stem, mesh.Parts, "AnvilLOD Oldrim converter", preserveShapeNames: true));
             converted++;
             report.AppendLine($"CONVERTED {key}: {mesh.Parts.Count} shapes, {mesh.Parts.Sum(p => p.TriangleCount):N0} triangles" + (mesh.Warnings.Count > 0 ? "; " + string.Join("; ", mesh.Warnings.Distinct().Take(2)) : ""));
             if (converted % 200 == 0) progress?.Report($"Converted {converted:N0} meshes...");

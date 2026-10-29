@@ -14,7 +14,8 @@ Existing TexGen output can supply textures for unsupported features underneath t
 
 - **Stitched object textures** follows enabled-plugin recipe order. Resources in virtual
   `Data/DynDOLOD` override same-named installation recipes. Copy rules, cropped/fractional
-  tiles, intermediate textures, colour multipliers and matching normal maps are supported.
+  tiles, intermediate textures, colour multipliers, matching normal maps and `x` mipmap
+  conversion recipes are supported.
   Generated DDS files use BC7 and mipmaps; copy rules preserve the source format.
 - **Tree billboards** renders winning TREE and tree-flagged STAT models, including record
   texture replacements, inclusion rules and seasonal replacement records. Height and
@@ -54,12 +55,79 @@ preserve published textures; LOD verifies the manifest before using them. If pub
 is interrupted and the next run reports changed files, keep that output disabled and
 generate into a fresh folder. See [persistent generation](PIPELINE.md).
 
+## Recipe-driven LOD materials
+
+Run **Textures, then LOD**, or select **Use this generated texture output for subsequent
+LOD jobs**. The generated manifest passes the exact recipe order, base size and brightness
+to LOD generation. CLI pipelines use the same preset with `pipeline --settings <preset.json>
+--stages textures,lod`, or a JSON request with `Lod.GeneratedTextureFolder`. Texture matching
+is enabled by default. Regenerate older texture output once
+to save this metadata. Without a generated manifest, installed recipes can still be read
+from the resource folder and virtual `Data/DynDOLOD`, using the default recipe base size.
+
+For a LOD shape using a full texture, PenguLOD can move its UVs into a recipe atlas when
+the complete UV range fits the recipe layout. Repeated tiles, clipped edges, copy chains
+and nested atlases participate in that check. Several equally applicable layouts, extra
+shader texture channels, or shader UV transforms retain the full texture and are reported.
+
+For a shape already using a recipe atlas, alternate textures rebuild that atlas with the
+relevant sources replaced. Unrelated tiles and the shape's UVs stay intact. Normal-only
+replacements use the texture set's actual normal path. Merged shapes combine their
+replacements; conflicting replacements for the same source cannot be resolved reliably
+and stop the combined job. Duplicate full-model shape names with alternate textures also
+require distinct names before generation. A full-model texture path changed by a mesh
+patch can be associated by an unambiguous source/UV region; unresolved associations are
+reported rather than guessed.
+
+`PenguLOD.recipes.json` in LOD output lists material mappings, generated variants, retained
+full textures and failures. Variant textures live under `textures/pengulod/recipes` in
+LOD output. Keep texture output enabled underneath it. The texture manifest also owns
+original input copies under `textures/pengulod/recipe-inputs` for in-place conversions;
+keep those files with the output so subsequent jobs never process an already-adjusted
+input a second time.
+
+Recipe and source content participate in LOD block fingerprints. The pipeline's normal
+stage-reuse check uses asset metadata; select **Verify all source asset contents** (CLI
+`--verify-source-contents`) when checking assets whose timestamps might have been preserved.
+
+## Conversion recipe format
+
+The twelve tab-separated columns in an `alpha` or `noalpha` recipe can describe either
+tile placement or a conversion. In a conversion, columns 6 and 12 contain `x`; these
+are mipmap instructions, not a request to execute a shader or another program.
+
+| Columns (starting at 1) | Conversion meaning |
+| --- | --- |
+| 1 | Base RGB brightness offset, -255 to 255 |
+| 2–4 | Nonnegative RGB multipliers, interpreted with gamma 2.2 |
+| 5 | Source DDS path; `\|` separates alternatives in priority order |
+| 6 | `x` |
+| 7 | Mipmap filter number |
+| 8 | Mipmap contrast percentage, -100 to 100 |
+| 9 | Mipmap brightness percentage, -100 to 100 |
+| 10 | Destination DDS path |
+| 11 | First adjusted mip level, starting at 0 |
+| 12 | `x` |
+
+Filters are 0 nearest, 1 linear, 2 cosine, 3 Hermite, 4 quadratic, 5 Gaussian,
+6 spline, 7 Lanczos, 8 Mitchell and 9 Catmull–Rom. Each mip samples the base image.
+At level `m >= start`, contrast and brightness are multiplied by `m - start + 1`;
+RGB is adjusted as `RGB × (1 + contrast/100) + brightness/100`, then clamped to 0–1.
+Alpha is retained by `alpha` recipes and removed by `noalpha` recipes. These operations
+retain source dimensions and generate a complete mip chain down to 1×1 in BC7; compressed
+bytes need not match TexGen. A conversion writes the specified texture, without inventing
+a normal companion. See the upstream [TexGen configuration guide](https://dyndolod.info/Help/TexGen-Configuration)
+and [mod-author resource conventions](https://dyndolod.info/Mod-Authors). Filter numbering
+follows the [ImagingLib sampling filters](https://github.com/ElminsterAU/imaginglib/blob/aef974039fb64d8d4ee8709cf07c667c59d88a91/Source/ImagingFormats.pas).
+
 ## Supported scope
 
 Texture generation supports source normals and a configurable static PBR/AO bake, but
-does not reproduce every TexGen conversion or the game's full shader. Special `x`-format
-glow/alpha conversions, full HD billboard parity, complex-grass shading and reference-scale
-discovery remain unsupported. [Seasons](SEASONS.md) uses written swap INIs.
+does not reproduce the game's full shader. Full HD billboard parity, complex-grass shading
+and reference-scale discovery remain unsupported. [Seasons](SEASONS.md) uses written swap INIs.
+Recipe parsing and rendering are native; resource directories named `DynDOLOD` do not
+require TexGen/DynDOLOD executables. Resource files and models must still be supplied by
+their authors and installed with their required mods.
 
 Models with unsupported/skinned shapes are skipped as a whole. Missing required source
 textures or unsupported required render resources stop publication. Missing assets must

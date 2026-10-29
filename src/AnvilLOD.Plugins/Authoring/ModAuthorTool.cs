@@ -308,7 +308,7 @@ public static class ModAuthorTool
                 var path = GamePath.ToFileSystemPath(req.OutputFolder, rel);
                 if (!req.Overwrite && File.Exists(path)) { written.Add($"L{lv.Level} kept"); continue; }
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                File.WriteAllBytes(path, LodNifWriter.Write($"{stem}_lod_{lv.Level}", lv.Parts));
+                File.WriteAllBytes(path, LodNifWriter.Write($"{stem}_lod_{lv.Level}", lv.Parts, preserveShapeNames: true));
                 meshesWritten++;
                 written.Add($"L{lv.Level} {lv.Triangles:N0} tris" + (lv.OverBudget ? $" (over the budget of {lv.Budget:N0})" : ""));
             }

@@ -4,6 +4,24 @@ PenguLOD currently provides a native grass → textures → terrain → object/t
 pipeline, with resumable stages, diagnostics, a desktop and CLI. The project is in alpha.
 The [user guide](USER-GUIDE.md) and feature guides describe the supported workflows and limits.
 
+## Compatibility priorities
+
+Each priority has a milestone, implementation issues and acceptance checks. Work advances
+one milestone at a time; an implementation milestone does not claim universal mod parity.
+
+| Priority | Scope | Tracking |
+| --- | --- | --- |
+| 1 — Recipes and texture replacement | Native conversion recipes, recipe UV layouts, record/season atlas variants, diagnostics and pipeline recovery | [v0.4 milestone](https://github.com/opteron-x86/PenguLOD/milestone/6), [#16](https://github.com/opteron-x86/PenguLOD/issues/16), [#17](https://github.com/opteron-x86/PenguLOD/issues/17), [#18](https://github.com/opteron-x86/PenguLOD/issues/18) |
+| 2 — HD tree and grass billboards | HD material/camera fidelity, complex grass, reference scale coverage | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/7), [#19](https://github.com/opteron-x86/PenguLOD/issues/19) |
+| 3 — Model and render support | More NIF geometry/material variants and render-template coverage | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/8), [#20](https://github.com/opteron-x86/PenguLOD/issues/20) |
+| 4 — Automatic object LOD | Integrated discovery, generation and coverage of missing object LOD models | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/9), [#21](https://github.com/opteron-x86/PenguLOD/issues/21) |
+| 5 — Hybrid tree authoring | Generate aligned trunk/crown resources and hybrid models from full trees | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/10), [#22](https://github.com/opteron-x86/PenguLOD/issues/22) |
+| 6 — Resource-pack discovery | Discover compatible installed data packs and explain missing resources | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/11), [#23](https://github.com/opteron-x86/PenguLOD/issues/23) |
+
+Priority 1 is implemented in v0.4.0-alpha.1. [Texture generation](TEXTURES.md) documents
+supported recipes, ambiguous mappings and how to pass generation metadata to LOD.
+Priorities 2–6 are queued. In-game visual validation remains ongoing.
+
 ## v0.3 quality milestones
 
 | Milestone | Delivered | Tracking |

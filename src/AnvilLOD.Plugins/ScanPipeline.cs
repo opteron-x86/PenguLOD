@@ -501,6 +501,26 @@ public static class ScanPipeline
         }
         string? Fingerprint(string p) => grass?.Fingerprint(p) ?? cards?.Fingerprint(p) ?? tree3d?.Fingerprint(p) ?? ships?.Fingerprint(p) ?? assets.Fingerprint(p);
 
+        RecipeTextureMapper? recipeMapper = null;
+        if (req.Scan.MatchTextures)
+        {
+            var generated = req.GeneratedTextureFolder is { } textureFolder ? TextureGenerationManifest.Read(textureFolder, true) : null;
+            var recipeSet = generated?.Recipes ?? TextureGeneration.ReadRules(game, assets, TextureGeneration.ResourceRoot(req.DynDolodFolder)).Program;
+            if (recipeSet.Entries.Count > 0)
+            {
+                byte[]? RecipeSource(string path)
+                {
+                    if (generated?.RecipeInputs.TryGetValue(path, out var saved) == true)
+                        return File.ReadAllBytes(GamePath.ToFileSystemPath(req.GeneratedTextureFolder!, saved));
+                    if (!assets.TryOpenSource(path, out var stream)) return null;
+                    using (stream) { using var buffer = new MemoryStream(); stream.CopyTo(buffer); return buffer.ToArray(); }
+                }
+                recipeMapper = new(recipeSet, assets, req.OutputFolder ?? Path.GetTempPath(), RecipeSource);
+                progress?.Report("Fingerprinting recipe sources and record texture variants...");
+                req = req with { SettingsFingerprint = req.SettingsFingerprint + "|recipes2:" + recipeMapper.InputFingerprint(scan.TextureVariants?.Values ?? []) };
+            }
+        }
+
         var sw = Stopwatch.StartNew();
         var bucketer = new QuadBucketer(scan.Grids);
         Parallel.ForEach(allRefs, RunLimits.Parallel(ct), bucketer.Add);
@@ -560,11 +580,11 @@ public static class ScanPipeline
             var pbrLod = req.PbrLod ? new PbrLodTextures(assets) : null;
             var opaqueLod = req.OpaqueAlpha ? new OpaqueLodTextures(assets, OpaqueLodStage.IsTranslucent) : null;
             var seasonalVariants=scan.TextureVariants?.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.Ordinal);
-            var generator = new LodGenerator(assets, cullTerrain?.Heights, new CompositeSyntheticSource(grass, cards, tree3d, ships)) { RemoveUnderwater = req.RemoveUnderwater, Brightness = req.ObjectBrightness, SnowShaderMode = req.SnowShaderMode, SnowCover = req.SnowCover, FitMountains = req.MountainFit && req.MountainInset > 0f, Pbr = pbrLod, Opaque = opaqueLod, Categorize = SizeBreakdown.Categorize, Inset = req.IceInset > 0f || req.MountainInset > 0f || req.ObjectInset > 0f || req.DetailedShips ? path => LodInset.For(path, req.IceInset, req.MountainInset, req.DetailedShips ? LodInset.DefaultShip : 0f, req.ObjectInset) : null, TextureVariants = seasonalVariants };
+            var generator = new LodGenerator(assets, cullTerrain?.Heights, new CompositeSyntheticSource(grass, cards, tree3d, ships)) { RemoveUnderwater = req.RemoveUnderwater, Brightness = req.ObjectBrightness, SnowShaderMode = req.SnowShaderMode, SnowCover = req.SnowCover, FitMountains = req.MountainFit && req.MountainInset > 0f, Pbr = pbrLod, Opaque = opaqueLod, Categorize = SizeBreakdown.Categorize, Inset = req.IceInset > 0f || req.MountainInset > 0f || req.ObjectInset > 0f || req.DetailedShips ? path => LodInset.For(path, req.IceInset, req.MountainInset, req.DetailedShips ? LodInset.DefaultShip : 0f, req.ObjectInset) : null, TextureVariants = seasonalVariants, RecipeMapper = recipeMapper is null ? null : recipeMapper.Map };
             if (req.ObjectAtlas)
             {
-                var models=quads.Values.SelectMany(v=>v).SelectMany(r=>new[]{r.Meshes.Lod4,r.Meshes.Lod8,r.Meshes.Lod16,r.Meshes.Lod32})
-                    .OfType<string>().Where(p=>!p.StartsWith('~')).Distinct(StringComparer.OrdinalIgnoreCase)
+                var models=quads.Values.SelectMany(v=>v).SelectMany(r=>new[]{r.Meshes.Lod4,r.Meshes.Lod8,r.Meshes.Lod16,r.Meshes.Lod32}
+                        .OfType<string>().Where(p=>!p.StartsWith('~')).Select(p=>LodMeshKey.Make(p,r.TextureVariant))).Distinct(StringComparer.OrdinalIgnoreCase)
                     .Select(p=>{ct.ThrowIfCancellationRequested();return generator.GetMesh(p);}).OfType<LodMesh>().ToArray();
                 // Mapping above discovers converted PBR/opaque inputs. Materialize them before packing paired pages.
                 if(pbrLod is not null && PbrLodStage.Run(assets,pbrLod,output,req.PbrLodSize,req.PbrLodBrightness,progress,ct) is {Failed:>0} pbrFailure)
@@ -574,6 +594,7 @@ public static class ScanPipeline
                 generator.ObjectAtlasTransform=ObjectAtlasStage.Build(models,assets,output,req.AtlasCellSize,progress,ct).Transform;
             }
             gen = generator.Generate(quads, plan.Rebuild, output, progress, ct);
+            recipeMapper?.ThrowIfFailed();
             if (ships is not null && ships.Built() is { Count: > 0 } builtShips)
                 progress?.Report($"Detailed ships: {builtShips.Count} ship models drawn from their real models ("
                                  + string.Join(", ", builtShips.Select(b => $"{Path.GetFileNameWithoutExtension(b.Model)} {b.Lod4:N0}/{b.Lod8:N0} triangles")) + " at LOD4/LOD8)"
@@ -739,6 +760,8 @@ public static class ScanPipeline
             }
             else ParentCopyWriter.Remove(output);
 
+            recipeMapper?.ThrowIfFailed();
+            if (recipeMapper is not null) progress?.Report($"Recipe mapping: {recipeMapper.Report.Count(r => r.Status == "Variant")} variant materials, {recipeMapper.Report.Count(r => r.Status == "Mapped")} UV mappings, {recipeMapper.Report.Count(r => r.Status == "Retained")} materials retained; details in PenguLOD.recipes.json.");
             if (pbrLod is not null)
             {
                 try

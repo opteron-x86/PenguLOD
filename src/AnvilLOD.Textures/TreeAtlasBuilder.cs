@@ -176,7 +176,7 @@ public sealed class TreeAtlasBuilder
     }
 
     /// <summary>2×2 box filter; colours are alpha-weighted so transparent texels don't darken edges.</summary>
-    public static (byte[] Rgba, int W, int H) Downsample(byte[] src, int w, int h)
+    public static (byte[] Rgba, int W, int H) Downsample(byte[] src, int w, int h, bool alphaWeighted = true)
     {
         int nw = Math.Max(1, w / 2), nh = Math.Max(1, h / 2);
         var dst = new byte[nw * nh * 4];
@@ -195,7 +195,7 @@ public sealed class TreeAtlasBuilder
                     pr += src[i]; pg += src[i + 1]; pb += src[i + 2];
                 }
                 int o = (y * nw + x) * 4;
-                if (a > 0)
+                if (alphaWeighted && a > 0)
                 {
                     dst[o] = (byte)MathF.Round(r / a);
                     dst[o + 1] = (byte)MathF.Round(g / a);
