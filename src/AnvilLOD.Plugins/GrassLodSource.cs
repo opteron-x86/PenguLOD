@@ -23,7 +23,7 @@ namespace AnvilLOD.Plugins;
 public sealed class GrassLodSource : ISyntheticMeshSource
 {
     public const string Prefix = "~anvillod-grass|";
-    private const int Version = 6; // 6: density tiers (each in its own part); 2: crossed quads, coverage-compensated size, vertex colours; 3: rendered billboards; 4: binned sampling (one tuft per bin); 5: atlas, brightness top/bottom
+    private const int Version = 7; // 7: atlas only includes types used by selected default/seasonal caches
 
     private readonly AssetIndex _assets;
     private readonly float _density;
@@ -73,6 +73,7 @@ public sealed class GrassLodSource : ISyntheticMeshSource
     public IReadOnlyList<LodReference> Cells { get; private set; } = [];
 
     private readonly Dictionary<(string Ws, int X, int Y, string Season), string> _seasonal = [];
+    private readonly HashSet<string> _atlasCaches = new(StringComparer.Ordinal);
 
     /// <summary>True if the grass cache has files for this season ("WIN", "SPR", "SUM", "AUT").</summary>
     public bool HasSeason(string suffix) => _seasonal.Keys.Any(k => k.Season == suffix);
@@ -92,22 +93,26 @@ public sealed class GrassLodSource : ISyntheticMeshSource
     }
 
     /// <summary>One LOD reference per cached cell inside the worldspaces' LOD grids (non-seasonal caches only).</summary>
-    public List<LodReference> Discover(IReadOnlyDictionary<string, LodGrid> grids)
+    public List<LodReference> Discover(IReadOnlyDictionary<string, LodGrid> grids, bool includeSeasons = true)
     {
         var refs = new List<LodReference>();
+        var cells = new HashSet<(string Ws, int X, int Y)>();
+        _seasonal.Clear(); _atlasCaches.Clear();
         foreach (var path in _assets.EnumeratePaths("grass\\"))
         {
+            RunLimits.Check();
             var name = path["grass\\".Length..];
             if (name.Contains('\\') || !GrassCache.TryParseFileName(name, out var ws, out var x, out var y, out var season))
                 continue;
-            if (season is not null)
-            {
-                _seasonal[(ws.ToLowerInvariant(), x, y, season)] = path; // ...x0005y-005.WIN.cgid: the grass of that season
-                continue;
-            }
             if (!grids.TryGetValue(ws, out var grid)) continue;
             var cell = new CellCoord(x, y);
             if (!grid.IsInsideGrid(cell) || !grid.Settings.Supports(LodLevel.Lod4)) continue;
+            if (season is not null)
+            {
+                if (includeSeasons) _seasonal[(ws.ToLowerInvariant(), x, y, season)] = path;
+                continue;
+            }
+            cells.Add((ws.ToLowerInvariant(), x, y)); _atlasCaches.Add(path);
 
             // Real grass from the cache is drawn out to the grass cell radius (often 10+ cells with NGIO), well into the
             // LOD8/LOD16 range, so grass LOD goes into all three near levels, sparser and bigger as the level grows.
@@ -124,6 +129,8 @@ public sealed class GrassLodSource : ISyntheticMeshSource
                 Meshes: new LodMeshSet(Mesh(4), Mesh(8), Mesh(16), null),
                 Flags: LodReferenceFlags.None));
         }
+        foreach (var (cell, path) in _seasonal)
+            if (cells.Contains((cell.Ws, cell.X, cell.Y))) _atlasCaches.Add(path);
         CellsFound = refs.Count;
         Cells = refs;
         return refs;
@@ -182,17 +189,17 @@ public sealed class GrassLodSource : ISyntheticMeshSource
         return GrassPatchBuilder.Build(path, origin, withBillboards, Math.Min(1f, _density * densityMul), _sizeScale * sizeMul, _top, _bottom, AnvilLOD.Core.Lod.LodLayers.GrassTiers);
     }
 
-    private GrassBillboard? FindBillboard(string model, uint runtimeId)
+    private GrassBillboard? FindBillboard(string model, uint runtimeId, bool record = true)
     {
         // The cache stores the runtime FormID from when it was made; prefer the GRAS it points at today if the model
         // matches, otherwise any GRAS using the same model.
         FormKey? fk = _runtime.ToFormKey(runtimeId);
         if (fk is null || !_grassModel.TryGetValue(fk.Value, out var m) || m != model)
             fk = _firstByModel.TryGetValue(model, out var byModel) ? byModel : null;
-        return Resolve(model, fk, record: true);
+        return Resolve(model, fk, record);
     }
 
-    /// <param name="record">Count a type with no billboard as missing (false while the atlas looks at every GRAS, placed or not).</param>
+    /// <param name="record">Count a type with no billboard as missing (false while the atlas gathers used types).</param>
     private GrassBillboard? Resolve(string model, FormKey? fk, bool record)
     {
         var stem = Path.GetFileNameWithoutExtension(model.Replace('\\', '/'));
@@ -328,16 +335,32 @@ public sealed class GrassLodSource : ISyntheticMeshSource
     public GrassAtlasSummary? Atlas { get; private set; }
 
     /// <summary>
-    /// Packs the billboards of every grass type (TexGen's, or rendered from the model) into <see cref="AtlasDiffuse"/> and a
+    /// Packs billboards used by the discovered grass caches (TexGen's, or rendered from the model) into <see cref="AtlasDiffuse"/> and a
     /// normal map atlas with the same layout (<see cref="AtlasNormal"/>), tiles capped at 256 px. Must run before blocks are
     /// built: the grass meshes take their UVs from it. Without an output folder (a scan) nothing is built.
     /// </summary>
-    public void PrepareAtlas()
+    public void PrepareAtlas(IProgress<string>? progress = null)
     {
         if (_outputFolder is null || _atlasRects is not null) return;
         var raw = new SortedDictionary<string, GrassBillboard>(StringComparer.Ordinal);
-        foreach (var (fk, model) in _grassModel)
-            if (Resolve(model, fk, record: false) is { } bb) raw.TryAdd(GamePath.Normalize(bb.Diffuse), bb);
+        var required = new HashSet<(string Model, uint Id)>();
+        int inspected = 0;
+        progress?.Report($"Grass atlas: inspecting {_atlasCaches.Count:N0} selected cache files for used grass types...");
+        foreach (string path in _atlasCaches.Order(StringComparer.Ordinal))
+        {
+            RunLimits.Check();
+            if (!_assets.TryOpen(path, out var stream)) throw new FileNotFoundException("Grass cache disappeared: " + path);
+            using (stream)
+                foreach (var type in GrassCacheValidation.ReadTypes(stream, RunLimits.Parallel().CancellationToken))
+                    if (type.Instances > 0) required.Add((NormalizeModel(type.Model), type.RuntimeFormId));
+            if (++inspected % 256 == 0) progress?.Report($"Grass atlas: inspected {inspected:N0}/{_atlasCaches.Count:N0} cache files...");
+        }
+        progress?.Report($"Grass atlas: resolving {required.Count:N0} cached grass types.");
+        foreach (var type in required.OrderBy(t => t.Model, StringComparer.Ordinal).ThenBy(t => t.Id))
+        {
+            RunLimits.Check();
+            if (FindBillboard(type.Model, type.Id, record: false) is { } bb) raw.TryAdd(GamePath.Normalize(bb.Diffuse), bb);
+        }
         var diffuse = new List<TreeAtlasBuilder.Input>();
         var normal = new List<TreeAtlasBuilder.Input>();
         var flat = new Dictionary<(int, int), byte[]>();

@@ -339,29 +339,30 @@ public static class ScanPipeline
         // Only the buried-triangle test (and the block hashes it feeds) depends on RemoveBuried; the underside reads the same heights.
         var cullTerrain = req.RemoveBuried ? terrain : null;
 
+        GrassLodSource? grass = null;
+        IReadOnlyList<LodReference> allRefs = scan.References;
+        if (req.GrassLod && scan.Grids.Count > 0 && (req.Levels is not { Count: > 0 } || req.Levels.Contains(LodLevel.Lod4)))
+        {
+            grass = new GrassLodSource(game, assets, req.GrassDensity, req.GrassSize, req.Generate ? req.OutputFolder : null, req.GrassTop, req.GrassBottom);
+            var grassRefs = grass.Discover(scan.Grids, req.Seasons);
+            if (req.Generate && grassRefs.Count > 0)
+            {
+                progress?.Report("Grass LOD: packing the grass billboards into one atlas...");
+                grass.PrepareAtlas(progress);
+            }
+            progress?.Report($"Grass cache: {grassRefs.Count:N0} cells with cached grass");
+            if (grassRefs.Count == 0)
+                Warn("Grass LOD is on, but no grass cache (grass\\<worldspace>x…y….cgid) was found. Generate one with NGIO or FasterNGIO.");
+            allRefs = [.. scan.References, .. grassRefs];
+        }
+
+        // Validate and prepare grass inputs before the potentially long occlusion pass.
         if (req.Occlusion is not null && terrain is not null && (req.OcclusionFolder ?? req.OutputFolder) is { } occlusionFolder)
         {
             var occ = OcclusionStage.Run(game, terrain.Heights, scan.Grids, scan.References, scan.Trees, assets, occlusionFolder, req.Occlusion, progress, Warn, ct);
             if (occ.Path is not null)
                 progress?.Report($"Occlusion.esp: {occ.Cells:N0} cells of {occ.Worldspaces} worldspace(s) in {occ.Elapsed.TotalSeconds:F0}s (clearance {req.Occlusion.Clearance:0}), written to {occ.Path}. Put it last in your plugin order.");
             if (occ.Skipped.Count > 0) progress?.Report($"Occlusion: left out (too small, a child world or no landscape): {string.Join(", ", occ.Skipped)}");
-        }
-
-        GrassLodSource? grass = null;
-        IReadOnlyList<LodReference> allRefs = scan.References;
-        if (req.GrassLod && scan.Grids.Count > 0 && (req.Levels is not { Count: > 0 } || req.Levels.Contains(LodLevel.Lod4)))
-        {
-            grass = new GrassLodSource(game, assets, req.GrassDensity, req.GrassSize, req.Generate ? req.OutputFolder : null, req.GrassTop, req.GrassBottom);
-            var grassRefs = grass.Discover(scan.Grids);
-            if (req.Generate && grassRefs.Count > 0)
-            {
-                progress?.Report("Grass LOD: packing the grass billboards into one atlas...");
-                grass.PrepareAtlas();
-            }
-            progress?.Report($"Grass cache: {grassRefs.Count:N0} cells with cached grass");
-            if (grassRefs.Count == 0)
-                Warn("Grass LOD is on, but no grass cache (grass\\<worldspace>x…y….cgid) was found. Generate one with NGIO or FasterNGIO.");
-            allRefs = [.. scan.References, .. grassRefs];
         }
         // Trees that go into object LOD instead of the billboard tree LOD files:
         //  - 3D tree LOD (opt-in): trees with a 3D model (DynDOLOD's passthru_lod.nif): the model at LOD4 (and LOD8), cards beyond.
