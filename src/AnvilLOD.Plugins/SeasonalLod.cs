@@ -17,12 +17,13 @@ namespace AnvilLOD.Plugins;
 /// </summary>
 public static class SeasonalLod
 {
+    private sealed record Replacement(FormKey Key,LodMeshSet? Meshes,string? Variant,LodShaderKind Shader);
     public sealed record Result(int Seasons, int Rebuilt, int Linked, IReadOnlyList<string> Messages);
 
     public static Result Build(
         GameContext game, IAssetSource assets, Func<string, IEnumerable<string>> enumerate, LodMeshResolver resolver,
         IReadOnlyDictionary<QuadKey, IReadOnlyList<LodReference>> quads, LodGenerator generator, string outputFolder,
-        IProgress<string>? progress, CancellationToken ct, GrassLodSource? grass = null, IReadOnlyList<TreeReference>? trees = null, Tree3DSource? tree3d = null, Tree3DSettings? treeSettings = null)
+        IProgress<string>? progress, CancellationToken ct, GrassLodSource? grass = null, IReadOnlyList<TreeReference>? trees = null, Tree3DSource? tree3d = null, Tree3DSettings? treeSettings = null, IDictionary<string,TextureVariant>? textureVariants = null)
     {
         var messages = new List<string>();
         var files = enumerate("seasons\\")
@@ -44,7 +45,7 @@ public static class SeasonalLod
             if (seasonFiles.Count == 0 && !seasonalGrass) continue;
 
             // Base FormKey → replacement LOD meshes (null = the swap has no object LOD: drop the reference).
-            var swaps = new Dictionary<string, LodMeshSet?>(StringComparer.OrdinalIgnoreCase);
+            var swaps = new Dictionary<string, Replacement>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var f in seasonFiles)
             {
@@ -58,7 +59,8 @@ public static class SeasonalLod
                     var swapKey = SeasonalCoverage.Resolve(game, s.Section, s.Swap);
                     if (baseKey is null || swapKey is null) throw new InvalidDataException($"{f}: unresolved [{s.Section}] seasonal object swap. Correct the INI or restore its required plugin.");
                     // Identity entries cancel earlier swaps.
-                    swaps[baseKey.Value.ToString()] = MeshesFor(game, resolver, swapKey.Value);
+                    if(baseKey==swapKey) {swaps.Remove(baseKey.Value.ToString());continue;}
+                    swaps[baseKey.Value.ToString()] = ReplacementFor(swapKey.Value);
                 }
             }
             // Which blocks change this season.
@@ -86,7 +88,7 @@ public static class SeasonalLod
                     else if (swaps.TryGetValue(r.BaseFormKey, out var m))
                     {
                         any = true;
-                        if (m is not null) seasonal.Add(r with { Meshes = m });   // swap without LOD: left out
+                        if (m.Meshes is not null) seasonal.Add(r with { BaseFormKey=m.Key.ToString(),Meshes=m.Meshes,TextureVariant=m.Variant,Shader=m.Shader });   // swap without LOD: left out
                     }
                     else if (seasonalGrass && grass!.SeasonalVariant(r, suffix) is { } g) { any = true; seasonal.Add(g); }
                     else seasonal.Add(r);
@@ -116,6 +118,30 @@ public static class SeasonalLod
         }
         foreach (var m in messages) progress?.Report(m);
         return new Result(seasons, rebuilt, linked, messages);
+
+        Replacement ReplacementFor(FormKey key)
+        {
+            game.LinkCache.TryResolve(key,out var record);
+            var model=(record as IModeledGetter)?.Model;
+            string? variantId=null;
+            if(textureVariants is not null && model is {File.IsNull:false})
+            {
+                var alternates=new List<AltTexture>();
+                foreach(var alternate in model.AlternateTextures??[])
+                {
+                    if(!game.LinkCache.TryResolve<ITextureSetGetter>(alternate.NewTexture.FormKey,out var texture))
+                        throw new InvalidDataException("Unresolved seasonal alternate texture on "+key);
+                    alternates.Add(new(alternate.Name,texture.Diffuse is {IsNull:false} d?d.DataRelativePath.Path:null,
+                        texture.NormalOrGloss is {IsNull:false} n?n.DataRelativePath.Path:null));
+                }
+                var variant=TextureVariant.Create(model.File.DataRelativePath.Path,alternates);
+                textureVariants[variant.Id]=variant;variantId=variant.Id;
+            }
+            var shader=record is IStaticGetter stat && !stat.Material.IsNull
+                && game.LinkCache.TryResolve<IMaterialObjectGetter>(stat.Material.FormKey,out var material)
+                ? MutagenReferenceScanner.ShaderKindOf(material.EditorID) : LodShaderKind.None;
+            return new(key,MeshesFor(game,resolver,key),variantId,shader);
+        }
     }
 
     private static string BuildManifestPath(string output, string rel) => Path.Combine(output, rel.Replace('\\', Path.DirectorySeparatorChar));

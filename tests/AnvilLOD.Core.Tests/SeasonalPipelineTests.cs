@@ -84,7 +84,7 @@ public class SeasonalPipelineTests
         string data=f.Textures.Data;
         foreach(string name in new[]{"object","seasonobject"})
         {
-            byte[] mesh=LodNifWriter.Write(name,[TextureFixture.Card(name,$@"textures\{name}.dds")]);
+            byte[] mesh=LodNifWriter.Write("object",[TextureFixture.Card("object",$@"textures\{name}.dds")]);
             TextureFixture.Put(data,$@"meshes\fixture\{name}.nif",mesh);TextureFixture.Put(data,$@"meshes\fixture\{name}_lod_0.nif",mesh);
             TextureFixture.Put(data,$@"textures\{name}.dds",TextureFixture.Solid(80,100,220));
         }

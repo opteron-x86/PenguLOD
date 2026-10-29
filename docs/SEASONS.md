@@ -15,7 +15,7 @@ For each configured season, terrain emits `.WIN.btr`, `.WIN.dds`, `.WIN_n.dds` (
 equivalent other suffixes). Tree LOD emits seasonal `.btt`, `.lst`, and tree atlas files.
 Trees in object LOD receive replacement 3D models within the configured geometry budgets,
 or replacement billboard cards. The native full-model fallback respects its setting.
-Object swaps validate both the record type and its required LOD models. Failed seasonal
+Object swaps use the replacement record’s texture variant and snow/ash material, and validate both the record type and its required LOD models. Failed seasonal
 blocks stop publication, preserving the previous LOD output. Grass uses the matching
 seasonal `.cgid` files and their GRAS billboards. Filenames follow the
 [Seasons of Skyrim loader](https://github.com/powerof3/SeasonsOfSkyrim/blob/master/include/LODSwap.h).
