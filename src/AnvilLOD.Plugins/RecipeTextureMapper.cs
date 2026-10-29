@@ -115,12 +115,19 @@ public sealed class RecipeTextureMapper
             string diffuse = GamePath.NormalizeTexture(input.DesiredDiffuse);
             string? normal = string.IsNullOrWhiteSpace(input.DesiredNormal) ? null : GamePath.NormalizeTexture(input.DesiredNormal);
             bool changed = original != diffuse || !Same(input.Normal, normal);
+            // The full shape already uses this atlas with identical slots. It is not a
+            // source tile: substituting it into itself can create a normal-map cycle.
+            if (known && Same(original, source) && Same(original, diffuse)
+                && Same(input.Normal, normal) && Same(normal, part.Material.Textures.ElementAtOrDefault(1))) continue;
             if (!contributors.Contains(original))
             {
                 // A patched full model can name a new texture without a record TXST.
-                // Associate it only when the full-texture input or the shape's complete
-                // atlas UV rectangle identifies exactly one original source.
+                // Associate it only when the input, a sole contributor, or the shape's
+                // complete atlas UV rectangle identifies exactly one original source.
                 string? inferred = !known && inputs.Count == 1 && contributors.Contains(source) ? source : null;
+                // Repeated/cropped tiles can all come from one source. A single matched
+                // full shape identifies that source even when the atlas UVs wrap.
+                if (inferred is null && inputs.Count == 1 && contributors.Count == 1) inferred = contributors.Single();
                 if (inferred is null && inputs.Count == 1 && part.UVs.Length > 0)
                 {
                     var min = part.UVs.Aggregate(Vector2.Min); var max = part.UVs.Aggregate(Vector2.Max);

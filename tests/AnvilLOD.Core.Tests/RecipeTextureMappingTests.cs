@@ -181,4 +181,53 @@ public class RecipeTextureMappingTests
         TextureFixture.Put(f.Data, Red, TextureFixture.Solid(200, 20, 25)); File.SetLastWriteTimeUtc(file, stamp);
         Assert.Equal(size, new FileInfo(file).Length); Assert.NotEqual(before, Mapper(f, rules).InputFingerprint([]));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SingleSourceAtlasVariantsPreserveWrappingUvs(bool copied)
+    {
+        using var f = new TextureFixture();
+        TextureFixture.Put(f.Data, Blue, TextureFixture.Solid(10, 20, 240));
+        var rules = Recipes(TextureFixture.Tile(Red, Atlas, 0), TextureFixture.Tile(Red, Atlas, 1));
+        if (copied) rules.Entries = [new("copy", 1, Copy: new(Red, Atlas))];
+        var part = TextureFixture.Card("shape", Atlas);
+        part = RecipeTextureMapper.Copy(part, part.Material, part.UVs.Select(uv => uv * 2 - new Vector2(.2f)).ToArray());
+        // The patched full model names a different source; the atlas still has just one contributor.
+        var mapper = Mapper(f, rules);
+        var mapped = mapper.Map(part, [Input(Green, Blue)])!;
+        Assert.Equal(part.UVs, mapped.UVs);
+        Assert.Same(part.Positions, mapped.Positions);
+        var image = Image(Path.Combine(f.Root, "lod"), mapped.Material.Textures[0]);
+        for (int i = 0; i < image.Pixels.Length; i += 4) Assert.True(image.Pixels[i + 2] > 220);
+        mapper.ThrowIfFailed();
+    }
+
+    [Fact]
+    public void FullShapeAlreadyUsingAtlasDoesNotSubstituteAtlasIntoItsOwnTiles()
+    {
+        using var f = new TextureFixture();
+        TextureFixture.Put(f.Data, Atlas, TextureFixture.Solid(10, 20, 240));
+        string normal = TextureRecipeRenderer.Normal(Atlas);
+        TextureFixture.Put(f.Data, normal, TextureFixture.Solid(128, 128, 255));
+        var mapper = Mapper(f, Recipes(TextureFixture.Tile(Red, Atlas, 0), TextureFixture.Tile(Green, Atlas, 1)));
+        var part = TextureFixture.Card("platform", Atlas);
+        part = RecipeTextureMapper.Copy(part, part.Material with { Textures = [Atlas, normal] },
+            part.UVs.Select(uv => uv with { X = uv.X * .5f }).ToArray());
+        Assert.Same(part, mapper.Map(part, [new("platform", Atlas, normal, Atlas, normal, false)]));
+        Assert.Empty(mapper.Report);
+        Assert.False(Directory.Exists(Path.Combine(f.Root, "lod")));
+    }
+
+    [Fact]
+    public void WrappingUnknownAlternateCannotChooseBetweenDifferentAtlasSources()
+    {
+        using var f = new TextureFixture();
+        TextureFixture.Put(f.Data, Blue, TextureFixture.Solid(10, 20, 240));
+        var mapper = Mapper(f, Recipes(TextureFixture.Tile(Red, Atlas, 0), TextureFixture.Tile(Green, Atlas, 1)));
+        var part = TextureFixture.Card("shape", Atlas);
+        part = RecipeTextureMapper.Copy(part, part.Material, part.UVs.Select(uv => uv * 2).ToArray());
+        Assert.Throws<InvalidDataException>(() => mapper.Map(part, [Input("textures\\patched.dds", Blue)]));
+        Assert.Contains(mapper.Report, r => r.Status == "Failed" && r.Detail.Contains("cannot be associated"));
+    }
 }

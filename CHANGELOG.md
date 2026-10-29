@@ -5,6 +5,16 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.6] - 2026-10-29
+
+- Fixed full-model texture matching for atlases made from one repeated source, including
+  meshes whose UVs wrap beyond the atlas rectangle. Record texture variants now rebuild
+  those atlases while preserving the LOD mesh's UVs.
+- Full shapes already using an atlas with identical texture slots no longer substitute
+  that atlas into its own source tiles or cause cyclic normal-map recipe failures.
+- Multiple-source layouts still require an unambiguous source tile, and missing required
+  replacement textures remain errors. Recipe-mapped blocks rebuild after this update.
+
 ## [0.4.0-alpha.5] - 2026-10-29
 
 - Grass LOD atlases use only types with instances in the selected cache cells, including
