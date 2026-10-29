@@ -4,7 +4,6 @@
     <RootNamespace>AnvilLOD.Textures</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="../../.tools/texture-compute/libpengulod_compute.so" Link="libpengulod_compute.so" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('../../.tools/texture-compute/libpengulod_compute.so')" />
     <PackageReference Include="BCnEncoder.Net" />
     <ProjectReference Include="..\AnvilLOD.Core\AnvilLOD.Core.csproj" />
   </ItemGroup>

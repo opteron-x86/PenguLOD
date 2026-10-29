@@ -17,8 +17,4 @@
     <AvaloniaResource Include="../../assets/pengulod-256.png" Link="Assets/pengulod.png" />
     <InternalsVisibleTo Include="AnvilLOD.Desktop.Tests" />
   </ItemGroup>
-  <ItemGroup Condition="Exists('../../.tools/fasterngio-runtime/FasterNGIO')">
-    <Content Include="../../.tools/fasterngio-runtime/**/*" Link="backends/fasterngio/%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-  </ItemGroup>
 </Project>

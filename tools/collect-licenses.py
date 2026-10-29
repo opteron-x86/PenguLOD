@@ -13,7 +13,8 @@ licenses = out / 'licenses'
 licenses.mkdir(exist_ok=True)
 for file in (root / 'assets/licenses').glob('*'):
     shutil.copyfile(file, licenses / file.name)
-for runtime in (packages / 'microsoft.netcore.app.runtime.linux-x64').glob('*'):
+rid = os.environ.get('PENGULOD_RUNTIME', 'linux-x64')
+for runtime in (packages / ('microsoft.netcore.app.runtime.' + rid)).glob('*'):
     if (runtime / 'LICENSE.TXT').exists():
         shutil.copyfile(runtime / 'LICENSE.TXT', licenses / ('dotnet-' + runtime.name + '-LICENSE.txt'))
 sdk_notices = pathlib.Path(os.environ.get('ANVILLOD_SDK_DIR', str(root / '.tools/dotnet'))) / 'ThirdPartyNotices.txt'
@@ -41,4 +42,4 @@ for name, item in sorted(assets['libraries'].items()):
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file, dest)
     lines.append('')
-(out / 'THIRD-PARTY-PACKAGES.txt').write_text('\n'.join(lines))
+(out / 'THIRD-PARTY-PACKAGES.txt').write_text('\n'.join(lines), encoding='utf-8')

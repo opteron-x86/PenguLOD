@@ -128,7 +128,6 @@ public sealed class GenerationPipelineTests
     [Fact]
     public void FailedTexturesResumeTheSameCombinedJobWithoutRebuildingGrass()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new GrassFixture();
         var recipe = File.ReadAllText(fixture.Textures.RuleFile);
         File.WriteAllText(fixture.Textures.RuleFile, TextureFixture.Tile(@"textures\missing.dds", @"textures\lod\atlas.dds", 0));

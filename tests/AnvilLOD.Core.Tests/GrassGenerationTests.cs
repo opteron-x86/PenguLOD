@@ -37,7 +37,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void PublishesFreshCacheKeepsPreviousAndDoesNotMixOldInstalledCells()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         var first = GrassGeneration.Run(f.Request);
         Assert.Equal(2, first.Files); Assert.Equal(1, first.Instances); Assert.Equal(1, first.EmptyFiles);
@@ -65,7 +64,6 @@ public sealed class GrassGenerationTests
     [InlineData("corrupt")]
     public void FailureOrInvalidCachePreservesPreviousOutput(string behavior)
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         var before = File.ReadAllText(Path.Combine(f.Output, GrassGenerationManifest.FileName));
@@ -78,7 +76,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void CancellationStopsChildProcessAndLeavesPreviousCacheIntact()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request); f.SetBehavior("wait");
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -93,7 +90,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void RejectsUnownedOrModifiedOutputAndPreviewOverFullCache()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         Directory.CreateDirectory(f.Output); File.WriteAllText(Path.Combine(f.Output, "mine.txt"), "keep");
         Assert.ThrowsAny<Exception>(() => GrassGeneration.Run(f.Request));
@@ -110,7 +106,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void PreviewCannotBeUsedForLodAndGrassOutputCannotBeClearedByLodOrTextures()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         Assert.Throws<ArgumentException>(() => ScanPipeline.Run(new ScanRequest(f.Textures.Game, new ScanOptions(), OutputFolder: f.Output, Generate: true, CleanOutput: true)));
@@ -124,7 +119,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void ChangedLoadOrderIsRejectedBeforeCleaningLodOutput()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         var manifest = GrassGenerationManifest.Read(f.Output, true)!;
@@ -143,7 +137,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void Grass_verification_reports_progress_and_cancels_before_scan_or_output_changes()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         var manifest = GrassGenerationManifest.Read(f.Output, true)!;
@@ -167,7 +160,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void VirtualInputRespectsPriorityCasingIniSelectionAndDoesNotCopyAssets()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         var instance = Path.Combine(f.Root, "Fluorine");
         var profile = Path.Combine(instance, "profiles", "Selected"); Directory.CreateDirectory(profile);

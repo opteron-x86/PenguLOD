@@ -1,0 +1,9 @@
+<Project>
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../GrassBackendFixture/GrassBackendFixture.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="CopyGrassFixture" AfterTargets="Build">
+    <ItemGroup><GrassFixtureFiles Include="$(MSBuildThisFileDirectory)../GrassBackendFixture/bin/$(Configuration)/$(TargetFramework)/*" /></ItemGroup>
+    <Copy SourceFiles="@(GrassFixtureFiles)" DestinationFolder="$(OutDir)grass-fixture" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

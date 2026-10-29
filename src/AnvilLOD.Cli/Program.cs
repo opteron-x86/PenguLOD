@@ -13,7 +13,7 @@ public static class Program
 {
     private static CancellationToken Cancellation;
     private const string Usage = """
-        PenguLOD — native Linux LOD generator for Skyrim SE/AE
+        PenguLOD — native Linux and Windows LOD generator for Skyrim SE/AE
 
         Usage:
           PenguLOD pipeline --settings <preset.json> [--stages grass,textures,terrain,lod]

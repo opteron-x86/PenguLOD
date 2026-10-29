@@ -40,7 +40,7 @@ public sealed class LinuxPathTests : IDisposable
     public void Case_insensitive_lookup_keeps_the_actual_host_path()
     {
         var actual = Write("mesh", "MixedCaseMod", "Meshes", "Landscape", "Rock.NIF");
-        Assert.Equal(actual, GamePath.ResolveExisting(_root, @"mixedcasemod\meshes\landscape\rock.nif"));
+        Assert.Equal(actual, GamePath.ResolveExisting(_root, @"mixedcasemod\meshes\landscape\rock.nif"), ignoreCase: OperatingSystem.IsWindows());
         Assert.Null(GamePath.ResolveExisting(_root, @"MixedCaseMod\Meshes\missing.nif"));
         Assert.Throws<ArgumentException>(() => GamePath.ResolveExisting(_root, @"..\outside.nif"));
     }

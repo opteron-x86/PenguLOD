@@ -1,0 +1,12 @@
+--- a/apps/FasterNGIO/CMakeLists.txt
++++ b/apps/FasterNGIO/CMakeLists.txt
+@@ -22,6 +22,9 @@
+ option(FASTERNGIO_HEADLESS "CLI backend for an external launcher" OFF)
+ if(FASTERNGIO_HEADLESS)
+ add_executable(FasterNGIO Main.cpp)
++if(WIN32)
++    target_sources(FasterNGIO PRIVATE FasterNGIO.app.manifest)
++endif()
+ else()
+ add_executable(FasterNGIO
+ 	Main.cpp

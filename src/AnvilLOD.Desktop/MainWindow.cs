@@ -74,7 +74,7 @@ public sealed partial class MainWindow : Window
             catch { loadIssue = $"Could not load settings: {e.Message} Automatic saving is disabled until you import a valid preset."; _saveAllowed = false; }
             _settings = new();
         }
-        Title = $"{ProductInfo.Name} · Linux";
+        Title = $"{ProductInfo.Name} · {ProductInfo.Platform}";
         Width = 1240; Height = 900; MinWidth = 960; MinHeight = 680;
         Background = Brush.Parse("#121720");
         FontFamily = new FontFamily("avares://Avalonia.Fonts.Inter/Assets#Inter");
@@ -199,7 +199,7 @@ public sealed partial class MainWindow : Window
         mo2.Bind(IsVisibleProperty, new Binding(nameof(DesktopSettings.SourceMode)) { Source = _settings, Converter = new FuncValueConverter<string, bool>(v => v == "Mod Organizer 2") });
         data.Bind(IsVisibleProperty, new Binding(nameof(DesktopSettings.SourceMode)) { Source = _settings, Converter = new FuncValueConverter<string, bool>(v => v != "Mod Organizer 2") });
         ((StackPanel)advanced.Content!).Children.Insert(1, PathField("Game folder override (MO2)", nameof(DesktopSettings.GameFolder), hint: "Use this if the gamePath saved in MO2 points to an old location."));
-        var s = Stack(16, Heading("Build a distant world", "Generate object, tree and grass LOD directly from your Linux installation."),
+        var s = Stack(16, Heading("Build a distant world", "Generate object, tree and grass LOD directly from your game installation."),
             Card("01  SOURCE", Stack(12, Row(source, Choice("Game edition", nameof(DesktopSettings.Edition), ["SE / AE", "VR"])), mo2, data, advanced)),
             Card("02  BUILD", Stack(12,
                 PathField("Output mod folder", nameof(DesktopSettings.OutputFolder), hint: "A separate, empty folder or an existing AnvilLOD output. Install the result with your mod manager."),
@@ -315,7 +315,7 @@ public sealed partial class MainWindow : Window
         Card("ABOUT PENGULOD", Stack(10, Text(ProductInfo.Description),
             Text("Native Avalonia desktop • managed .NET engine • GPL-3.0-only"),
             Text("Built on CageTV’s AnvilLOD. Maintained by opteron-x86 and PenguLOD contributors.", true),
-            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. Install the matching AnvilLOD game plugin separately. This alpha includes native terrain, tree reduction, seasonal output and object atlases; compare new output in game before replacing a known-good setup.", true),
+            Text("The generator runs natively on Linux and Windows. Install the AnvilLOD game plugin matching your Skyrim runtime separately. On Linux, Skyrim and its SKSE DLL run under Proton/Wine. This alpha includes native terrain, tree reduction, seasonal output and object atlases; compare new output in game before replacing a known-good setup.", true),
             Button("Open project on GitHub", () => Open(ProductInfo.Repository))))));
 
     private Border ToolResults(string page)

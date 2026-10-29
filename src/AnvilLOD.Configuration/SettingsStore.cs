@@ -13,7 +13,8 @@ public sealed class SettingsStore
     private static string ConfigBase => Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } path
         ? path : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
     private static string CacheBase => Environment.GetEnvironmentVariable("XDG_CACHE_HOME") is { Length: > 0 } path
-        ? path : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache");
+        ? path : OperatingSystem.IsWindows() ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache");
     public static string ConfigRoot => Path.Combine(ConfigBase, "PenguLOD");
     public static string CacheRoot => Path.Combine(CacheBase, "PenguLOD");
 
