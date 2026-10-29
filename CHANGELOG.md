@@ -12,6 +12,8 @@ Pre-release versions are marked alpha or beta until the supported workflows have
   those atlases while preserving the LOD mesh's UVs.
 - Full shapes already using an atlas with identical texture slots no longer substitute
   that atlas into its own source tiles or cause cyclic normal-map recipe failures.
+- Duplicate full-model shape names can be resolved by a unique matching LOD material.
+  Ambiguous record overrides and distinct contributors to merged shapes remain protected.
 - Multiple-source layouts still require an unambiguous source tile, and missing required
   replacement textures remain errors. Recipe-mapped blocks rebuild after this update.
 
