@@ -39,9 +39,11 @@ cp LICENSE.txt VERSION UPSTREAM_VERSION "$PENGULOD_PACKAGE_DIR"/
 cp assets/pengulod-256.png "$PENGULOD_PACKAGE_DIR"/pengulod.png
 cp tools/run-pengulod.sh tools/run-anvillod.sh tools/install-desktop.sh tools/repair-pglite-paths.py "$PENGULOD_PACKAGE_DIR"/
 cp packaging/README-LINUX.md "$PENGULOD_PACKAGE_DIR"/README-LINUX.md
-cp docs/PROVENANCE.md "$PENGULOD_PACKAGE_DIR"/PROVENANCE.md
 mkdir -p "$PENGULOD_PACKAGE_DIR/docs"
-cp docs/*.md "$PENGULOD_PACKAGE_DIR/docs/"
+# Ship user documentation; contributor and release-maintenance guides stay in source.
+for guide in USER-GUIDE GRASS TEXTURES TERRAIN TREES MATERIALS SEASONS ATLASES PIPELINE CLI DIAGNOSTICS TROUBLESHOOTING COMPUTE PACKAGING PROVENANCE ROADMAP; do
+    cp "docs/$guide.md" "$PENGULOD_PACKAGE_DIR/docs/"
+done
 mkdir -p "$PENGULOD_PACKAGE_DIR"/backends/fasterngio
 cp -a .tools/fasterngio-runtime/. "$PENGULOD_PACKAGE_DIR"/backends/fasterngio/
 chmod +x "$PENGULOD_PACKAGE_DIR"/run-pengulod.sh "$PENGULOD_PACKAGE_DIR"/run-anvillod.sh "$PENGULOD_PACKAGE_DIR"/install-desktop.sh

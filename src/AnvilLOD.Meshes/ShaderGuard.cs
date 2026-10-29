@@ -24,9 +24,8 @@ public static class ShaderGuard
     public const string FlatNormal = @"textures\default_n.dds";
 
     /// <summary>
-    /// The texture slots of a baked object-LOD shape. A shape with a diffuse texture and no normal map (Water for ENB's creek water, a mod's
-    /// effect-like plane) gets the vanilla flat normal: the standard LOD shader reads the normal slot, and a null one is a null texture in
-    /// the lighting shader's material setup, which crashed the game while drawing such a shape (user report, 2026-10-15).
+    /// Supplies a flat normal for baked object-LOD shapes with a diffuse map but no normal map.
+    /// The standard LOD shader requires a non-null normal texture during material setup.
     /// </summary>
     public static string[] BakedSlots(IReadOnlyList<string> textures)
     {

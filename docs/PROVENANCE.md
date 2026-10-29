@@ -1,40 +1,46 @@
-# Project provenance and compatibility
+# Dependencies, credits and compatibility
 
-PenguLOD is a renamed fork of [CageTV/AnvilLOD](https://github.com/CageTV/AnvilLOD),
-not a clean-room rewrite. Upstream history and copyright notices are retained.
+PenguLOD is based on [AnvilLOD by CageTV](https://github.com/CageTV/AnvilLOD) and retains
+its copyright notices and GPL-3.0-only license. The application version is recorded in
+`VERSION`; the integrated AnvilLOD runtime-plugin version is recorded in `UPSTREAM_VERSION`.
 
-| Component | Baseline |
-| --- | --- |
-| Initial Linux port base | AnvilLOD 0.2.68, `84531ba648ed588835776786c3fe528457861e37` |
-| Native Linux baseline commit | `90d2e30` |
-| Integrated upstream release | AnvilLOD 0.2.70, `e10cb46219727d819a298b2c4a0c23e6f6228d20` |
-| PenguLOD application version | Root `VERSION`; current `0.2.0-alpha.2` |
-| AnvilLOD game-plugin version | Root `UPSTREAM_VERSION`; currently `0.2.70` |
-| FasterNGIO | `5a1bff6ad3e44b5b9c4b5acdd0663ae20860ca40` |
+## Generator dependencies
 
-The repository’s `origin` should be `git@github.com:opteron-x86/PenguLOD.git`, and
-`upstream` should be `https://github.com/CageTV/AnvilLOD.git`. Upstream changes are
-merged on a branch, tested and reviewed before reaching `main`.
+| Component | Use | Distribution |
+| --- | --- | --- |
+| .NET and Avalonia | Managed runtime, desktop UI and rendering | Included in Linux packages |
+| Mutagen and texture libraries | Plugin/archive access and texture processing | Included; versions and notices accompany each package |
+| [FasterNGIO](https://github.com/panthuncia/FasterNGIO) | Offline CPU grass generation | Included as a separate native executable, with corresponding patched source and licenses |
+| Vulkan texture helper | Optional BC7 encoding | Included; requires a host Vulkan driver |
+| Game/mod assets and DynDOLOD resources | Source meshes, textures and generation recipes | Supplied by the user |
 
-PenguLOD’s executables, menu entry and default configuration directory have their own names.
-C# namespaces/project directories and game-facing identifiers remain `AnvilLOD` to reduce
-merge churn and preserve runtime compatibility. This includes plugin names, SKSE data,
-texture subdirectories, output ownership markers and manifests. The inherited Windows WPF
-application and PowerShell build scripts remain in source; they are outside PenguLOD’s Linux release pipeline.
+FasterNGIO is pinned to `5a1bff6ad3e44b5b9c4b5acdd0663ae20860ca40`. Checksums,
+dependency pins and maintained patches are under `tools/fasterngio` in the source
+checkout. Linux packages include these changes and dependency sources in
+`backends/fasterngio/FasterNGIO-source.tar.gz`.
 
-The initial Linux release does not redistribute the SKSE DLL. Install the upstream AnvilLOD
-plugin matching your Skyrim runtime separately when using dynamic/runtime features.
-Do not use PenguLOD’s application version to select that DLL.
+`THIRD-PARTY-PACKAGES.txt`, published `.deps.json` files and packaged license notices
+identify managed dependencies and versions. Native runtime notices accompany the backend.
+Generated output can contain assets belonging to installed mods; those assets are not
+licensed by this repository. Game assets and generated mod output are not distributed.
 
-FasterNGIO is built from checksum-verified archives with the headless, TESWorld pin,
-scheduler-progress and finite-blades patches under `tools/fasterngio/`. Its submodules,
-corresponding source, patches and runtime dependency notices are included in the Linux package.
-NuGet package versions are recorded in the published `.deps.json` files and
-`THIRD-PARTY-PACKAGES.txt`. No Skyrim, mod-list or generated game assets belong in this repository.
+## Game runtime
 
-AppImage packaging uses [appimagetool 1.9.1](https://github.com/AppImage/appimagetool/releases/tag/1.9.1),
-verified against SHA-256 `ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0`.
+Dynamic LOD and runtime quality controls require the separate AnvilLOD SKSE plugin
+matching the Skyrim runtime. The integrated upstream version is **0.2.70**, available
+from [upstream releases](https://github.com/CageTV/AnvilLOD/releases/tag/v0.2.70).
+The Windows DLL runs inside Skyrim under Proton/Wine and is not in the Linux package.
+PenguLOD's application version does not select the game-plugin DLL.
+
+Game-facing identifiers such as `AnvilLOD.esp`, `AnvilLOD.esm`, runtime data paths,
+ownership markers and manifests retain their names for compatibility. Source namespaces
+and project names also remain `AnvilLOD`. The inherited WPF application and PowerShell
+scripts are outside the supported Linux release pipeline.
+
+## AppImage components
+
+Packaging uses [appimagetool 1.9.1](https://github.com/AppImage/appimagetool/releases/tag/1.9.1),
+verified with SHA-256 `ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0`.
 Its embedded [type2 runtime at caf24f9](https://github.com/AppImage/type2-runtime/tree/caf24f9)
-is reused without downloading another runtime. The runtime license and dependency notices
-are retained under `assets/licenses/AppImage-runtime-LICENSE.txt` and in binary packages.
-The Vulkan helper is PenguLOD source; its compiler and the host Vulkan driver are not bundled.
+is reused. Runtime license notices accompany binary and source packages. Host graphics
+and Vulkan drivers are supplied by the Linux distribution.

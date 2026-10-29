@@ -1,8 +1,8 @@
-# Desktop and CLI parity
+# Command-line usage
 
 The CLI and desktop share the preset schema, request validation and persistent pipeline.
-The shared configuration assembly has no Avalonia dependency. Export a preset from
-Preferences, or use **Export pipeline request** on Pipeline. Both formats retain the full
+Export a preset from Preferences, or use **Export pipeline request** on Pipeline.
+Both formats retain the full
 grass, texture/material, terrain/seasons, tree budget, atlas, runtime and compute settings.
 
 ```sh
@@ -34,6 +34,4 @@ Existing flag-based `generate` also uses transactional publication and checkpoin
 available in `--help`. Exit status is 0 for success, 2 for argument/generation failure,
 and 130 for cancellation. `diagnose` returns 1 for blocking findings.
 
-CLI tests export desktop presets, generate textures, reuse verified output, inspect saved
-jobs, and reject undefined stages/conflicting request formats. Unrelated reports beside
-`plugins.txt` no longer invalidate the source fingerprint.
+Use `PenguLOD --help` for the complete command reference.

@@ -706,8 +706,8 @@ public static class ScanPipeline
             }
             if (req.Scan.ParentCopies && parentCopies is { Count: > 0 })
             {
-                // A skinned model (a cloth banner or flag) drawn from a copy has no skeleton to take its bones from, so its vertices explode into
-                // giant sheets across the sky (Whiterun's tower banners, 2026-10-13). The plugin refuses them too; leaving them out here keeps the list clean and says so.
+                // Copied skinned models have no skeleton and produce invalid vertex transforms.
+                // Exclude them here as well as in the runtime plugin, and report the missing coverage.
                 var skinned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var model in parentCopies.Select(c => GamePath.Normalize(c.Model)).Where(m => !m.Contains("\\anvillod\\", StringComparison.Ordinal) && !m.StartsWith("anvillod\\", StringComparison.Ordinal)).Distinct(StringComparer.OrdinalIgnoreCase))
                 {

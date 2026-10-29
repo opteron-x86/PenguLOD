@@ -6,13 +6,28 @@ import shutil
 import subprocess
 import tarfile
 
+# Exclude local tooling and assistant instructions from corresponding-source archives.
+# Source code, build configuration, patches and license notices remain included.
+excluded_dirs = {'.git', 'build', '.anvillod-headless', '.codex', '.claude', '.agents', '__pycache__'}
+excluded_files = {'agents.md', 'agents.override.md', 'claude.md', 'claude.local.md', 'gemini.md'}
+
+
+def distributable(path):
+    return path.is_file() and path.name.casefold() not in excluded_files and not any(
+        part in excluded_dirs for part in path.parts)
+
+
 root = pathlib.Path(__file__).resolve().parents[2]
 runtime = root / '.tools/fasterngio-runtime'
 libs = runtime / 'lib'
+library_lines = subprocess.check_output(
+    ['ldd', str(root / '.tools/fasterngio-build/bin/FasterNGIO')], text=True).splitlines()
+if not (root / '.tools/FasterNGIO/CMakeLists.txt').is_file():
+    raise FileNotFoundError('Build FasterNGIO before packaging its runtime and source.')
 if libs.exists():
     shutil.rmtree(libs)
 libs.mkdir(exist_ok=True)
-for line in subprocess.check_output(['ldd', str(root / '.tools/fasterngio-build/bin/FasterNGIO')], text=True).splitlines():
+for line in library_lines:
     match = re.search(r'(\S+) => (/\S+)', line)
     if not match:
         continue
@@ -24,16 +39,16 @@ for line in subprocess.check_output(['ldd', str(root / '.tools/fasterngio-build/
         shutil.copy2(path, libs / name)
 with tarfile.open(runtime / 'FasterNGIO-source.tar.gz', 'w:gz') as tar:
     for item in (root / '.tools/FasterNGIO').rglob('*'):
-        if item.is_file() and not any(p in {'.git', 'build', '.anvillod-headless'} for p in item.parts):
+        if distributable(item):
             tar.add(item, 'FasterNGIO/' + str(item.relative_to(root / '.tools/FasterNGIO')))
     for item in (root / 'tools/fasterngio').rglob('*'):
-        if item.is_file():
+        if distributable(item):
             tar.add(item, 'anvillod-build/tools/fasterngio/' + str(item.relative_to(root / 'tools/fasterngio')))
     tar.add(root / 'tools/build-fasterngio.sh', 'anvillod-build/tools/build-fasterngio.sh')
 (runtime / 'backend.json').write_text(json.dumps({
     'name': 'FasterNGIO', 'revision': '5a1bff6ad3e44b5b9c4b5acdd0663ae20860ca40',
     'gpu': False, 'source': 'https://github.com/panthuncia/FasterNGIO',
-    'license': 'GPL-3.0', 'build': 'AnvilLOD native headless CPU BVH',
+    'license': 'GPL-3.0', 'build': 'PenguLOD native headless CPU BVH',
     'patches': ['headless', 'tesworld-pin', 'scheduler-progress', 'finite-blades'],
 }, indent=2) + '\n')
 licenses = runtime / 'licenses'

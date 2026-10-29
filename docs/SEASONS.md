@@ -27,8 +27,5 @@ Runtime-generated winter swaps must first be saved by Seasons of Skyrim as INIs 
 available to the selected profile. PenguLOD does not execute SKSE or recreate the runtime's
 automatic snow rules. Dynamic shader snow remains a runtime effect.
 
-`TerrainFixture(seasons: true)` is the dedicated synthetic seasonal test profile. It
-contains landscape and tree replacements with visibly different colours. Tests generate
-both default and seasonal output, inspect NIF texture paths, check BTT/LST/atlas coexistence,
-exercise native 3D replacements, and verify failure/cleanup behavior. No game assets are
-included. Follow [the transition checks](DIAGNOSTICS.md) to validate a real seasonal profile.
+Follow [the transition checks](DIAGNOSTICS.md#repeatable-checks) in each configured season.
+Compare loaded-cell textures and trees with the corresponding distant output.

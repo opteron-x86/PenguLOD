@@ -30,7 +30,6 @@ Build requirements: a C compiler, Vulkan headers/loader and `glslangValidator`. 
 application works without the optional helper or without a Vulkan driver. Runtime Vulkan
 drivers are supplied by the distribution, not bundled in the package.
 
-Local validation used Mesa llvmpipe because the build session exposes no `/dev/dri` hardware
-device. The decoded 512×512 benchmark matched CPU output (MSE 0). That is a functional
-compute test, not a hardware acceleration claim. CI repeats the software-driver check;
-hardware speed and driver stability still require testing on the user's system.
+CI checks encoding through Mesa's software Vulkan driver. Physical GPU performance and
+driver stability require separate measurements; use the benchmark on the target system
+before selecting acceleration for production jobs.

@@ -5,12 +5,10 @@ using AnvilLOD.Core.World;
 namespace AnvilLOD.Plugins;
 
 /// <summary>
-/// Grid objects the engine itself can animate. A model the SKSE plugin attaches to the scene is never updated by the engine (its
-/// controllers keep start and last time at -FLT_MAX), so waterfall flow, windmill blades and water wheels stand still. DynDOLOD makes them
-/// real references: a STAT base for the effect LOD meshes (waterfall bodies and skirts), a MSTT base for models that animate through a
-/// controller manager (fans, rotors, wheels), and a persistent, full-LOD reference per placement (<c>DynDOLOD.esm</c> / <c>.esp</c>, measured in
-/// docs\dyndolod-plugin-inventory.md). This picks the grid objects to turn into the same thing in <c>AnvilLOD.esp</c>; the SKSE plugin then
-/// leaves them out of <c>AnvilLOD.dyn</c>.
+/// Selects grid objects to emit as persistent, full-LOD references in <c>AnvilLOD.esp</c>,
+/// allowing the engine to animate them. Effect LOD meshes use STAT bases; models with
+/// controller-manager sequences use MSTT bases. The SKSE plugin excludes these references
+/// from <c>AnvilLOD.dyn</c> to avoid drawing duplicate clones.
 /// </summary>
 public static class NativeGridObjects
 {

@@ -13,7 +13,7 @@
  				continue;
  			}
 +			// x/y/z/scale are half floats. Out-of-range terrain heights can encode
-+			// infinity (observed in ksws07World), poisoning both the blade and the
++			// infinity, invalidating both the blade and the
 +			// block's bounds. Omit only these unrepresentable blades, after all RNG
 +			// draws and rejection; retain every valid blade's original bytes/order.
 +			if (std::any_of(blade.words.begin(), blade.words.begin() + 4,
