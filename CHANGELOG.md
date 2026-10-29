@@ -5,6 +5,16 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.5] - 2026-10-29
+
+- Grass LOD atlases use only types with instances in the selected cache cells, including
+  matching seasonal cells when seasons are enabled. Unused grass-library records can no
+  longer fail atlas generation because their textures are absent.
+- Atlas preparation reads cache type headers and checks payload bounds without decoding
+  every blade. Used models absent from GRAS records still receive model-based billboards.
+- Grass atlas preparation now runs before occlusion generation, so required grass asset
+  failures are reported before the long occlusion pass.
+
 ## [0.4.0-alpha.4] - 2026-10-29
 
 - Fixed vanilla and legacy grass meshes using Bethesda's `\bNOR` normal-map marker.

@@ -43,6 +43,11 @@ After a full successful run, **Use generated grass cache for LOD** lets generati
 the new cache directly, suppressing older installed grass files. Changed plugin order,
 grass models, landscape, placement settings or generated files require regeneration.
 
+Grass LOD packs billboards for types that have instances in the selected cache cells.
+When seasons are enabled, matching seasonal cells contribute their grass types too.
+Unused grass-library records do not require textures. Missing textures needed by a used
+model still stop generation; atlas preparation reports these before the occlusion pass.
+
 ## Progress and validation
 
 Logs report preparation, cells processed, files written and elapsed time. The backend
