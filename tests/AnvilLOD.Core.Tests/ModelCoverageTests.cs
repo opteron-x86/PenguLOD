@@ -86,6 +86,20 @@ public class ModelCoverageTests
     }
 
     [Theory]
+    [InlineData("bhkCollisionObject", false)]
+    [InlineData("bhkRigidBody", false)]
+    [InlineData("NiAlphaProperty", false)]
+    [InlineData("NiParticles", true)]
+    public void NonvisualChildrenAreIgnoredButUnsupportedVisibleGeometryIsReported(string type, bool incomplete)
+    {
+        var bytes = ModelNifFixture.WithExtraChild(ModelNifFixture.Create(ModelNifFixture.Geometry.Packed), type);
+        var mesh = NifGeometryReader.Read("child", bytes);
+        Assert.Equal(incomplete, mesh.HasIncompleteGeometry);
+        Assert.Single(mesh.Parts);
+        if (incomplete) Assert.Throws<NotSupportedException>(() => BillboardRenderer.Render(mesh, _ => null));
+    }
+
+    [Theory]
     [InlineData(ModelNifFixture.Geometry.Triangles)]
     [InlineData(ModelNifFixture.Geometry.Partition)]
     public void ExternalSkeletonOrIncompleteWeightsHaveExplicitDiagnostics(ModelNifFixture.Geometry geometry)

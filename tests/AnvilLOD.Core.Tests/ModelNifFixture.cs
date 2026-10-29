@@ -173,4 +173,16 @@ public static class ModelNifFixture
         w.Set(alternate, b => b.Write(copy));
         return w.ToBytes(0);
     }
+
+    internal static byte[] WithExtraChild(byte[] bytes, string type)
+    {
+        var nif = NifFile.Read(bytes); var w = new NifWriter();
+        foreach (string s in nif.Strings) w.String(s);
+        foreach (var block in nif.Blocks) w.Reserve(block.Type);
+        foreach (var block in nif.Blocks) w.Set(block.Index, b => b.Write(bytes, block.Offset, block.Size));
+        int child = w.Reserve(type);
+        w.Set(child, b => { NifWriter.WriteObjectNet(b, -1); NifWriter.WriteAvObject(b, 14, Vector3.Zero, 1); });
+        w.Set(0, b => { NifWriter.WriteObjectNet(b, -1); NifWriter.WriteAvObject(b, 14, Vector3.Zero, 1); b.Write(4u); b.Write(1); b.Write(2); b.Write(3); b.Write(child); b.Write(0u); });
+        return w.ToBytes(0);
+    }
 }

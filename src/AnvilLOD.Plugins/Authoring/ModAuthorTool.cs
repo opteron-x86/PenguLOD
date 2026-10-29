@@ -407,7 +407,7 @@ public static class ModAuthorTool
         try
         {
             var m = NifGeometryReader.Read(path, bytes);
-            if (m.Parts.Count > 0) return (m, null);
+            if (m.Parts.Count > 0 && !m.HasIncompleteGeometry) return (m, null);
             var why = m.Warnings.Count > 0 ? string.Join("; ", m.Warnings.Distinct().Take(3)) : $"no drawable shapes ({bytes.Length:N0} bytes, an empty or placeholder file?)";
             return (null, "Model unusable: " + why);
         }

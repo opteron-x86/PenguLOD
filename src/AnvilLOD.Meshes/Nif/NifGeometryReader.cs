@@ -168,6 +168,9 @@ public static partial class NifGeometryReader
             }
             else
             {
+                // Some shipped resources also list collision/properties as children. They do not draw.
+                if (block.Type.StartsWith("bhk", StringComparison.Ordinal) || block.Type.EndsWith("Property", StringComparison.Ordinal)
+                    || block.Type.EndsWith("ExtraData", StringComparison.Ordinal) || block.Type is "BSXFlags" or "NiCollisionObject" or "BSShaderTextureSet") return;
                 // Scene children are NiAVObjects. An unsupported hidden particle/effect is not visible geometry.
                 var r = nif.ReaderFor(block);
                 if ((ReadAvObject(nif, ref r).Flags & 1) == 0)
