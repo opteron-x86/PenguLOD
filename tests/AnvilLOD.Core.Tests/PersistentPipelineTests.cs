@@ -82,11 +82,22 @@ public sealed class PersistentPipelineTests : IDisposable
         Assert.Equal("Complete", next.Journal.Stages[1].Status);
     }
 
-    [Fact]
-    public void ConcurrentJobsCannotShareAnOutputEvenWithDifferentCaches()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConcurrentJobsRespectHostPathIdentityEvenWithDifferentCaches(bool changeCase)
     {
         using var job = Open();
-        Assert.Throws<IOException>(() => new PersistentPipeline(Path.Combine(_root, "other-cache"), [new("different", "Other", Output("grass"), [])]));
+        PipelineStagePlan[] stages = [new("different", "Other", Output(changeCase ? "GRASS" : "grass"), [])];
+        string cache = Path.Combine(_root, "other-cache");
+        if (OperatingSystem.IsWindows() || !changeCase)
+            Assert.Throws<IOException>(() => new PersistentPipeline(cache, stages));
+        else
+        {
+            // A case-sensitive host treats these as two separate output directories.
+            using var separate = new PersistentPipeline(cache, stages);
+            Assert.NotEqual(job.Folder, separate.Folder);
+        }
     }
 
     [Fact]

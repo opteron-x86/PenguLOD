@@ -18,6 +18,8 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 - Windows grass staging uses hard links with a cancellable copy fallback, avoiding
   a requirement for administrator rights or Developer Mode. Steam discovery also
   reads the default Windows Steam installation and its library manifests.
+- Output locks account for Windows path casing, preventing two jobs from targeting
+  the same directory through differently capitalized paths.
 - Windows desktop modlist testing and physical GPU validation remain open work.
 
 ## [0.4.0-alpha.1] - 2026-10-29
