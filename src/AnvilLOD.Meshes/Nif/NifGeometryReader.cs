@@ -30,6 +30,9 @@ public static partial class NifGeometryReader
     /// <summary>Prefix of the warning added to a mesh for every water-shader shape read as lit fake water.</summary>
     public const string WaterPlaneWarning = "WaterPlane:";
 
+    /// <summary>A complete effect cannot be represented by a static billboard; never render its remaining shapes alone.</summary>
+    public const string UnsupportedEffectWarning = "Unsupported render effect: ";
+
     /// <summary>Colour (RGBA, little-endian) of fake water: CS Water Mod's dark teal at ~69% opacity (0xAF33342A), made 10% more transparent and 10% darker so it sits closer to the water around it.</summary>
     public const uint FakeWaterColor = 0x9E2E2F26u;
 
@@ -176,6 +179,10 @@ public static partial class NifGeometryReader
                 if ((ReadAvObject(nif, ref r).Flags & 1) == 0)
                     warnings.Add($"Scene child {block.Index} ({block.Type}) is not supported; skipped.");
             }
+        }
+        catch (UnsupportedEffectException ex)
+        {
+            warnings.Add($"{UnsupportedEffectWarning}shape/node {block.Index} ({block.Type}): {ex.Message}");
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or IndexOutOfRangeException or OverflowException or NotSupportedException)
         {
@@ -530,7 +537,14 @@ public static partial class NifGeometryReader
         {
             var tr = nif.ReaderFor(nif.Blocks[texSetRef]);
             uint n = tr.U32();
-            for (int i = 0; i < n; i++) textures.Add(AnvilLOD.Core.World.GamePath.NormalizeTexture(tr.SizedString()));
+            for (int i = 0; i < n; i++)
+            {
+                string texture = tr.SizedString();
+                // Vanilla grass meshes also contain Bethesda's backspace + NOR marker.
+                // It means no usable normal-map file; use geometry normals, as for an empty slot.
+                // Recognize only this exact marker in the normal slot. All other paths stay validated.
+                textures.Add(i == 1 && texture == "\bNOR" ? "" : AnvilLOD.Core.World.GamePath.NormalizeTexture(texture));
+            }
         }
         if (textures.Count == 0 || string.IsNullOrWhiteSpace(textures[0])) return null;
         while (textures.Count < 9) textures.Add("");

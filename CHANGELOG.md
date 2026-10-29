@@ -5,6 +5,16 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.4] - 2026-10-29
+
+- Fixed vanilla and legacy grass meshes using Bethesda's `\bNOR` normal-map marker.
+  Native rendering uses geometry normals instead of treating the marker as a file path.
+  Other invalid texture paths remain errors.
+- Automatic tree billboard discovery reports and excludes whole trees with unsupported
+  animated, blended or view-dependent effect materials. Explicitly requested renders,
+  required grass/trunk/object resources and malformed geometry still fail safely.
+  No partial tree billboard is published.
+
 ## [0.4.0-alpha.3] - 2026-10-29
 
 - Added native triangle-strip reading, self-contained static skin poses, SSE skin

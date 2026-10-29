@@ -43,7 +43,15 @@ a source texture, UV transform, clamp mode, base-color tint and optional vertex 
 or alpha testing. Effect lighting influence controls whether the surface is lit.
 These materials are render-only and cannot be exported as ordinary object LOD shaders.
 Animated effect controllers, blending, palette mapping, falloff and view-dependent
-effects remain explicit failures. This is not full game-shader emulation.
+effects remain unsupported. Automatic tree billboard discovery excludes the entire
+tree when these effects are its only unsupported feature, reports the exclusion and
+marks its billboard-list entry `False`. No partial tree billboard is written. An explicit
+billboard rule or model filter still reports a failure, as do required grass, trunk and
+object renders. This is not full game-shader emulation.
+
+The Bethesda `\bNOR` marker in a NIF's normal-map slot is treated as an absent normal map;
+billboard rendering then uses the model's geometry normals. Other invalid texture paths
+remain errors, including that marker in a diffuse slot.
 
 Object render templates still need a valid TexGen viewport plane. Hybrid trunk rendering
 still needs the installed model's matching cards and crops. Geometry support does not

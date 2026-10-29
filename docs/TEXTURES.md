@@ -21,6 +21,9 @@ Existing TexGen output can supply textures for unsupported features underneath t
   texture replacements, inclusion rules and seasonal replacement records. Height and
   resolution controls use mesh bounds. [Material calibration](MATERIALS.md) controls
   source normal maps, lighting, brightness and supported PBR/AO baking.
+  Automatic discovery excludes whole trees whose animated, blended or view-dependent
+  effects cannot be rendered as static billboards. The texture report explains each
+  exclusion. Explicit billboard rules and model filters still require a supported render.
 - **Hybrid tree trunk textures** renders front/side diffuse and normal pairs from
   `_trunk.nif` resources under `DynDOLOD/Render/Billboards/` or
   `DynDOLOD/Render/Skyrim/Billboards/`. Matching installed hybrid meshes supply camera
