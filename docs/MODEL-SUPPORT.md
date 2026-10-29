@@ -69,7 +69,10 @@ LOD models. PenguLOD can consume those installed models through its existing tre
 selection; it does not need to launch TreeLODGen. Its crown pruning, bark reduction and
 hybrid authoring are useful references for further tree-generation work. An installed
 model still needs matching textures, a compatible mesh checksum and an acceptable triangle
-budget. TreeLODGen source code is GPL-3.0; any future code reuse must preserve its license
+budget. Its current application targets Windows Forms, and its
+[hybrid command](https://github.com/Cl3mus33/TreeLODGen/blob/dc4cc8ac7561bb6e015e3c57973f5137f1d75b06/Hybrid.cs)
+uses TexGen output and launches `LODGenx64.exe`. Native hybrid authoring therefore still
+needs an integrated implementation. TreeLODGen source code is GPL-3.0; any future code reuse must preserve its license
 and attribution. This implementation adds no TreeLODGen or nifly runtime dependency.
 
 The binary layouts follow the [NIF format definitions](https://github.com/niftools/nifxml)
