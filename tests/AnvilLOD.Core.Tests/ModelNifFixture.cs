@@ -12,7 +12,8 @@ public static class ModelNifFixture
 
     internal static byte[] Create(Geometry geometry, bool skinned = false, bool missingBone = false,
         float weight = .25f, bool badIndex = false, bool truncate = false, bool le = false, bool effect = false,
-        bool unsupportedEffect = false, bool modelNormals = false, ushort? alphaFlags = null, byte alphaThreshold = 128)
+        bool unsupportedEffect = false, bool modelNormals = false, ushort? alphaFlags = null, byte alphaThreshold = 128,
+        bool rotatedBones = false)
     {
         bool legacy = geometry is Geometry.Triangles or Geometry.Strips;
         bool partitioned = geometry is Geometry.Partition or Geometry.DynamicPartition;
@@ -145,6 +146,18 @@ public static class ModelNifFixture
         w.Set(textures, b => { b.Write(2u); NifWriter.WriteSizedString(b, @"textures\green.dds"); NifWriter.WriteSizedString(b, @"textures\green_n.dds"); });
         if (alpha >= 0) w.Set(alpha, b => { NifWriter.WriteObjectNet(b, -1); b.Write(alphaFlags!.Value); b.Write(alphaThreshold); });
         var bytes = w.ToBytes(root);
+        if (rotatedBones)
+        {
+            var blocks = NifFile.Read(bytes).Blocks;
+            for (int bone = 0; bone < 2; bone++)
+            {
+                int offset = blocks[bone == 0 ? bone0 : bone1].Offset;
+                float sign = bone == 0 ? 1 : -1;
+                float[] rotation = [0, -sign, 0, sign, 0, 0, 0, 0, 1];
+                for (int j = 0; j < 9; j++) BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(offset + 28 + j * 4), rotation[j]);
+                BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(offset + 64), 2);
+            }
+        }
         if (le) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(Array.IndexOf(bytes, (byte)'\n') + 14), 83);
         if (truncate)
         {

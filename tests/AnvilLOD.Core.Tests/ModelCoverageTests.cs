@@ -56,6 +56,23 @@ public class ModelCoverageTests
     }
 
     [Theory]
+    [InlineData(ModelNifFixture.Geometry.Triangles)]
+    [InlineData(ModelNifFixture.Geometry.Packed)]
+    [InlineData(ModelNifFixture.Geometry.Partition)]
+    public void StaticSkinRotatesAndScalesPositionsButKeepsDirectionsUnitLength(ModelNifFixture.Geometry geometry)
+    {
+        var mesh = NifGeometryReader.Read("rotated skin", ModelNifFixture.Create(geometry, skinned: true, rotatedBones: true));
+        Assert.Empty(mesh.Warnings);
+        var p = Assert.Single(mesh.Parts);
+        // Quarter-turns in opposite directions, both scaled by 2, blended 1/4 and 3/4.
+        Assert.Equal(new Vector3(125, 5, 0), p.Positions[0]);
+        Assert.Equal(new Vector3(125, -395, 800), p.Positions[3]);
+        Assert.InRange(Vector3.Distance(-Vector3.UnitX, p.Normals[0]), 0, .02f);
+        Assert.InRange(Vector3.Distance(-Vector3.UnitY, p.Tangents[0]), 0, .02f);
+        Assert.All(p.Normals, n => Assert.InRange(n.Length(), .999f, 1.001f));
+    }
+
+    [Theory]
     [InlineData(0, 107f)]
     [InlineData(1, 127f)]
     public void SwitchNodesRenderOnlyTheActiveBranch(int active, float x)
