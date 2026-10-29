@@ -16,7 +16,8 @@ public sealed record LodMaterial(
     byte AlphaThreshold,
     Vector3 EmissiveColor,
     float EmissiveMultiple,
-    LodShaderPassthru? Passthru = null)   // the source shader's own settings, for models that say "passthru"
+    LodShaderPassthru? Passthru = null,
+    StaticEffectMaterial? RenderEffect = null)   // render-only static BSEffectShaderProperty; never written as a lighting shader
 {
     /// <summary>Stable string key used for grouping and hashing.</summary>
     // Records are copied with `with` throughout material mapping. Caching this in a field
@@ -24,10 +25,17 @@ public sealed record LodMaterial(
     public string Key => string.Join('|', Textures.Select(t => t.ToLowerInvariant()))
         + $"|{ShaderFlags1:X}|{ShaderFlags2:X}|{ClampMode}|{(HasAlpha ? $"{AlphaFlags:X}/{AlphaThreshold}" : "-")}"
         + FormattableString.Invariant($"|{EmissiveColor.X:R},{EmissiveColor.Y:R},{EmissiveColor.Z:R}x{EmissiveMultiple:R}")
-        + (Passthru is null ? "" : "|pt" + Passthru.Key);
+        + (Passthru is null ? "" : "|pt" + Passthru.Key)
+        + (RenderEffect is null ? "" : "|effect:" + RenderEffect.Key);
 
     public bool Equals(LodMaterial? other) => other is not null && Key == other.Key;
     public override int GetHashCode() => Key.GetHashCode(StringComparison.Ordinal);
+}
+
+/// <summary>Texture/tint subset of BSEffectShaderProperty supported by texture rendering.</summary>
+public sealed record StaticEffectMaterial(Vector4 Tint, float LightingInfluence)
+{
+    public string Key => FormattableString.Invariant($"{Tint.X:R},{Tint.Y:R},{Tint.Z:R},{Tint.W:R},{LightingInfluence:R}");
 }
 
 /// <summary>
@@ -76,6 +84,9 @@ public sealed class LodMesh
     public required string Path { get; init; }
     public required IReadOnlyList<LodMeshPart> Parts { get; init; }
     public IReadOnlyList<string> Warnings { get; init; } = [];
+
+    /// <summary>A visible shape/node was lost or could not be interpreted. Fake-water conversion is informational.</summary>
+    public bool HasIncompleteGeometry => Warnings.Any(w => !w.StartsWith(Nif.NifGeometryReader.WaterPlaneWarning, StringComparison.Ordinal));
 
     /// <summary>
     /// The file holds no shape at all (just a node). DynDOLOD Resources ships such files on purpose, e.g. the window

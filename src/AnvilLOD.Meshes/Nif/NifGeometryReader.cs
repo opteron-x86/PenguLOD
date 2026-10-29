@@ -4,10 +4,10 @@ namespace AnvilLOD.Meshes.Nif;
 
 /// <summary>
 /// Extracts drawable geometry from an SSE NIF: walks the scene graph from the root,
-/// accumulates node transforms, and returns every visible BSTriShape-family shape that uses
-/// a BSLightingShaderProperty, baked into mesh space.
+/// accumulates node transforms, and reads packed/legacy triangle geometry and self-contained
+/// static skin poses into mesh space. Texture renderers can opt into static effect materials.
 /// </summary>
-public static class NifGeometryReader
+public static partial class NifGeometryReader
 {
     // NiNode and subclasses whose children we follow. Subclass-specific fields come after the
     // children list, so the NiNode layout is enough for traversal.
@@ -55,18 +55,19 @@ public static class NifGeometryReader
     /// <param name="passthru">Keep every shape's own shader settings (LODGen's "passthru" LOD models) instead of
     /// reducing them to the standard LOD shader.</param>
     /// <param name="waterAsLit">Read BSWaterShaderProperty shapes as lit fake water (<see cref="FakeWaterMaterial"/>) instead of skipping them.</param>
-    public static LodMesh Read(string path, byte[] data, bool passthru = false, bool waterAsLit = false, bool includeTexGenPlane = false, bool includeUnshaded = false)
+    public static LodMesh Read(string path, byte[] data, bool passthru = false, bool waterAsLit = false, bool includeTexGenPlane = false, bool includeUnshaded = false, bool renderEffects = false)
     {
         var nif = NifFile.Read(data);
         var parts = new List<LodMeshPart>();
         var warnings = new List<string>();
         var visited = new HashSet<int>();
+        var scene = new Lazy<Dictionary<int, Matrix4x4>>(() => SceneTransforms(nif));
 
         foreach (var root in nif.Roots)
-            Walk(nif, root, Matrix4x4.Identity, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded);
+            Walk(nif, root, Matrix4x4.Identity, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects);
 
         bool anyShape = nif.Blocks.Any(b => ShapeTypes.Contains(b.Type) || b.Type is "NiTriShape" or "BSLODTriShape" or "NiTriStrips");
-        return new LodMesh { Path = path, Parts = parts, Warnings = warnings, NoShapesInFile = !anyShape };
+        return new LodMesh { Path = path, Parts = parts, Warnings = warnings, NoShapesInFile = !anyShape && warnings.Count == 0 };
     }
 
     /// <summary>
@@ -106,7 +107,7 @@ public static class NifGeometryReader
         var o = new AvObject();
         o.Name = nif.String(r.I32());
         uint numExtra = r.U32();
-        r.Skip((int)numExtra * 4);
+        r.Skip(checked((int)numExtra * 4));
         r.I32(); // controller
         o.Flags = r.U32();
         var t = new Vector3(r.F32(), r.F32(), r.F32());
@@ -120,56 +121,58 @@ public static class NifGeometryReader
         return o;
     }
 
-    private static void Walk(NifFile nif, int index, Matrix4x4 parent, List<LodMeshPart> parts, List<string> warnings, HashSet<int> visited, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded)
+    private static void Walk(NifFile nif, int index, Matrix4x4 parent, List<LodMeshPart> parts, List<string> warnings,
+        HashSet<int> visited, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded,
+        Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects, int depth = 0)
     {
-        if (index < 0 || index >= nif.Blocks.Count || !visited.Add(index)) return;
+        if (index == -1) return;
+        if (index < 0 || index >= nif.Blocks.Count) { warnings.Add($"Scene child {index} could not be read: invalid block reference."); return; }
+        if (depth > 256 || !visited.Add(index)) { warnings.Add($"Scene child {index} could not be read: repeated, cyclic or excessively deep node."); return; }
         var block = nif.Blocks[index];
-
-        if (NodeTypes.Contains(block.Type))
+        try
         {
-            var r = nif.ReaderFor(block);
-            var av = ReadAvObject(nif, ref r);
-            if ((av.Flags & 1) != 0) return; // hidden
-            var world = av.Local * parent;
-            uint numChildren = r.U32();
-            var children = new int[numChildren];
-            for (int i = 0; i < numChildren; i++) children[i] = r.I32();
-            foreach (var c in children) Walk(nif, c, world, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded);
-        }
-        else if (ShapeTypes.Contains(block.Type))
-        {
-            try
+            if (NodeTypes.Contains(block.Type))
             {
-                var part = ReadShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded);
+                var r = nif.ReaderFor(block);
+                var av = ReadAvObject(nif, ref r);
+                if ((av.Flags & 1) != 0) return;
+                var world = av.Local * parent;
+                int count = checked((int)r.U32());
+                r.Require(checked(count * 4));
+                var children = new int[count];
+                for (int i = 0; i < count; i++) children[i] = r.I32();
+                if (block.Type is "NiSwitchNode" or "NiLODNode")
+                {
+                    int effects = checked((int)r.U32()); r.Skip(checked(effects * 4));
+                    r.U16(); int active = r.I32();
+                    if (active == -1 && block.Type == "NiSwitchNode") return;
+                    if (active < 0 || active >= count) throw new NotSupportedException("Switch/LOD node has no valid serialized active child.");
+                    children = [children[active]];
+                }
+                foreach (int child in children)
+                    Walk(nif, child, world, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects, depth + 1);
+            }
+            else if (ShapeTypes.Contains(block.Type))
+            {
+                var part = ReadShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects);
                 if (part is not null) parts.Add(part);
             }
-            catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or InvalidDataException)
+            else if (block.Type is "NiTriShape" or "BSLODTriShape" or "NiTriStrips")
             {
-                warnings.Add($"Shape {block.Index} ({block.Type}) could not be read: {ex.Message}");
-            }
-        }
-        else if (block.Type is "NiTriShape" or "BSLODTriShape")
-        {
-            // Skyrim LE (Oldrim) geometry: the same shader and alpha blocks, but the vertices live in a NiTriShapeData block.
-            try
-            {
-                var part = ReadLeShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded);
+                var part = ReadLeShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects);
                 if (part is not null) parts.Add(part);
             }
-            catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or InvalidDataException)
-            {
-                warnings.Add($"Shape {block.Index} ({block.Type}) could not be read: {ex.Message}");
-            }
+            else warnings.Add($"Scene child {block.Index} ({block.Type}) is not supported; skipped.");
         }
-        else if (block.Type == "NiTriStrips")
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or IndexOutOfRangeException or OverflowException or NotSupportedException)
         {
-            warnings.Add("NiTriStrips shapes are not supported and are skipped; convert the mesh to triangle lists.");
+            warnings.Add($"Shape/node {block.Index} ({block.Type}) could not be read: {ex.Message}");
         }
     }
 
     // ---------- shapes ----------
 
-    private static LodMeshPart? ReadShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded)
+    private static LodMeshPart? ReadShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded, Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects)
     {
         var r = nif.ReaderFor(block);
         var av = ReadAvObject(nif, ref r);
@@ -184,13 +187,22 @@ public static class NifGeometryReader
         int numVerts = r.U16();
         uint dataSize = r.U32();
 
-        if (skin >= 0) { warnings.Add($"Skinned shape '{av.Name}' skipped."); return null; }
-        if (dataSize == 0 || numVerts == 0 || numTris == 0) return null;
+        SkinInfo? skinInfo = skin >= 0 ? ReadSkin(nif, skin, av.Name) : null;
+        SkinBuffer? partition = null;
+        if (skinInfo is not null && dataSize == 0)
+        {
+            partition = ReadSkinBuffer(nif, skinInfo.Partition);
+            numVerts = partition.Vertices;
+            numTris = partition.Triangles.Length / 3;
+            desc = partition.Descriptor;
+        }
+        if (numVerts == 0 || numTris == 0) return null;
+        if (dataSize == 0 && partition is null) throw new InvalidDataException("Shape has counts but no vertex/triangle buffer.");
 
-        var material = ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit);
+        bool viewportPlane = includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true;
+        var material = viewportPlane ? new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0)
+            : ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit, renderEffects);
         if (includeUnshaded && shaderRef < 0) material = UnshadedMaterial;
-        if (material is null && includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true)
-            material = new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0);
         if (material is null) { warnings.Add($"Shape '{av.Name}' has no lighting shader; skipped."); return null; }
         bool water = waterAsLit && ReferenceEquals(material, FakeWaterMaterial);
         if (water) warnings.Add(WaterPlaneWarning + av.Name);
@@ -200,10 +212,17 @@ public static class NifGeometryReader
         bool hasPos = (attrs & 0x1) != 0, hasUV = (attrs & 0x2) != 0, hasNormal = (attrs & 0x8) != 0,
              hasTangent = (attrs & 0x18) == 0x18, hasColor = (attrs & 0x20) != 0, hasSkin = (attrs & 0x40) != 0,
              hasEye = (attrs & 0x100) != 0;
-        if (!hasPos) return null;
+        if (!hasPos && block.Type != "BSDynamicTriShape") throw new NotSupportedException("Vertex positions are absent.");
+        int attributesSize = (hasPos ? 16 : 0) + (hasUV ? 4 : 0) + (hasNormal ? 4 : 0) + (hasTangent ? 4 : 0)
+            + (hasColor ? 4 : 0) + (hasSkin ? 12 : 0) + (hasEye ? 4 : 0);
+        if (vertexSize < attributesSize || vertexSize == 0) throw new InvalidDataException("Vertex descriptor is shorter than its attributes.");
+        int bufferSize = checked(vertexSize * numVerts + (partition is null ? numTris * 6 : 0));
+        if (partition is null && dataSize != bufferSize) throw new InvalidDataException("Vertex/triangle data size does not match the descriptor and counts.");
+        var vr = partition is null ? r : nif.ReaderFor(nif.Blocks[skinInfo!.Partition]);
+        if (partition is not null) vr.Position = partition.Offset;
+        vr.Require(bufferSize);
 
         var world = av.Local * parent;
-        var normalMatrix = Transforms.RotationOnly(world);
 
         var pos = new Vector3[numVerts];
         var uv = new Vector2[numVerts];
@@ -211,35 +230,61 @@ public static class NifGeometryReader
         var tan = new Vector3[numVerts];
         var bit = new Vector3[numVerts];
         uint[]? col = hasColor ? new uint[numVerts] : null;
+        var influences = skinInfo is null ? null : new List<Influence>[numVerts];
 
         for (int i = 0; i < numVerts; i++)
         {
-            int start = r.Position;
-            var p = new Vector3(r.F32(), r.F32(), r.F32());
+            int start = vr.Position;
+            var p = hasPos ? new Vector3(vr.F32(), vr.F32(), vr.F32()) : Vector3.Zero;
             float bx = 0;
-            if ((attrs & 0x11) == 0x11) bx = r.F32();
-            else if ((attrs & 0x11) == 0x1) r.Skip(4);
-            if (hasUV) uv[i] = new Vector2((float)r.F16(), (float)r.F16());
+            if ((attrs & 0x11) == 0x11) bx = vr.F32();
+            else if ((attrs & 0x11) == 0x1) vr.Skip(4);
+            if (hasUV) uv[i] = new Vector2((float)vr.F16(), (float)vr.F16());
             Vector3 n = Vector3.UnitZ, t = Vector3.UnitX;
             float by = 0, bz = 0;
-            if (hasNormal) { n = Transforms.DecodeDir(r.U8(), r.U8(), r.U8()); by = Transforms.DecodeByte(r.U8()); }
-            if (hasTangent) { t = Transforms.DecodeDir(r.U8(), r.U8(), r.U8()); bz = Transforms.DecodeByte(r.U8()); }
-            if (hasColor) col![i] = r.U32();
-            if (hasSkin) r.Skip(12);
-            if (hasEye) r.Skip(4);
-            if (r.Position - start != vertexSize) r.Position = start + vertexSize; // trust the descriptor
+            if (hasNormal) { n = Transforms.DecodeDir(vr.U8(), vr.U8(), vr.U8()); by = Transforms.DecodeByte(vr.U8()); }
+            if (hasTangent) { t = Transforms.DecodeDir(vr.U8(), vr.U8(), vr.U8()); bz = Transforms.DecodeByte(vr.U8()); }
+            if (hasColor) col![i] = vr.U32();
+            if (hasSkin)
+            {
+                float w0 = (float)vr.F16(), w1 = (float)vr.F16(), w2 = (float)vr.F16(), w3 = (float)vr.F16();
+                byte b0 = vr.U8(), b1 = vr.U8(), b2 = vr.U8(), b3 = vr.U8();
+                if (influences is not null) influences[i] = [new(b0, w0), new(b1, w1), new(b2, w2), new(b3, w3)];
+            }
+            if (hasEye) vr.Skip(4);
+            vr.Position = start + vertexSize;
 
-            pos[i] = Vector3.Transform(p, world);
-            nrm[i] = Transforms.SafeNormalize(Vector3.TransformNormal(n, normalMatrix), Vector3.UnitZ);
-            tan[i] = Transforms.SafeNormalize(Vector3.TransformNormal(t, normalMatrix), Vector3.UnitX);
+            pos[i] = p;
+            nrm[i] = n;
+            tan[i] = t;
             var b = hasTangent ? new Vector3(bx, by, bz) : Vector3.Cross(n, t);
-            bit[i] = Transforms.SafeNormalize(Vector3.TransformNormal(b, normalMatrix), Vector3.UnitY);
+            bit[i] = b;
         }
 
-        var tris = new ushort[numTris * 3];
-        for (int i = 0; i < tris.Length; i++) tris[i] = r.U16();
+        var tris = partition?.Triangles ?? new ushort[numTris * 3];
+        if (partition is null) for (int i = 0; i < tris.Length; i++) tris[i] = vr.U16();
         foreach (var idx in tris)
             if (idx >= numVerts) throw new InvalidDataException("Triangle index out of range.");
+
+        if (block.Type == "BSDynamicTriShape")
+        {
+            // Dynamic positions are outside the interleaved buffer, even when that buffer lives in the skin partition.
+            r.Position += checked((int)dataSize);
+            uint particles = r.U32();
+            if (particles != 0) r.Skip(checked(numVerts * 12 + numTris * 6));
+            if (r.U32() != numVerts * 16) throw new InvalidDataException("Dynamic vertex count does not match the shape.");
+            for (int i = 0; i < numVerts; i++) { pos[i] = new(r.F32(), r.F32(), r.F32()); bit[i].X = r.F32(); }
+        }
+        if (!hasNormal) nrm = FaceNormals(pos, tris);
+        if (!hasTangent) (tan, bit) = TangentsFromUv(pos, uv, nrm, tris);
+        if (skinInfo is not null)
+        {
+            if (!hasSkin) throw new NotSupportedException("Skinned shape has no vertex weights in its buffer.");
+            BakeSkin(nif, skinInfo, scene.Value, pos, nrm, tan, bit, influences!, tris);
+            material = StaticSkinMaterial(material);
+        }
+        else TransformVertices(world, pos, nrm, tan, bit);
+        ValidateVertices(pos, uv);
 
         if (water)
         {
@@ -266,7 +311,7 @@ public static class NifGeometryReader
     /// A Skyrim LE (Oldrim) shape: NiTriShape (or BSLODTriShape) with a NiTriShapeData block. Tangents come from the data block when it has
     /// them, otherwise they are worked out from the UVs (LE keeps them in an extra data block we don't read).
     /// </summary>
-    private static LodMeshPart? ReadLeShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded)
+    private static LodMeshPart? ReadLeShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded, Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects)
     {
         var r = nif.ReaderFor(block);
         var av = ReadAvObject(nif, ref r);
@@ -275,19 +320,21 @@ public static class NifGeometryReader
         int dataRef = r.I32();
         int skin = r.I32();
         uint numMaterials = r.U32();
-        r.Skip((int)numMaterials * 8);   // material names and extra data
+        r.Skip(checked((int)numMaterials * 8));   // material names and extra data
         r.I32();                         // active material
         r.U8();                          // material needs update
         int shaderRef = r.I32();
         int alphaRef = r.I32();
 
-        if (skin >= 0) { warnings.Add($"Skinned shape '{av.Name}' skipped."); return null; }
-        if (dataRef < 0 || dataRef >= nif.Blocks.Count || nif.Blocks[dataRef].Type != "NiTriShapeData") return null;
+        bool strips = block.Type == "NiTriStrips";
+        if (dataRef < 0 || dataRef >= nif.Blocks.Count || nif.Blocks[dataRef].Type != (strips ? "NiTriStripsData" : "NiTriShapeData"))
+            throw new InvalidDataException("Geometry data block is missing or has the wrong type.");
+        SkinInfo? skinInfo = skin >= 0 ? ReadSkin(nif, skin, av.Name) : null;
 
-        var material = ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit);
+        bool viewportPlane = includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true;
+        var material = viewportPlane ? new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0)
+            : ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit, renderEffects);
         if (includeUnshaded && shaderRef < 0) material = UnshadedMaterial;
-        if (material is null && includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true)
-            material = new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0);
         if (material is null) { warnings.Add($"Shape '{av.Name}' has no lighting shader; skipped."); return null; }
         bool water = waterAsLit && ReferenceEquals(material, FakeWaterMaterial);
         if (water) warnings.Add(WaterPlaneWarning + av.Name);
@@ -297,7 +344,8 @@ public static class NifGeometryReader
         int numVerts = d.U16();
         d.U8(); d.U8();                   // keep and compress flags
         bool hasVerts = d.U8() != 0;
-        if (!hasVerts || numVerts == 0) return null;
+        if (numVerts == 0) return null;
+        if (!hasVerts) throw new InvalidDataException("Geometry declares vertices but has no vertex data.");
         var src = new Vector3[numVerts];
         for (int i = 0; i < numVerts; i++) src[i] = new Vector3(d.F32(), d.F32(), d.F32());
         ushort vectorFlags = d.U16();
@@ -327,7 +375,7 @@ public static class NifGeometryReader
                 col[i] = (uint)(ca << 24 | cb << 16 | cg << 8 | cr);
             }
         }
-        int numUvSets = vectorFlags & 0x3F;
+        int numUvSets = vectorFlags & 1; // Bethesda geometry uses a single UV-set bit, not the generic NiGeometryData mask.
         var uv = new Vector2[numVerts];
         for (int set = 0; set < numUvSets; set++)
             for (int i = 0; i < numVerts; i++)
@@ -340,30 +388,32 @@ public static class NifGeometryReader
 
         // NiTriShapeData
         int numTris = d.U16();
-        d.U32();                          // number of triangle points
-        bool hasTris = d.U8() != 0;
-        if (!hasTris || numTris == 0) return null;
-        var tris = new ushort[numTris * 3];
-        for (int i = 0; i < tris.Length; i++) tris[i] = d.U16();
+        ushort[] tris;
+        if (strips) tris = ReadStrips(ref d, numVerts);
+        else
+        {
+            if (d.U32() != numTris * 3) throw new InvalidDataException("Triangle point count does not match the triangle count.");
+            bool hasTris = d.U8() != 0;
+            if (numTris == 0) return null;
+            if (!hasTris) throw new InvalidDataException("Geometry declares triangles but has no triangle data.");
+            d.Require(numTris * 6);
+            tris = new ushort[numTris * 3];
+            for (int i = 0; i < tris.Length; i++) tris[i] = d.U16();
+        }
         foreach (var idx in tris)
             if (idx >= numVerts) throw new InvalidDataException("Triangle index out of range.");
 
         if (!hasNormals) srcN = FaceNormals(src, tris);
         if (srcT is null || srcB is null) (srcT, srcB) = TangentsFromUv(src, uv, srcN, tris);
 
-        var world = av.Local * parent;
-        var normalMatrix = Transforms.RotationOnly(world);
-        var pos = new Vector3[numVerts];
-        var nrm = new Vector3[numVerts];
-        var tan = new Vector3[numVerts];
-        var bit = new Vector3[numVerts];
-        for (int i = 0; i < numVerts; i++)
+        var pos = src; var nrm = srcN; var tan = srcT; var bit = srcB;
+        if (skinInfo is not null)
         {
-            pos[i] = Vector3.Transform(src[i], world);
-            nrm[i] = Transforms.SafeNormalize(Vector3.TransformNormal(srcN[i], normalMatrix), Vector3.UnitZ);
-            tan[i] = Transforms.SafeNormalize(Vector3.TransformNormal(srcT[i], normalMatrix), Vector3.UnitX);
-            bit[i] = Transforms.SafeNormalize(Vector3.TransformNormal(srcB[i], normalMatrix), Vector3.UnitY);
+            BakeSkin(nif, skinInfo, scene.Value, pos, nrm, tan, bit, null, tris);
+            material = StaticSkinMaterial(material);
         }
+        else TransformVertices(av.Local * parent, pos, nrm, tan, bit);
+        ValidateVertices(pos, uv);
         if (water)
         {
             col = new uint[numVerts];
@@ -428,12 +478,13 @@ public static class NifGeometryReader
         return (tan, bit);
     }
 
-    private static LodMaterial? ReadMaterial(NifFile nif, int shaderRef, int alphaRef, bool passthru, bool waterAsLit)
+    private static LodMaterial? ReadMaterial(NifFile nif, int shaderRef, int alphaRef, bool passthru, bool waterAsLit, bool renderEffects)
     {
         if (shaderRef < 0 || shaderRef >= nif.Blocks.Count) return null;
         var sb = nif.Blocks[shaderRef];
         if (waterAsLit && sb.Type == "BSWaterShaderProperty") return FakeWaterMaterial;
-        if (sb.Type != "BSLightingShaderProperty") return null;
+        if (renderEffects && sb.Type == "BSEffectShaderProperty") return ReadStaticEffect(nif, sb, alphaRef);
+        if (sb.Type != "BSLightingShaderProperty") throw new NotSupportedException($"Shader {sb.Type} is not supported for this operation.");
 
         var r = nif.ReaderFor(sb);
         uint shaderType = r.U32();

@@ -187,7 +187,7 @@ public sealed class TextureGenerationTests
         Assert.Contains(AnvilLOD.Meshes.Nif.NifGeometryReader.Read("tree", bytes).Warnings, w => w.Contains("Skinned"));
         TextureFixture.Put(f.Data, @"meshes\trees\testtree.nif", bytes);
         var result = TextureGeneration.Run(f.Request with { Stitched = false, Trees = true });
-        Assert.Contains(result.Items, i => i.Kind == "Tree" && i.Status == "Skipped" && i.Detail.Contains("Unsupported model shapes"));
+        Assert.Contains(result.Items, i => i.Kind == "Tree" && i.Status == "Failed" && i.Detail.Contains("Unsupported model shapes"));
         Assert.Empty(Directory.GetFiles(f.Output, "*.dds", SearchOption.AllDirectories));
     }
 

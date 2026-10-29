@@ -5,6 +5,10 @@ preferred. With **Build missing 3D tree models**, trees without an installed mod
 native reduction of their full model. Missing textures or unsupported geometry retain
 billboard tree LOD and appear in the report.
 
+Supported inputs include legacy triangle strips and self-contained skinned models baked
+to their serialized static pose. Active switch branches prevent duplicate static/animated
+tree geometry. See [model support](MODEL-SUPPORT.md) for skeleton and material limits.
+
 Record-specific alternate texture sets are applied to full-model shapes before native
 reduction, including seasonal replacements. Each variant has separate materials and cache
 keys. Automatic billboards use the same overrides. An unmatched or ambiguous shape, or a

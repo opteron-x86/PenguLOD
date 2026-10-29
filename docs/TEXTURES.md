@@ -129,6 +129,9 @@ Recipe parsing and rendering are native; resource directories named `DynDOLOD` d
 require TexGen/DynDOLOD executables. Resource files and models must still be supplied by
 their authors and installed with their required mods.
 
-Models with unsupported/skinned shapes are skipped as a whole. Missing required source
-textures or unsupported required render resources stop publication. Missing assets must
-be supplied by the source mod; generation does not repair or rewrite that mod.
+Triangle strips, dynamic vertex buffers and suitable self-contained static skin poses
+are supported. Static effect materials can be rendered from compatible resources; see
+[model support](MODEL-SUPPORT.md) for formats and limits. An unreadable visible shape,
+missing required texture or unsupported required render resource stops publication and
+preserves existing output. Missing assets must be supplied by the source mod; generation
+does not repair or rewrite that mod.

@@ -202,6 +202,7 @@ public static class BtoBuilder
 
     internal static void WriteShader(BinaryWriter b, LodMaterial m, int texSet, bool colors)
     {
+        if (m.RenderEffect is not null) throw new NotSupportedException("Render-only effect materials cannot be written as object LOD lighting shaders.");
         var pt = m.Passthru;
         // Shader types with extra per-type data (environment maps, skin, hair...) can't be carried over, so a
         // passthru shape of such a type is written as the default type; tree LOD models are all default-type.

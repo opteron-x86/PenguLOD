@@ -25,6 +25,7 @@ public static class BillboardRenderer
     /// otherwise vanish at a distance; 0 = leave as rendered).</param>
     public static BillboardImage? Render(LodMesh model, TextureLoader loadTexture, int maxPixels = 512, bool vertexColors = true, float minCoverage = 0f, float unitsPerPixel = 0, (Vector3 Min, Vector3 Max)? viewport = null, float brightness = 1, bool shaded = true, (int W, int H)? pixelSize = null, MaterialBakeSettings? materials = null)
     {
+        if (model.HasIncompleteGeometry) throw new NotSupportedException("Cannot render incomplete geometry: " + string.Join("; ", model.Warnings));
         materials ??= new();
         materials.Validate();
         var (min, max) = viewport ?? Meshes.Authoring.LodMeshAuthor.Bounds(model);
@@ -53,7 +54,10 @@ public static class BillboardRenderer
         foreach (var part in model.Parts)
         {
             RunLimits.Check();
-            var tex = loadTexture(part.Material.Textures[0]);
+            if (part.Material.Textures.Count == 0 || string.IsNullOrWhiteSpace(part.Material.Textures[0]))
+                throw new InvalidDataException("Render shape has no diffuse texture: " + part.Name);
+            var tex = loadTexture(part.Material.Textures[0]) ?? throw new FileNotFoundException("Diffuse texture missing: " + part.Material.Textures[0]);
+            var effect = part.Material.RenderEffect;
             var normalTexture = materials.SourceNormals && part.Material.Textures.Count > 1 ? Optional(part.Material.Textures[1]) : null;
             bool pbr = materials.PbrAlbedo && part.Material.Textures[0].Replace('/', '\\').Contains(@"\pbr\", StringComparison.OrdinalIgnoreCase);
             var occlusion = pbr && materials.OcclusionStrength > 0 && part.Material.Textures.Count > 5 ? Optional(part.Material.Textures[5]) : null;
@@ -85,7 +89,11 @@ public static class BillboardRenderer
                     if (part.Material.Passthru is { } shader)
                         uv = uv * new Vector2(shader.UvScaleX, shader.UvScaleY) + new Vector2(shader.UvOffsetX, shader.UvOffsetY);
                     var (r, g, bl, al) = Sample(tex, uv, part.Material.ClampMode);
-                    if (al < threshold) continue;
+                    al *= (part.Material.Passthru?.Alpha ?? 1) * (effect?.Tint.W ?? 1);
+                    if (effect is not null && (part.Material.ShaderFlags1 & 8u) != 0 && part.Colors is { } alphaColors)
+                        al *= ((alphaColors[i0] >> 24) * w0 + (alphaColors[i1] >> 24) * w1 + (alphaColors[i2] >> 24) * w2) / 255f;
+                    if ((part.Material.HasAlpha && (al < threshold || al <= 0)) || part.Material.Passthru?.Alpha == 0 || effect?.Tint.W == 0) continue;
+                    if (effect is not null) { r *= effect.Tint.X; g *= effect.Tint.Y; bl *= effect.Tint.Z; }
                     if (pbr)
                     {
                         float ao = occlusion is null ? 1 : Sample(occlusion, uv, part.Material.ClampMode).B / 255f;
@@ -94,7 +102,7 @@ public static class BillboardRenderer
                         g = 255 * MathF.Pow(g / 255, materials.PbrGamma) * factor;
                         bl = 255 * MathF.Pow(bl / 255, materials.PbrGamma) * factor;
                     }
-                    if (vertexColors && part.Colors is { } col)
+                    if ((effect is null ? vertexColors : (part.Material.ShaderFlags2 & 0x20u) != 0) && part.Colors is { } col)
                     {
                         var vc = Unpack(col[i0]) * w0 + Unpack(col[i1]) * w1 + Unpack(col[i2]) * w2;
                         r *= vc.X; g *= vc.Y; bl *= vc.Z;
@@ -117,6 +125,7 @@ public static class BillboardRenderer
                         }
                     }
                     float shade = brightness * (shaded ? materials.Ambient + materials.Directional * MathF.Abs(Vector3.Dot(n, light)) : 1);
+                    if (effect is not null) shade = brightness + (shade - brightness) * effect.LightingInfluence;
                     depth[idx] = z;
                     int o = idx * 4;
                     // The card faces the viewer (looking along +Y): a back-facing normal is turned round, as both sides are drawn.

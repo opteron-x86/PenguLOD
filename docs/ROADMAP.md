@@ -20,7 +20,9 @@ one milestone at a time; an implementation milestone does not claim universal mo
 
 Priority 1 is implemented in v0.4.0-alpha.1. [Texture generation](TEXTURES.md) documents
 supported recipes, ambiguous mappings and how to pass generation metadata to LOD.
-Priorities 2–6 are queued. In-game visual validation remains ongoing.
+Priority 3 is implemented in v0.4.0-alpha.3; [model support](MODEL-SUPPORT.md) defines the
+supported geometry, static skin poses, render materials and failure behavior.
+Priorities 2 and 4–6 are queued. In-game visual validation remains ongoing.
 
 ## v0.3 quality milestones
 

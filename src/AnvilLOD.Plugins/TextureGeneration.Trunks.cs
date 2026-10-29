@@ -53,7 +53,7 @@ public static partial class TextureGeneration
             if (indexed++ % 100 == 0) progress?.Report($"Reading hybrid tree cards: {indexed:N0}/{hybridPaths.Length:N0}");
             try
             {
-                var mesh = NifGeometryReader.Read(path, read(path) ?? throw new FileNotFoundException(path), passthru: true);
+                var mesh = NifGeometryReader.Read(path, read(path) ?? throw new FileNotFoundException(path), passthru: true, renderEffects: true);
                 foreach (var part in mesh.Parts)
                 {
                     if (part.Material.Textures.Count == 0) continue;
@@ -102,7 +102,7 @@ public static partial class TextureGeneration
                 if (card.Error is not null) throw new NotSupportedException(card.Error);
                 if (!card.Views.ContainsKey(1) || !card.Views.ContainsKey(2))
                     throw new InvalidDataException("Both front and side cards are required in the installed hybrid model.");
-                var source = NifGeometryReader.Read(resource.Source, resource.Load(), passthru: true);
+                var source = NifGeometryReader.Read(resource.Source, resource.Load(), passthru: true, renderEffects: true);
                 if (source.Warnings.Count > 0 || source.Parts.Count == 0)
                     throw new NotSupportedException("Incomplete trunk geometry: " + string.Join("; ", source.Warnings.DefaultIfEmpty("no supported shapes")));
                 var metadata = new StringBuilder("[LOD]\r\nScale=1.000000\r\n");
