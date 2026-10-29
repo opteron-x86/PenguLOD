@@ -99,6 +99,15 @@ public static partial class TextureGeneration
                 if (bytes is null) { Skip("Model file missing"); warn("Billboard model missing: " + path); continue; }
                 var mesh = NifGeometryReader.Read(path, bytes, passthru: true, renderEffects: true);
                 foreach (var warning in mesh.Warnings) warn(path + ": " + warning);
+                // Automatic tree discovery also finds ghost/effect trees. Exclude the whole model
+                // when only its effect materials are unsupported; never publish a partial crown.
+                // A rule or filtered preview is an explicit render request and must still fail.
+                if (!isGrass && rule is null && request.ModelFilter.Length == 0 && mesh.Warnings.Count > 0
+                    && mesh.Warnings.All(w => w.StartsWith(NifGeometryReader.UnsupportedEffectWarning, StringComparison.Ordinal)))
+                {
+                    const string reason = "Excluded whole tree from automatic billboards: unsupported animated, blended or view-dependent effects. No partial billboard was generated; an explicit billboard rule or model filter requires a supported render.";
+                    Skip(reason); warn(path + ": " + reason); continue;
+                }
                 if (mesh.HasIncompleteGeometry)
                 { throw new NotSupportedException("Unsupported model shapes; existing output was preserved: " + string.Join("; ", mesh.Warnings)); }
                 if (mesh.Parts.Count == 0) { Skip("Model has no supported shapes"); continue; }

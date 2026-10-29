@@ -13,7 +13,7 @@ public static class ModelNifFixture
     internal static byte[] Create(Geometry geometry, bool skinned = false, bool missingBone = false,
         float weight = .25f, bool badIndex = false, bool truncate = false, bool le = false, bool effect = false,
         bool unsupportedEffect = false, bool modelNormals = false, ushort? alphaFlags = null, byte alphaThreshold = 128,
-        bool rotatedBones = false)
+        bool rotatedBones = false, string normalTexture = @"textures\green_n.dds", string diffuseTexture = @"textures\green.dds")
     {
         bool legacy = geometry is Geometry.Triangles or Geometry.Strips;
         bool partitioned = geometry is Geometry.Partition or Geometry.DynamicPartition;
@@ -143,7 +143,7 @@ public static class ModelNifFixture
                 b.Write(1f); b.Write(0f); b.Write(0f); b.Write(1f); b.Write(1f); b.Write(1f); b.Write(0f); b.Write(0f); b.Write(0f);
             }
         });
-        w.Set(textures, b => { b.Write(2u); NifWriter.WriteSizedString(b, @"textures\green.dds"); NifWriter.WriteSizedString(b, @"textures\green_n.dds"); });
+        w.Set(textures, b => { b.Write(2u); NifWriter.WriteSizedString(b, diffuseTexture); NifWriter.WriteSizedString(b, normalTexture); });
         if (alpha >= 0) w.Set(alpha, b => { NifWriter.WriteObjectNet(b, -1); b.Write(alphaFlags!.Value); b.Write(alphaThreshold); });
         var bytes = w.ToBytes(root);
         if (rotatedBones)
