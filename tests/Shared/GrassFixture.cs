@@ -8,35 +8,21 @@ public sealed class GrassFixture : IDisposable
     public TextureFixture Textures { get; } = new();
     public string Root => Textures.Root;
     public string Output => Path.Combine(Root, "Grass output");
-    public string Executable => Path.Combine(Root, "fake FasterNGIO");
+    private string Backend => Path.Combine(Root, "Fake backend forêt");
+    public string Executable => Path.Combine(Backend, OperatingSystem.IsWindows() ? "PenguLOD.GrassFixture.exe" : "PenguLOD.GrassFixture");
     public GrassGenerationRequest Request => new(Textures.Game, Output, Executable, Threads: 2);
     public GrassFixture(string behavior = "success")
     {
-        File.WriteAllBytes(Path.Combine(Root, "seed.cgid"), Cache());
+        Directory.CreateDirectory(Backend);
+        foreach (string source in Directory.EnumerateFiles(Path.Combine(AppContext.BaseDirectory, "grass-fixture")))
+            File.Copy(source, Path.Combine(Backend, Path.GetFileName(source)));
+        File.WriteAllBytes(Path.Combine(Backend, "seed.cgid"), Cache());
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         SetBehavior(behavior);
     }
     public void SetBehavior(string behavior)
     {
-        File.WriteAllText(Executable, "#!/usr/bin/env python3\n" + $$"""
-            import pathlib, sys, shutil, time
-            args = sys.argv[1:]
-            out = pathlib.Path(args[args.index('--out') + 1])
-            print('FAKE_READY', flush=True)
-            behavior = '{{behavior}}'
-            if behavior == 'wait':
-                time.sleep(120)
-            if behavior == 'fail':
-                print('fixture error', file=sys.stderr, flush=True)
-                sys.exit(9)
-            out.mkdir(parents=True, exist_ok=True)
-            seed = pathlib.Path(__file__).with_name('seed.cgid')
-            shutil.copyfile(seed, out / 'Tamrielx0000y0000.cgid')
-            (out / 'Tamrielx0001y0000.cgid').write_bytes(b'\0' * 4)
-            if behavior == 'corrupt':
-                (out / 'Tamrielx0000y0000.cgid').write_bytes(b'\xff' * 4)
-            print('wrote 2 files', flush=True)
-            """ + "\n");
-        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        File.WriteAllText(Path.Combine(Backend, "behavior.txt"), behavior);
     }
     public static byte[] Cache(uint count = 1, uint halves = 16)
     {

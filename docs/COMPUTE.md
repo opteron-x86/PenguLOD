@@ -25,11 +25,13 @@ both implementations are warmed before timing. Job logs record selected/fallback
 image counts. Software Vulkan is excluded from automatic acceleration even if its benchmark
 is faster. `compute-info --allow-software` explicitly runs it for correctness testing.
 
-Build requirements: a C compiler, Vulkan headers/loader and `glslangValidator`. Run
-`bash tools/build-texture-compute.sh`; the normal package build also runs it. The managed
-application works without the optional helper or without a Vulkan driver. Runtime Vulkan
-drivers are supplied by the distribution, not bundled in the package.
+Build requirements: a C compiler, Vulkan headers/loader and `glslangValidator`. On Linux,
+run `bash tools/build-texture-compute.sh`; the normal package build also runs it. On Windows,
+`tools/build-native-windows.ps1` builds the DLL with the pinned native dependencies.
+The managed application works without the optional helper or without a Vulkan driver.
+Runtime graphics drivers are supplied by the distribution or GPU vendor.
 
-CI checks encoding through Mesa's software Vulkan driver. Physical GPU performance and
+Linux CI checks encoding through Mesa's software Vulkan driver. Windows CI builds the
+native DLL and exercises compute probing and CPU fallback. Physical GPU performance and
 driver stability require separate measurements; use the benchmark on the target system
 before selecting acceleration for production jobs.

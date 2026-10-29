@@ -46,6 +46,29 @@ relative links valid inside the extracted package. Contributor and release-maint
 documentation stays in the source checkout. Source bundles retain build inputs, patches,
 dependency pins and licenses, excluding local tooling and assistant instructions.
 
+## Windows development
+
+Install .NET 10 SDK, PowerShell 7.4+, Python 3.12+, Git for Windows, CMake 3.28+,
+Ninja and Visual Studio 2026 C++ build tools with the Windows SDK. Run from PowerShell:
+
+```powershell
+./tools/build-native-windows.ps1
+./tools/test-windows.ps1
+./tools/build-windows.ps1 -ReuseBackend
+./tools/windows-smoke.ps1
+```
+
+`build-windows.ps1` without `-ReuseBackend` also builds and tests the native components.
+The build fetches checksum-pinned FasterNGIO sources and a pinned vcpkg baseline from
+`tools/windows/vcpkg.json`. Dependencies use the static MSVC runtime. Native builds stay
+under `.tools/`; the self-contained desktop/CLI and ZIP are written under `dist/`.
+Use a separate extracted package for a running application because rebuilding replaces
+`dist/win-x64`. The smoke test opens the real Avalonia Win32 window with isolated settings.
+
+The test grass process is a small .NET executable shared by both platforms, so failure,
+Unicode/space-containing paths, process cancellation and output recovery are exercised
+on Windows as well as Linux. Optional game-profile tests remain opt-in.
+
 ## Source layout
 
 - `src/AnvilLOD.Desktop`: PenguLOD Avalonia UI and services.
@@ -58,8 +81,8 @@ dependency pins and licenses, excluding local tooling and assistant instructions
 - `skse`: inherited game-runtime plugin source; versioned separately with `UPSTREAM_VERSION`.
 
 The retained `AnvilLOD` names help upstream merges and compatibility. Avoid broad namespace or
-output filename renames. Windows WPF/PowerShell tooling is inherited and is not a supported
-PenguLOD release target.
+output filename renames. Both packages use the Avalonia desktop; the inherited WPF
+application and root-level upstream release scripts are outside PenguLOD's release pipeline.
 
 ## Upstream synchronization
 
@@ -70,7 +93,7 @@ git switch -c upstream/anvillod-next
 git merge --no-ff <upstream-tag>
 ```
 
-Keep PenguLOD’s `VERSION`, branding and Linux workflow when resolving conflicts; update
+Keep PenguLOD’s `VERSION`, branding and cross-platform workflow when resolving conflicts; update
 `UPSTREAM_VERSION` and `docs/PROVENANCE.md` to record the integrated upstream version.
-Check desktop defaults against engine changes. Run the tests and Linux build before opening a PR.
+Check desktop defaults against engine changes. Run relevant local tests and require both platform builds in CI.
 See [RELEASING.md](docs/RELEASING.md) for version/tag conventions.

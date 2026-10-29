@@ -5,6 +5,23 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.2] - 2026-10-29
+
+- Added a self-contained Windows x64 ZIP with the Avalonia desktop, CLI, native
+  grass backend and optional Vulkan texture helper. Linux portable and AppImage
+  packages continue to use the same application source and version.
+- Releases require Linux and Windows engine/UI tests, native backend tests and
+  extracted-package startup checks before publishing either platform.
+- Native dependencies are selected for the target OS. Windows builds retain UTF-8
+  path support and use Windows configuration/cache locations. Grass process tests
+  cover success, cancellation and recovery on both hosts, including Unicode paths.
+- Windows grass staging uses hard links with a cancellable copy fallback, avoiding
+  a requirement for administrator rights or Developer Mode. Steam discovery also
+  reads the default Windows Steam installation and its library manifests.
+- Output locks account for Windows path casing, preventing two jobs from targeting
+  the same directory through differently capitalized paths.
+- Windows desktop modlist testing and physical GPU validation remain open work.
+
 ## [0.4.0-alpha.1] - 2026-10-29
 
 - Native TexGen `x` recipes retain source dimensions and apply the specified mipmap

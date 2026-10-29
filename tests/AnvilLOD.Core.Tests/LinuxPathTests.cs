@@ -40,7 +40,7 @@ public sealed class LinuxPathTests : IDisposable
     public void Case_insensitive_lookup_keeps_the_actual_host_path()
     {
         var actual = Write("mesh", "MixedCaseMod", "Meshes", "Landscape", "Rock.NIF");
-        Assert.Equal(actual, GamePath.ResolveExisting(_root, @"mixedcasemod\meshes\landscape\rock.nif"));
+        Assert.Equal(actual, GamePath.ResolveExisting(_root, @"mixedcasemod\meshes\landscape\rock.nif"), ignoreCase: OperatingSystem.IsWindows());
         Assert.Null(GamePath.ResolveExisting(_root, @"MixedCaseMod\Meshes\missing.nif"));
         Assert.Throws<ArgumentException>(() => GamePath.ResolveExisting(_root, @"..\outside.nif"));
     }
@@ -114,9 +114,9 @@ public sealed class LinuxPathTests : IDisposable
             Path.Combine(_root, "Mods"), Path.Combine(_root, "Profiles")));
         var index = VirtualDataIndex.Build(instance.OpenProfile("Default"), ["meshes", @"textures\terrain\lodgen"]);
 
-        Assert.Equal(high, index.ResolveLoose(@"meshes\architecture\wall.nif"));
-        Assert.Equal(billboard, index.ResolveLoose(@"textures\terrain\lodgen\tree.dds"));
-        Assert.Equal(config, index.FindLoose(@"skse\plugins\custom.ini"));
+        Assert.Equal(high, index.ResolveLoose(@"meshes\architecture\wall.nif"), ignoreCase: OperatingSystem.IsWindows());
+        Assert.Equal(billboard, index.ResolveLoose(@"textures\terrain\lodgen\tree.dds"), ignoreCase: OperatingSystem.IsWindows());
+        Assert.Equal(config, index.FindLoose(@"skse\plugins\custom.ini"), ignoreCase: OperatingSystem.IsWindows());
         Assert.Null(index.FindLoose(@"meshes\architecture\hidden.nif"));
         Assert.Equal(2, index.LooseFileCount);
         Assert.Equal(0, index.MissingModFolders);
@@ -139,7 +139,7 @@ public sealed class LinuxPathTests : IDisposable
         var model = Write("model", "Mod", "Meshes", "Architecture", "Wall.NIF");
         Write("old output", "Mod", "Meshes", "Generated", "AlreadyMade.NIF");
         var collected = LodMeshMaker.Collect([Path.Combine(_root, "Mod")], Path.Combine(_root, "Mod", "Meshes", "Generated"));
-        Assert.Equal(model, Assert.Single(collected).File);
+        Assert.Equal(model, Assert.Single(collected).File, ignoreCase: OperatingSystem.IsWindows());
         Assert.Equal(@"meshes\architecture\wall.nif", collected[0].Relative);
     }
 

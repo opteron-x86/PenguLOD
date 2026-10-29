@@ -109,7 +109,7 @@ public static class PipelineDiagnostics
                 bool present=assets.Exists(SksePluginInstaller.RelativeDll);
                 if(runtime && !present && lod.SkseDll==SkseDllChoice.None)
                     Add("Warning","runtime-plugin-missing","Selected dynamic LOD features need the AnvilLOD SKSE plugin. It is not present in the selected profile.",
-                        "Install the Windows game plugin matching your Skyrim runtime; the PenguLOD generator itself remains native Linux.",SksePluginInstaller.RelativeDll);
+                        "Install the Windows game plugin matching your Skyrim runtime; PenguLOD itself runs natively on Linux or Windows.",SksePluginInstaller.RelativeDll);
                 if(present && assets.TryOpen(SksePluginInstaller.RelativeDll,out var dll))
                 {
                     try

@@ -63,6 +63,13 @@ public static class HostPath
         return Path.TrimEndingDirectorySeparator(current);
     }
 
+    /// <summary>Stable identity for hashing host locations; Windows aliases differ only in casing.</summary>
+    public static string ComparisonKey(string path)
+    {
+        string canonical = Canonical(path);
+        return OperatingSystem.IsWindows() ? canonical.ToUpperInvariant() : canonical;
+    }
+
     public static bool IsWithin(string path, string parent)
     {
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;

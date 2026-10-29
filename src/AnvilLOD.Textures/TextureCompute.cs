@@ -59,7 +59,7 @@ public sealed class TextureCompute : IDisposable
     private static ComputeBenchmark Measure(bool allowSoftware,out IntPtr context)
     {
         context=IntPtr.Zero;var message=new StringBuilder(1024);
-        if(!OperatingSystem.IsLinux())return new(false,"CPU",false,false,0,0,0,"The optional Vulkan backend is packaged for Linux.");
+        if(!OperatingSystem.IsLinux() && !OperatingSystem.IsWindows())return new(false,"CPU",false,false,0,0,0,"The optional Vulkan backend is packaged for Linux and Windows.");
         try { context=pgl_create(message,message.Capacity,out int software);
             if(context==IntPtr.Zero)return new(false,message.ToString(),false,false,0,0,0,"Vulkan unavailable; CPU fallback.");
             string device=message.ToString();

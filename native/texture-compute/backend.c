@@ -6,6 +6,12 @@
 #include <string.h>
 #include <vulkan/vulkan_core.h>
 
+#ifdef _WIN32
+#define PGL_EXPORT __declspec(dllexport)
+#else
+#define PGL_EXPORT __attribute__((visibility("default")))
+#endif
+
 typedef struct {
   VkInstance instance;
   VkPhysicalDevice physical;
@@ -25,7 +31,7 @@ typedef struct {
   void *mapped;
 } Buffer;
 
-void pgl_destroy(Context *c) {
+PGL_EXPORT void pgl_destroy(Context *c) {
   if (!c)
     return;
   if (c->device) {
@@ -55,7 +61,7 @@ void pgl_destroy(Context *c) {
       goto failed;                                                             \
     }                                                                          \
   } while (0)
-Context *pgl_create(char *message, int capacity, int *software) {
+PGL_EXPORT Context *pgl_create(char *message, int capacity, int *software) {
   Context *c = calloc(1, sizeof(*c));
   if (!c)
     return NULL;
@@ -223,7 +229,7 @@ static VkResult buffer(Context *c, VkDeviceSize size, Buffer *b) {
 
 // Calls on a context are serialized by the managed wrapper. Only opaque input
 // is accepted there.
-int pgl_encode(Context *c, const uint8_t *rgba, uint32_t width, uint32_t height,
+PGL_EXPORT int pgl_encode(Context *c, const uint8_t *rgba, uint32_t width, uint32_t height,
                uint8_t *output, char *message, int capacity) {
   Buffer input = {0}, encoded = {0};
   VkFence fence = VK_NULL_HANDLE;

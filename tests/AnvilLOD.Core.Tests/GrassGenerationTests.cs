@@ -37,7 +37,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void PublishesFreshCacheKeepsPreviousAndDoesNotMixOldInstalledCells()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         var first = GrassGeneration.Run(f.Request);
         Assert.Equal(2, first.Files); Assert.Equal(1, first.Instances); Assert.Equal(1, first.EmptyFiles);
@@ -65,7 +64,6 @@ public sealed class GrassGenerationTests
     [InlineData("corrupt")]
     public void FailureOrInvalidCachePreservesPreviousOutput(string behavior)
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         var before = File.ReadAllText(Path.Combine(f.Output, GrassGenerationManifest.FileName));
@@ -78,7 +76,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void CancellationStopsChildProcessAndLeavesPreviousCacheIntact()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request); f.SetBehavior("wait");
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -93,7 +90,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void RejectsUnownedOrModifiedOutputAndPreviewOverFullCache()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         Directory.CreateDirectory(f.Output); File.WriteAllText(Path.Combine(f.Output, "mine.txt"), "keep");
         Assert.ThrowsAny<Exception>(() => GrassGeneration.Run(f.Request));
@@ -110,7 +106,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void PreviewCannotBeUsedForLodAndGrassOutputCannotBeClearedByLodOrTextures()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         Assert.Throws<ArgumentException>(() => ScanPipeline.Run(new ScanRequest(f.Textures.Game, new ScanOptions(), OutputFolder: f.Output, Generate: true, CleanOutput: true)));
@@ -124,7 +119,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void ChangedLoadOrderIsRejectedBeforeCleaningLodOutput()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         var manifest = GrassGenerationManifest.Read(f.Output, true)!;
@@ -143,7 +137,6 @@ public sealed class GrassGenerationTests
     [Fact]
     public void Grass_verification_reports_progress_and_cancels_before_scan_or_output_changes()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         GrassGeneration.Run(f.Request);
         var manifest = GrassGenerationManifest.Read(f.Output, true)!;
@@ -165,9 +158,8 @@ public sealed class GrassGenerationTests
     }
 
     [Fact]
-    public void VirtualInputRespectsPriorityCasingIniSelectionAndDoesNotCopyAssets()
+    public void VirtualInputRespectsPriorityCasingIniSelectionAndPreservesSources()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
         var instance = Path.Combine(f.Root, "Fluorine");
         var profile = Path.Combine(instance, "profiles", "Selected"); Directory.CreateDirectory(profile);
@@ -186,10 +178,52 @@ public sealed class GrassGenerationTests
         var req = f.Request with { Game = new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: instance) };
         var work = Path.Combine(f.Root, "inputs"); var input = GrassGeneration.PrepareInput(req, work, null, default);
         var mesh = Path.Combine(input.Data, "meshes", "trees", "testtree.nif");
-        Assert.Equal("high", File.ReadAllText(mesh)); Assert.NotNull(new FileInfo(mesh).LinkTarget);
+        Assert.Equal("high", File.ReadAllText(mesh));
+        if (!OperatingSystem.IsWindows()) Assert.NotNull(new FileInfo(mesh).LinkTarget);
         Assert.Equal("overwrite", File.ReadAllText(input.Ngio));
         Assert.Contains("iMinGrassSize=72", File.ReadAllText(Path.Combine(input.Inis, "Skyrim.ini")));
         Directory.Delete(work, true);
         Assert.Equal("high", File.ReadAllText(Path.Combine(instance, "mods", "High", "Meshes", "Trees", "TestTree.nif")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StagedInputCanBeRemovedWithoutChangingSourceAttributes(bool readOnly)
+    {
+        using var fixture = new TextureFixture();
+        string source = Path.Combine(fixture.Root, "source.nif"), destination = Path.Combine(fixture.Root, "staged.nif");
+        File.WriteAllText(source, "read-only input");
+        var original = File.GetAttributes(source);
+        File.SetAttributes(source, readOnly ? original | FileAttributes.ReadOnly : original);
+        var attributes = File.GetAttributes(source);
+        try
+        {
+            int copies = 0;
+            GrassGeneration.StageInputFile(source, destination, default, () => copies++);
+            Assert.Equal("read-only input", File.ReadAllText(destination));
+            if (OperatingSystem.IsWindows() && readOnly) Assert.Equal(1, copies);
+            File.Delete(destination);
+            Assert.Equal("read-only input", File.ReadAllText(source));
+            Assert.Equal(attributes, File.GetAttributes(source));
+        }
+        finally { File.SetAttributes(source, original); }
+    }
+
+    [Fact]
+    public void InputCopyFallbackPreservesContentAndRejectsOverwriteOrCancelledWork()
+    {
+        using var fixture = new TextureFixture();
+        string source = Path.Combine(fixture.Root, "Source forêt.bsa"), destination = Path.Combine(fixture.Root, "copy.bsa");
+        byte[] content = new byte[2 * 1024 * 1024 + 17];
+        new Random(8).NextBytes(content);
+        File.WriteAllBytes(source, content);
+        GrassGeneration.CopyInputFile(source, destination, default);
+        Assert.Equal(content, File.ReadAllBytes(destination));
+        Assert.Throws<IOException>(() => GrassGeneration.CopyInputFile(source, destination, default));
+        Assert.Equal(content, File.ReadAllBytes(source));
+        string cancelled = Path.Combine(fixture.Root, "cancelled.bsa");
+        Assert.Throws<OperationCanceledException>(() => GrassGeneration.CopyInputFile(source, cancelled, new CancellationToken(true)));
+        Assert.False(File.Exists(cancelled));
     }
 }

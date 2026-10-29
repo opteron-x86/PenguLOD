@@ -214,7 +214,6 @@ public sealed class DesktopTests : IDisposable
     [AvaloniaFact]
     public async Task GrassCachingRunsThroughUiAndPersistsOutputForLod()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new GrassFixture();
         var window = Window();
         window.ReplaceSettings(new DesktopSettings {
@@ -237,7 +236,6 @@ public sealed class DesktopTests : IDisposable
     [AvaloniaFact]
     public async Task FailedGrassDoesNotStartTexturesOrClearLodOutput()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new GrassFixture("fail");
         string lod = Path.Combine(fixture.Root, "LOD"); Directory.CreateDirectory(lod);
         File.WriteAllText(Path.Combine(lod, "AnvilLOD.log"), "previous result");
@@ -257,7 +255,6 @@ public sealed class DesktopTests : IDisposable
     [AvaloniaFact]
     public async Task ExistingCacheValidationRunsInsideTheJobAndPreservesPriorOutputs()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new GrassFixture();
         await Task.Run(() => GrassGeneration.Run(fixture.Request), TestContext.Current.CancellationToken);
         var manifestPath = Path.Combine(fixture.Output, GrassGenerationManifest.FileName);
@@ -297,7 +294,6 @@ public sealed class DesktopTests : IDisposable
     [AvaloniaFact]
     public async Task CombinedGrassRegenerationKeepsTheUiResponsiveAndCanBeCancelled()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new GrassFixture();
         await Task.Run(() => GrassGeneration.Run(fixture.Request), TestContext.Current.CancellationToken);
         string manifest = File.ReadAllText(Path.Combine(fixture.Output, GrassGenerationManifest.FileName));
@@ -337,7 +333,6 @@ public sealed class DesktopTests : IDisposable
     [AvaloniaFact]
     public async Task CombinedGrassJobKeepsTextureAndGrassOverridesTogether()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new GrassFixture();
         var window = Window();
         window.ReplaceSettings(new DesktopSettings {
@@ -356,7 +351,6 @@ public sealed class DesktopTests : IDisposable
     [AvaloniaFact]
     public async Task FailedCombinedTexturesSaveReportsAndResumeWithoutRegeneratingGrass()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new GrassFixture();
         string rule = File.ReadAllText(fixture.Textures.RuleFile);
         File.WriteAllText(fixture.Textures.RuleFile, TextureFixture.Tile(@"textures\missing.dds", @"textures\lod\atlas.dds", 0));

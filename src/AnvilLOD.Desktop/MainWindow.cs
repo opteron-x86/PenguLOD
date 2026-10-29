@@ -74,7 +74,7 @@ public sealed partial class MainWindow : Window
             catch { loadIssue = $"Could not load settings: {e.Message} Automatic saving is disabled until you import a valid preset."; _saveAllowed = false; }
             _settings = new();
         }
-        Title = $"{ProductInfo.Name} · Linux";
+        Title = $"{ProductInfo.Name} · {ProductInfo.Platform}";
         Width = 1240; Height = 900; MinWidth = 960; MinHeight = 680;
         Background = Brush.Parse("#121720");
         FontFamily = new FontFamily("avares://Avalonia.Fonts.Inter/Assets#Inter");
@@ -145,7 +145,7 @@ public sealed partial class MainWindow : Window
         _pages["Preferences"] = Preferences();
         var nav = Stack(6);
         nav.Children.Add(new TextBlock { Text = "PENGULOD", FontSize = 24, FontWeight = FontWeight.Bold, Foreground = Accent, Margin = new Thickness(10, 8, 0, 0) });
-        nav.Children.Add(new TextBlock { Text = "NATIVE LINUX", FontSize = 10, LetterSpacing = 2, Foreground = Muted, Margin = new Thickness(12, 0, 0, 32) });
+        nav.Children.Add(new TextBlock { Text = "NATIVE " + ProductInfo.Platform.ToUpperInvariant(), FontSize = 10, LetterSpacing = 2, Foreground = Muted, Margin = new Thickness(12, 0, 0, 32) });
         foreach (var title in _pages.Keys)
         {
             var button = new Button { Content = title, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(12), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
@@ -185,9 +185,11 @@ public sealed partial class MainWindow : Window
         var source = Choice("Source", nameof(DesktopSettings.SourceMode), ["Mod Organizer 2", "Data folder / Vortex"]);
         var profileRow = Row(Button("Read profiles", LoadProfiles), _profiles);
         _profiles.SelectionChanged += (_, _) => { if (_profiles.SelectedItem is string p) _settings.Profile = p; };
+        var prefix = PathField("Wine / Proton prefix", nameof(DesktopSettings.WinePrefix), hint: "Optional pfx folder; resolves C: and custom drive mappings from MO2's INI.");
+        prefix.IsVisible = !OperatingSystem.IsWindows();
         var advanced = new Expander { Header = "Advanced source paths", HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = Stack(10,
-                PathField("Wine / Proton prefix", nameof(DesktopSettings.WinePrefix), hint: "Optional pfx folder; resolves C: and custom drive mappings from MO2's INI."),
+                prefix,
                 PathField("Mods folder override", nameof(DesktopSettings.ModsFolder)),
                 PathField("Profiles folder override", nameof(DesktopSettings.ProfilesFolder)),
                 PathField("Overwrite folder override", nameof(DesktopSettings.OverwriteFolder)),
@@ -199,7 +201,7 @@ public sealed partial class MainWindow : Window
         mo2.Bind(IsVisibleProperty, new Binding(nameof(DesktopSettings.SourceMode)) { Source = _settings, Converter = new FuncValueConverter<string, bool>(v => v == "Mod Organizer 2") });
         data.Bind(IsVisibleProperty, new Binding(nameof(DesktopSettings.SourceMode)) { Source = _settings, Converter = new FuncValueConverter<string, bool>(v => v != "Mod Organizer 2") });
         ((StackPanel)advanced.Content!).Children.Insert(1, PathField("Game folder override (MO2)", nameof(DesktopSettings.GameFolder), hint: "Use this if the gamePath saved in MO2 points to an old location."));
-        var s = Stack(16, Heading("Build a distant world", "Generate object, tree and grass LOD directly from your Linux installation."),
+        var s = Stack(16, Heading("Build a distant world", "Generate object, tree and grass LOD directly from your game installation."),
             Card("01  SOURCE", Stack(12, Row(source, Choice("Game edition", nameof(DesktopSettings.Edition), ["SE / AE", "VR"])), mo2, data, advanced)),
             Card("02  BUILD", Stack(12,
                 PathField("Output mod folder", nameof(DesktopSettings.OutputFolder), hint: "A separate, empty folder or an existing AnvilLOD output. Install the result with your mod manager."),
@@ -315,7 +317,7 @@ public sealed partial class MainWindow : Window
         Card("ABOUT PENGULOD", Stack(10, Text(ProductInfo.Description),
             Text("Native Avalonia desktop • managed .NET engine • GPL-3.0-only"),
             Text("Built on CageTV’s AnvilLOD. Maintained by opteron-x86 and PenguLOD contributors.", true),
-            Text("The generator runs on Linux without Wine. Skyrim and its SKSE DLL still run under Proton/Wine. Install the matching AnvilLOD game plugin separately. This alpha includes native terrain, tree reduction, seasonal output and object atlases; compare new output in game before replacing a known-good setup.", true),
+            Text("The generator runs natively on Linux and Windows. Install the AnvilLOD game plugin matching your Skyrim runtime separately. On Linux, Skyrim and its SKSE DLL run under Proton/Wine. This alpha includes native terrain, tree reduction, seasonal output and object atlases; compare new output in game before replacing a known-good setup.", true),
             Button("Open project on GitHub", () => Open(ProductInfo.Repository))))));
 
     private Border ToolResults(string page)
@@ -346,7 +348,7 @@ public sealed partial class MainWindow : Window
     }
     private Control PathField(string label, string property, bool file = false, string? hint = null)
     {
-        var box = new TextBox { Name = property, PlaceholderText = "/path/to/" + (file ? "file" : "folder") }; Bind(box, TextBox.TextProperty, _settings, property);
+        var box = new TextBox { Name = property, PlaceholderText = (OperatingSystem.IsWindows() ? @"C:\path\to\" : "/path/to/") + (file ? "file" : "folder") }; Bind(box, TextBox.TextProperty, _settings, property);
         var browse = Button("Browse…", async () =>
         {
             var path = await Pick(file, label);

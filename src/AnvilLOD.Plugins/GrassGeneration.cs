@@ -53,7 +53,7 @@ public static partial class GrassGeneration
         using var limits = RunLimits.Enter(req.Threads == 0 ? RunLimits.Parallel().MaxDegreeOfParallelism : req.Threads, ct, RunLimits.CacheDirectory);
         Validate(req);
         string exe = Path.GetFullPath(req.Executable ?? BundledExecutable);
-        if (!File.Exists(exe)) throw new FileNotFoundException("FasterNGIO is missing. Use the complete AnvilLOD Linux package, or select a native FasterNGIO executable in Grass cache > Advanced.", exe);
+        if (!File.Exists(exe)) throw new FileNotFoundException("FasterNGIO is missing. Use the complete PenguLOD package for your operating system, or select a native FasterNGIO executable in Grass cache > Advanced.", exe);
         if (req.Executable is null && req.Rejection == "gpu")
             throw new ArgumentException("The bundled backend uses CPU BVH. Choose Auto / CPU, or select a GPU-enabled FasterNGIO executable in Advanced.");
         var watch = Stopwatch.StartNew();
@@ -61,7 +61,7 @@ public static partial class GrassGeneration
         var output = HostPath.Canonical(req.OutputFolder);
         var parent = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(parent);
-        var lockName = ".anvillod-grass-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(output)))[..16] + ".lock";
+        var lockName = ".anvillod-grass-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(HostPath.ComparisonKey(output))))[..16] + ".lock";
         var lockPath = Path.Combine(parent, lockName);
         if (new FileInfo(lockPath).LinkTarget is not null) throw new IOException("Grass lock must not be a symbolic link: " + lockPath);
         using var guard = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);

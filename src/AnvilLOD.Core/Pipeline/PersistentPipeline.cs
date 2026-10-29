@@ -61,11 +61,12 @@ public sealed class PersistentPipeline : IDisposable
         try
         {
             // Lock output locations as well as the journal: another cache directory must not bypass the guard.
-            foreach (var output in stages.Select(p => p.OutputFolder).Order(StringComparer.Ordinal).Distinct())
+            var paths = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            foreach (var output in stages.Select(p => p.OutputFolder).Order(paths).Distinct(paths))
             {
                 ct.ThrowIfCancellationRequested();
                 var parent = Path.GetDirectoryName(output)!; Directory.CreateDirectory(parent);
-                Lock(Path.Combine(parent, ".pengulod-output-" + OutputSnapshot.HashText(output)[..24] + ".lock"));
+                Lock(Path.Combine(parent, ".pengulod-output-" + OutputSnapshot.HashText(HostPath.ComparisonKey(output))[..24] + ".lock"));
             }
             Directory.CreateDirectory(Folder); Lock(Path.Combine(Folder, "job.lock"));
             if (File.Exists(JournalPath))
