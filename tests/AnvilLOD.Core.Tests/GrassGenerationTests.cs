@@ -195,8 +195,8 @@ public sealed class GrassGenerationTests
         string source = Path.Combine(fixture.Root, "source.nif"), destination = Path.Combine(fixture.Root, "staged.nif");
         File.WriteAllText(source, "read-only input");
         var original = File.GetAttributes(source);
-        var attributes = readOnly ? original | FileAttributes.ReadOnly : original;
-        File.SetAttributes(source, attributes);
+        File.SetAttributes(source, readOnly ? original | FileAttributes.ReadOnly : original);
+        var attributes = File.GetAttributes(source);
         try
         {
             int copies = 0;
