@@ -740,7 +740,7 @@ public static class ScanPipeline
                         if (!assets.TryOpen(rel, out var ns)) continue;
                         byte[] nb;
                         using (ns) { using var ms = new MemoryStream(); ns.CopyTo(ms); nb = ms.ToArray(); }
-                        if (AnvilLOD.Meshes.Nif.NifGeometryReader.Read(rel, nb).Warnings.Any(w => w.StartsWith("Skinned shape", StringComparison.Ordinal))) skinned.Add(model);
+                        if (AnvilLOD.Meshes.Nif.NifGeometryReader.HasSkinInstances(nb)) skinned.Add(model);
                     }
                     catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or InvalidDataException or NotSupportedException or IOException) { }
                 }

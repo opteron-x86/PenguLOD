@@ -70,6 +70,10 @@ public static partial class NifGeometryReader
         return new LodMesh { Path = path, Parts = parts, Warnings = warnings, NoShapesInFile = !anyShape && warnings.Count == 0 };
     }
 
+    /// <summary>Raw runtime copies keep the original skeleton requirements even when static LOD can bake a pose.</summary>
+    public static bool HasSkinInstances(byte[] data) => NifFile.Read(data).Blocks.Any(b =>
+        b.Type is "NiSkinInstance" or "BSDismemberSkinInstance" or "BSSkin::Instance");
+
     /// <summary>
     /// The vertex descriptor (layout of the vertex buffer: stride, attribute offsets and which attributes exist) of the first triangle shape in an
     /// SSE mesh, or null if it has none. Two shapes with the same descriptor can swap vertex buffers without the shader noticing.
@@ -162,7 +166,13 @@ public static partial class NifGeometryReader
                 var part = ReadLeShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects);
                 if (part is not null) parts.Add(part);
             }
-            else warnings.Add($"Scene child {block.Index} ({block.Type}) is not supported; skipped.");
+            else
+            {
+                // Scene children are NiAVObjects. An unsupported hidden particle/effect is not visible geometry.
+                var r = nif.ReaderFor(block);
+                if ((ReadAvObject(nif, ref r).Flags & 1) == 0)
+                    warnings.Add($"Scene child {block.Index} ({block.Type}) is not supported; skipped.");
+            }
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or IndexOutOfRangeException or OverflowException or NotSupportedException)
         {
@@ -200,8 +210,10 @@ public static partial class NifGeometryReader
         if (dataSize == 0 && partition is null) throw new InvalidDataException("Shape has counts but no vertex/triangle buffer.");
 
         bool viewportPlane = includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true;
-        var material = viewportPlane ? new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0)
+        var material = viewportPlane && (shaderRef < 0 || shaderRef >= nif.Blocks.Count || nif.Blocks[shaderRef].Type != "BSLightingShaderProperty")
+            ? new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0)
             : ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit, renderEffects);
+        if (material is null && viewportPlane) material = new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0);
         if (includeUnshaded && shaderRef < 0) material = UnshadedMaterial;
         if (material is null) { warnings.Add($"Shape '{av.Name}' has no lighting shader; skipped."); return null; }
         bool water = waterAsLit && ReferenceEquals(material, FakeWaterMaterial);
@@ -332,8 +344,10 @@ public static partial class NifGeometryReader
         SkinInfo? skinInfo = skin >= 0 ? ReadSkin(nif, skin, av.Name) : null;
 
         bool viewportPlane = includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true;
-        var material = viewportPlane ? new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0)
+        var material = viewportPlane && (shaderRef < 0 || shaderRef >= nif.Blocks.Count || nif.Blocks[shaderRef].Type != "BSLightingShaderProperty")
+            ? new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0)
             : ReadMaterial(nif, shaderRef, alphaRef, passthru, waterAsLit, renderEffects);
+        if (material is null && viewportPlane) material = new LodMaterial([""], 0, 0, 0, alphaRef >= 0, 0, 0, Vector3.Zero, 0);
         if (includeUnshaded && shaderRef < 0) material = UnshadedMaterial;
         if (material is null) { warnings.Add($"Shape '{av.Name}' has no lighting shader; skipped."); return null; }
         bool water = waterAsLit && ReferenceEquals(material, FakeWaterMaterial);

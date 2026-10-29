@@ -75,6 +75,16 @@ public class ModelCoverageTests
         Assert.Contains(mesh.Warnings, w => w.Contains("active child"));
     }
 
+    [Fact]
+    public void RuntimeCopiesStillRecognizeOriginalSkinRequirements()
+    {
+        var skin = ModelNifFixture.Create(ModelNifFixture.Geometry.Partition);
+        Assert.False(NifGeometryReader.Read("skin", skin).HasIncompleteGeometry);
+        Assert.True(NifGeometryReader.HasSkinInstances(skin));
+        var staticBytes = LodNifWriter.Write("baked", NifGeometryReader.Read("skin", skin).Parts);
+        Assert.False(NifGeometryReader.HasSkinInstances(staticBytes));
+    }
+
     [Theory]
     [InlineData(ModelNifFixture.Geometry.Triangles)]
     [InlineData(ModelNifFixture.Geometry.Partition)]
@@ -171,5 +181,44 @@ public class ModelCoverageTests
         var mesh = NifGeometryReader.Read("opaque", ModelNifFixture.Create(ModelNifFixture.Geometry.Packed));
         Assert.NotNull(BillboardRenderer.Render(mesh, _ => (new byte[] { 10, 100, 10, 0 }, 1, 1), 32));
         Assert.Throws<FileNotFoundException>(() => BillboardRenderer.Render(mesh, _ => null));
+    }
+
+    [Fact]
+    public void GeneratedFullTreeMaterialsDiscardSpecialShaderChannels()
+    {
+        using var f = new TextureFixture();
+        var bytes = ModelNifFixture.Create(ModelNifFixture.Geometry.Packed);
+        var nif = NifFile.Read(bytes); var writer = new NifWriter();
+        foreach (string s in nif.Strings) writer.String(s);
+        foreach (var block in nif.Blocks) writer.Reserve(block.Type);
+        foreach (var block in nif.Blocks)
+        {
+            var payload = bytes.AsSpan(block.Offset, block.Size).ToArray();
+            if (block.Type == "BSLightingShaderProperty")
+            {
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(16), 0x80000881u);
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(20), 0x00800040u);
+                System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(payload.AsSpan(44), 1f);
+            }
+            if (block.Type == "BSShaderTextureSet") writer.Set(block.Index, b =>
+            {
+                b.Write(6u);
+                foreach (string texture in new[] { @"textures\green.dds", @"textures\green_n.dds", "glow", "height", "environment", "rmaos" })
+                    NifWriter.WriteSizedString(b, texture);
+            });
+            else writer.Set(block.Index, b => b.Write(payload));
+        }
+        const string path = @"meshes\trees\testtree.nif";
+        TextureFixture.Put(f.Data, path, writer.ToBytes(0));
+        var source = new Tree3DSource(AssetIndex.Build(Mutagen.Bethesda.GameRelease.SkyrimSE, f.Data), settings: new(true));
+        var selection = source.Select(path, 4, native: true);
+        Assert.NotNull(selection.MeshPath);
+        var material = Assert.Single(source.Build(selection.MeshPath)!.Parts).Material;
+        Assert.Equal(Vector3.Zero, material.EmissiveColor);
+        Assert.Equal(0u, material.ShaderFlags1 & 0x881u);
+        Assert.Equal(0u, material.ShaderFlags2 & 0x00800040u);
+        Assert.All(material.Textures.Skip(2), texture => Assert.Equal("", texture));
+        var authored = NifGeometryReader.Read(path, writer.ToBytes(0), passthru: true);
+        Assert.Equal(0x00800040u, authored.Parts[0].Material.ShaderFlags2 & 0x00800040u);
     }
 }
