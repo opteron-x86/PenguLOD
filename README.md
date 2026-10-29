@@ -9,7 +9,7 @@ A native Linux LOD toolkit for Skyrim, built on [CageTV’s AnvilLOD](https://gi
 PenguLOD combines an Avalonia desktop and CLI with native terrain, object, tree and grass LOD,
 texture generation, and offline grass caching. It reads Fluorine/MO2 profiles directly and runs without Wine.
 
-**Current version: 0.2.0-alpha.2**, incorporating AnvilLOD **0.2.70**.
+**Current version: 0.2.0-alpha.3**, incorporating AnvilLOD **0.2.70**.
 The all-in-one pipeline supports grass → textures → terrain → object/tree/grass LOD, with
 verified resume and safe output publication. New terrain and seasonal rendering need broader
 in-game validation; this alpha does not claim full TexGen or DynDOLOD parity.
@@ -37,7 +37,7 @@ On first launch, PenguLOD imports an existing `~/.config/AnvilLOD/settings.json`
 with all selected output paths, preferences and the old cache location. An existing PenguLOD
 configuration takes precedence. `--settings /path/to/settings.json` selects an isolated configuration.
 
-See the [Linux guide](docs/LINUX-PORT.md) for source setup, texture generation, grass caching,
+See the [user guide](docs/USER-GUIDE.md) for source setup, texture generation, grass caching,
 settings, testing and current limitations.
 
 ## Available now
@@ -72,7 +72,7 @@ Requires .NET 10 SDK, CMake 3.28+, Ninja, a C++23 compiler and the native develo
 listed in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
-git clone git@github.com:opteron-x86/PenguLOD.git
+git clone https://github.com/opteron-x86/PenguLOD.git
 cd PenguLOD
 bash tools/test.sh
 bash tools/build.sh
@@ -83,7 +83,7 @@ bash tools/build.sh
 app and checks native startup. `v*` tags matching `VERSION` publish tested releases with
 checksums and source archives. See [release maintenance](docs/RELEASING.md).
 
-The [roadmap](docs/ROADMAP.md) records implemented milestones, validation and remaining limits.
+The [roadmap](docs/ROADMAP.md) lists upcoming quality, compatibility and performance work.
 Use the [transition checklist](docs/DIAGNOSTICS.md#repeatable-checks) when testing generated output in Skyrim.
 
 ## Credits and license
@@ -91,7 +91,8 @@ Use the [transition checklist](docs/DIAGNOSTICS.md#repeatable-checks) when testi
 PenguLOD is maintained by **opteron-x86 and contributors**, based on **AnvilLOD by CageTV**.
 The native grass engine is [FasterNGIO by panthuncia](https://github.com/panthuncia/FasterNGIO),
 with pinned source and local patches. Thanks also to the Avalonia, Mutagen, nifly and other
-dependency authors. [Provenance](docs/PROVENANCE.md) records the fork point and compatibility decisions.
+dependency authors. See [dependencies and compatibility](docs/PROVENANCE.md) for bundled
+components, source pins and game-runtime requirements.
 
 [GPL-3.0-only](LICENSE.txt). Existing upstream copyright notices are retained. Packaged dependencies
 include their own notices and licenses; the grass backend includes its corresponding source.

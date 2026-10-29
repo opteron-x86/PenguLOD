@@ -237,10 +237,8 @@ namespace AnvilLOD
 		return instance;
 	}
 
-	/// A walled city's child worldspace (Whiterun) is flagged NoGrass and uses the parent's land: inside the cells the game keeps loaded around
-	/// the player there is real terrain with its grass switched off, and the baked-grass LOD terrain is hidden, so the ground reads as bare
-	/// dirt in a square that follows the player (Whiterun, 2026-10-14). Clearing the flag in memory lets the game draw grass there like in the
-	/// open country: no plugin, nothing written to disk.
+	/// Child city worldspaces can inherit terrain while suppressing grass with NoGrass.
+	/// Clear the flag in memory so loaded terrain has grass where the distant grass LOD is hidden.
 	void Controller::ClearCityNoGrass()
 	{
 		if (!Settings::Get().cityGrass) {
@@ -303,8 +301,7 @@ namespace AnvilLOD
 			item.opposite = (e.flags & NativeEntry::kOpposite) != 0;
 			item.initiallyDisabled = (e.flags & NativeEntry::kInitiallyDisabled) != 0;
 			item.nearOnly = (e.flags & NativeEntry::kNear) != 0;
-			// The fires, candles and streams of AnvilLOD Effects.esp: hundreds of particle systems enabled all over the map (the far grid) crashed
-			// the renderer when the player turned toward them (Riften, 2026-10-13), so these are only ever enabled close to the player.
+			// Keep particle effects near the player to avoid overloading the renderer with distant systems.
 			item.effects = file.strings[e.nativePlugin].rfind("AnvilLOD Effects", 0) == 0;
 			item.x = e.x;
 			item.y = e.y;
@@ -711,8 +708,7 @@ namespace AnvilLOD
 
 	namespace
 	{
-		/// A skinned shape (a cloth banner or flag that moves with bones) drawn from a clone has no skeleton to take its bones from: its
-		/// vertices end up wherever the garbage bone transforms put them, like exploding body armor (Whiterun's tower flags, 2026-10-13).
+		/// Cloned skinned shapes have no skeleton and cannot produce valid bone transforms.
 		bool HasSkinnedShape(RE::NiAVObject* a_object, int a_depth = 0)
 		{
 			if (!a_object || a_depth > 64) {
@@ -798,8 +794,7 @@ namespace AnvilLOD
 				std::ranges::stable_partition(a_item.controllers, [](RE::NiTimeController* c) { return netimmerse_cast<RE::NiControllerManager*>(c) != nullptr; });
 				RE::NiTimeController::StartAnimations(node);
 				StartSequences(a_item.controllers);
-				// A clone's controllers come out never started (start / last time at -FLT_MAX after 100 s of updates, 2026-10-11):
-				// do what the loader does to a scene graph that has animations, then start the plain controllers explicitly.
+				// Cloned controllers need the loader's animation setup and an explicit start time.
 				{
 					bool selective = true, rigid = false;
 					node->SetSelectiveUpdateFlags(selective, true, rigid);
@@ -912,9 +907,7 @@ namespace AnvilLOD
 		}
 	}
 
-	/// A model's root node is a BSFadeNode, and the engine fades it by the distance to the camera with settings its own reference loading
-	/// sets up (a fade of 500 to 1000 units). A clone attached by the plugin never gets that setup and starts at currentFade 0: fully
-	/// transparent close to the camera, solid farther out, which hid every copy inside the square around the player (Whiterun, 2026-10-14).
+	/// Cloned BSFadeNodes lack the engine's reference-loading fade setup and start transparent.
 	/// Make the node opaque; the values of the first few are logged.
 	void Controller::ForceFadeIn(Item& a_item)
 	{
@@ -1016,10 +1009,8 @@ namespace AnvilLOD
 			if (item.controllers.empty() || !item.node) {
 				continue;
 			}
-			// The scene graph's own update pass; it left every controller of a clone untouched (start / last time never set,
-			// 2026-10-11 log), so a controller manager (windmill blades, water wheels: they animate through sequences) is also
-			// ticked itself. Plain controllers are not: calling those directly crashed in
-			// BSLightingShaderPropertyFloatController::Update on cloned models (crash 2026-10-08).
+			// Sequence managers may need explicit updates on clones. Plain shader controllers
+			// must use the scene-graph update; direct calls can access uninitialized clone state.
 			if (Settings::Get().driveSequences) {
 				DriveSequences(item.controllers, item.node.get(), t);
 			}
@@ -1118,11 +1109,9 @@ namespace AnvilLOD
 		} countCopies{ *this };
 		const auto& settings = Settings::Get();
 		if (_refresh.exchange(false)) {
-			// Hide now, draw again on the next update: detaching and re-attaching in the same pass left the objects around the player
-			// invisible until the next cell change (Redraw now, 2026-10-11).
+			// Defer reattachment until the next update so detached objects become visible again.
 			HideAll();
-			// ... and with a new root too, like after a cell change (entering and leaving a building brought the objects back, a plain
-			// hide and draw did not).
+			// Recreate the root as well as its children to reset attachment state.
 			if (_root && _root->parent) {
 				_root->parent->DetachChild(_root.get());
 			}

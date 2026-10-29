@@ -5,15 +5,15 @@ namespace AnvilLOD.Core.Tests;
 
 public class Mo2ProfileChoiceTests
 {
-    private static readonly string[] Profiles = ["tabula rasa!", "anvil-test-notexgen", "TEST"];
+    private static readonly string[] Profiles = ["default profile!", "texture-test", "TEST"];
 
     [Fact]
     public void UnderMo2_TheProfileMo2HasSelectedWinsOverTheRememberedOne() =>
-        Assert.Equal("anvil-test-notexgen", Mo2ProfileChoice.Pick(Profiles, "tabula rasa!", "anvil-test-notexgen", underMo2: true));
+        Assert.Equal("texture-test", Mo2ProfileChoice.Pick(Profiles, "default profile!", "texture-test", underMo2: true));
 
     [Fact]
     public void OutsideMo2_TheRememberedProfileWins() =>
-        Assert.Equal("tabula rasa!", Mo2ProfileChoice.Pick(Profiles, "tabula rasa!", "anvil-test-notexgen", underMo2: false));
+        Assert.Equal("default profile!", Mo2ProfileChoice.Pick(Profiles, "default profile!", "texture-test", underMo2: false));
 
     [Fact]
     public void NamesMatchWithoutRegardToCase() =>
@@ -21,11 +21,11 @@ public class Mo2ProfileChoiceTests
 
     [Fact]
     public void UnderMo2_AMissingMo2ProfileFallsBackToTheRememberedOne() =>
-        Assert.Equal("tabula rasa!", Mo2ProfileChoice.Pick(Profiles, "tabula rasa!", "gone", underMo2: true));
+        Assert.Equal("default profile!", Mo2ProfileChoice.Pick(Profiles, "default profile!", "gone", underMo2: true));
 
     [Fact]
     public void NothingKnown_TheFirstProfile() =>
-        Assert.Equal("tabula rasa!", Mo2ProfileChoice.Pick(Profiles, null, null, underMo2: false));
+        Assert.Equal("default profile!", Mo2ProfileChoice.Pick(Profiles, null, null, underMo2: false));
 
     [Fact]
     public void NoProfiles_Null() =>

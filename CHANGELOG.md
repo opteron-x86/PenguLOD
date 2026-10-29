@@ -5,21 +5,29 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.2.0-alpha.3] - 2026-10-28
+
+- Reorganized documentation into setup, grass, textures and troubleshooting guides, with
+  current workflow instructions and a focused roadmap.
+- Removed profile-specific paths, local benchmark results and development-session notes
+  from documentation; replaced profile-derived fixture names with neutral examples.
+- Binary packages now include only user-facing guides. Bundled backend source excludes
+  assistant instruction files and local tool state while retaining build inputs and licenses.
+- No generation behavior changes.
+
 ## [0.2.0-alpha.2] - 2026-10-27
 
 - Fixed terrain generation failing on unpainted LAND by using Skyrim's `landscape/dirt02.dds`
   default instead of `landscape/default.dds`. Honor `sDefaultLandDiffuseTexture` from the
   selected profile/explicit INI with case-insensitive Linux path lookup.
-- Skip the base texture when alpha layers fully cover it; genuinely missing painted textures
+- Skip the base texture when alpha layers fully cover it; missing painted textures
   still stop publication and now identify the world, cell and quadrant.
 - Added regression coverage for omitted/null base layers, INI precedence and opaque paint.
-  Rebuilt the previously failing 512×512 Tamriel tile against a real profile without changing
-  installed game or generated output. A complete Tamriel regeneration remains a user-side check.
 
 ## [0.2.0-alpha.1] - 2026-10-27
 
 - Portable archive and AppImage packages, isolated candidate builds, and compatibility checks
-  for Ubuntu 24.04, Debian 13 and Fedora 43. Flatpak evaluated; no Flatpak release claimed.
+  for Ubuntu 24.04, Debian 13 and Fedora 43.
 
 - Shared desktop/CLI presets and validation, per-stage CLI commands, request export,
   saved-job inspection and compact reports. Legacy CLI generation now uses safe publication.
@@ -29,7 +37,7 @@ Pre-release versions are marked alpha or beta until the supported workflows have
   passes; hardware performance validation remains pending.
 
 - Native paired object texture atlases with UV remapping, material grouping, padded mips,
-  conservative eligibility checks and coverage reports; replaced the unused atlas placeholder.
+  conservative eligibility checks and coverage reports.
 
 - Seasonal terrain, tree atlases/BTT/LST and native 3D tree replacements, using Seasons of
   Skyrim form swaps. Added a synthetic seasonal profile and end-to-end regression checks.
@@ -46,8 +54,7 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 - Isolated LOD publication with previous-output backups, concurrent-job locks and retained
   failure logs; a failed or empty generation preserves the installed output.
 - Native terrain/water stage with landscape layer baking, model-space normals, existing-BTR
-  fallback, terrain-shadow heightmap export and desktop controls. Automated format/fixture
-  validation passes; in-game visual validation remains pending.
+  fallback, terrain-shadow heightmap export and desktop controls.
 - Per-level tree budgets, authored far-model selection, native trunk reduction and optional
   full-model fallback. Foliage geometry and UVs are preserved; over-budget levels use
   billboards with explicit coverage/cost reports in the desktop and scan JSON.
@@ -70,7 +77,7 @@ Initial PenguLOD Linux release, based on CageTV/AnvilLOD 0.2.70.
 - PenguLOD branding, independent versioning and one-time migration of existing AnvilLOD settings.
 - Automated Linux tests, native backend build/tests, portable packages, source archives and SHA-256 checksums.
 
-### Current limits
+### Limits at release
 
 - Linux x64 release target: Ubuntu 24.04 or compatible newer glibc distributions. Other distributions need validation.
 - Native terrain/water LOD generation, full TexGen/PBR parity, seasonal billboard generation and GPU grass acceleration remain planned.
@@ -80,4 +87,4 @@ Initial PenguLOD Linux release, based on CageTV/AnvilLOD 0.2.70.
 
 Download the `linux-x64` archive, extract it, and launch `linux-x64/run-pengulod.sh`.
 Existing AnvilLOD settings are imported once without changing the original, output paths or cache location.
-See the [Linux guide](https://github.com/opteron-x86/PenguLOD/blob/main/docs/LINUX-PORT.md) for setup.
+See the [user guide](https://github.com/opteron-x86/PenguLOD/blob/main/docs/USER-GUIDE.md) for setup.

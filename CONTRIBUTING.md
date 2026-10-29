@@ -3,7 +3,9 @@
 Use a branch from `main`, keep changes focused, and include the relevant validation in your pull
 request. Preserve upstream copyright notices and game-side compatibility names. Report bugs with
 the PenguLOD version, distribution, workflow stage, settings needed to reproduce it, and a relevant
-log excerpt. Synthetic fixtures are preferred; do not commit game/mod assets or personal profiles.
+log excerpt. Use synthetic fixture names and portable example paths. Do not commit game/mod
+assets, personal profiles, local benchmarks, session notes or assistant context files.
+Document supported behavior and reproducible procedures; keep debugging history in focused issues.
 
 ## Linux development
 
@@ -25,10 +27,24 @@ prepared `.tools/fasterngio-runtime`. Releases always rebuild the native backend
 Set `PENGULOD_DOTNET` to use a particular SDK executable; `PENGULOD_NUGET_SOURCE` overrides
 the package source. The previous `ANVILLOD_*` build variables remain accepted.
 
+Set `PENGULOD_PACKAGE_DIR="$PWD/dist/candidate/linux-x64"` for an isolated package build.
+The build and AppImage scripts accept this override; it must be a `linux-x64` folder
+under `dist/`. `bash tools/package-appimage.sh` requires `appstreamcli` and validates
+the installed metadata, desktop entry and icon before packaging.
+
 The core tests exercise engine fixtures; desktop tests use Avalonia’s rendered headless platform.
 `tools/native-smoke.sh` additionally checks the actual Linux windowing backend. Optional tests
 that require a real game profile are skipped by default. Keep live generation separate from builds:
 start the app from a portable folder that the build will not overwrite.
+
+For an optional game-backed desktop test, export a preset with dedicated output and cache
+folders, then run `bash tools/test.sh --smoke-settings /path/to/test-preset.json`.
+This test writes to those folders. Screenshots and TRX results are saved under `.artifacts/`.
+
+Binary packages include an explicit set of user guides from `tools/build.sh`. Keep their
+relative links valid inside the extracted package. Contributor and release-maintenance
+documentation stays in the source checkout. Source bundles retain build inputs, patches,
+dependency pins and licenses, excluding local tooling and assistant instructions.
 
 ## Source layout
 

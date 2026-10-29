@@ -4,7 +4,7 @@ namespace AnvilLOD.Core.Tests;
 
 public class PreflightTests
 {
-    private static readonly string Mods = Path.Combine(Path.GetTempPath(), "Modlists", "Tabula", "mods");
+    private static readonly string Mods = Path.Combine(Path.GetTempPath(), "Modlists", "Example", "mods");
 
     [Fact]
     public void A_ticked_output_mod_is_reported_by_name()

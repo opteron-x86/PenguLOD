@@ -68,8 +68,8 @@ public static class OcclusionLauncher
     ];
 
     /// <summary>
-    /// How many threads may read object LOD meshes at once for a PC with this much RAM. Unlimited threads took over 80 GB of committed memory
-    /// on a 64 GB PC with 3D tree LOD, so this allows about one thread per 24 GB (1 to 4). An estimate: the page logs the peak of every run.
+    /// Limits simultaneous object-LOD mesh readers to about one per 24 GB of RAM (1 to 4).
+    /// This is a memory-use heuristic; the log records the measured peak for each run.
     /// </summary>
     public static int SuggestedThreads(long installedRamBytes)
     {

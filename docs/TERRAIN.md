@@ -26,7 +26,7 @@ detail that was absent from those files. Missing coverage or unresolved landscap
 stops publication and preserves the previous output. Missing LOD-water records are reported;
 the affected world's water shapes are omitted rather than referencing an invalid water type.
 
-The initial bake supports diffuse layers, vertex colours and height-derived normals.
+The bake supports diffuse layers, vertex colours and height-derived normals.
 [Seasonal terrain](SEASONS.md) uses written Seasons of Skyrim LTEX swaps and available
 seasonal baseline textures. True PBR terrain conversion and source normal-detail baking
 remain unsupported. Brightness scales linear colour; vertex colour strength controls the
@@ -39,12 +39,11 @@ reduces the sample density for large worlds, without stretching their bounds.
 
 Synthetic tests cover BTR structure at levels 4/8/16/32, UVs, shared edges, water segments,
 negative coordinates, landscape materials, missing coverage, fallback sampling, heightmap
-orientation, output preservation and desktop checkpoint reuse. In-game visual validation of
-this native terrain implementation is still pending. Compare land/water transitions, shorelines,
-tile seams and the world map in a small test profile before replacing an established terrain set.
+orientation, output preservation and desktop checkpoint reuse. Compare land/water transitions,
+shorelines, tile seams and the world map when changing source assets or settings. Broader
+modlist and shader compatibility is tracked in the [roadmap](ROADMAP.md).
 
 Format references: [NifTools schema](https://github.com/niftools/nifxml/blob/develop/nif.xml),
 [terrain conversion format observations](https://github.com/bryantmh/tes4skyrim/blob/master/docs/commentary/asset_convert_terrain.md),
 [Bottled Shaders heightmap reader](https://github.com/InTheBottle/Bottled-Shaders/blob/f0deaabe1f5d8c675bce06927a5c257f4af4e94d/src/Features/TerrainShadows.cpp).
-The writer was also compared with locally installed xLODGen SSE BTR structures. No game assets
-are included in the tests or repository.
+No game assets are included in the tests or repository.
