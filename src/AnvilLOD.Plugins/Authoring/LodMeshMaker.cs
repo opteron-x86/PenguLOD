@@ -218,7 +218,7 @@ public static class LodMeshMaker
                 var path = Path.Combine(req.OutputFolder, "meshes", "lod", group, $"{stem}_lod_{lv.Level}.nif");
                 if (!req.Overwrite && File.Exists(path)) { action.Add($"L{lv.Level} kept"); continue; }
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                File.WriteAllBytes(path, LodNifWriter.Write($"{stem}_lod_{lv.Level}", lv.Parts, "AnvilLOD LOD Maker"));
+                File.WriteAllBytes(path, LodNifWriter.Write($"{stem}_lod_{lv.Level}", lv.Parts, "AnvilLOD LOD Maker", preserveShapeNames: true));
                 Interlocked.Increment(ref meshesWritten);
                 action.Add($"L{lv.Level} {lv.Triangles:N0} tris" + (lv.OverBudget ? $" (over the budget of {lv.Budget:N0})" : ""));
             }

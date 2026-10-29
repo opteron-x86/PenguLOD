@@ -10,7 +10,7 @@ namespace AnvilLOD.Meshes.Authoring;
 /// </summary>
 public static class LodNifWriter
 {
-    public static byte[] Write(string name, IReadOnlyList<LodMeshPart> parts, string author = "AnvilLOD Mod Author tools")
+    public static byte[] Write(string name, IReadOnlyList<LodMeshPart> parts, string author = "AnvilLOD Mod Author tools", bool preserveShapeNames = false)
     {
         var w = new NifWriter { Author = author };
         int rootName = w.String(name);
@@ -26,7 +26,7 @@ public static class LodNifWriter
             int texSet = w.Reserve("BSShaderTextureSet");
             int alpha = p.Material.HasAlpha ? w.Reserve("NiAlphaProperty") : -1;
             children.Add(shape);
-            int shapeName = w.String($"{name}:{n++}");
+            int shapeName = w.String(preserveShapeNames && !string.IsNullOrWhiteSpace(p.Name) ? p.Name : $"{name}:{n}"); n++;
             bool colors = p.Colors is not null;
 
             w.Set(shape, b => WriteShape(b, p, shapeName, shader, alpha));

@@ -49,7 +49,7 @@ public static class TextureImages
         while (source.Width >= w * 2 || source.Height >= h * 2)
         {
             if (source.Width == 1 && source.Height == 1) break;
-            var d = TreeAtlasBuilder.Downsample(source.Pixels, source.Width, source.Height);
+            var d = TreeAtlasBuilder.Downsample(source.Pixels, source.Width, source.Height, alphaWeighted: !normal);
             source = new(d.Rgba, d.W, d.H);
         }
         for (int y = topRow; y < bottomRow; y++)
@@ -93,7 +93,7 @@ public static class TextureImages
     {
         var mips = new List<byte[]>();
         var levels = alpha && !normal ? PbrLodConverter.MipChain(image.Pixels, image.Width, image.Height)
-            : Levels(image).ToList();
+            : Levels(image, normal).ToList();
         foreach (var level in levels)
         {
             RunLimits.Check();
@@ -106,10 +106,10 @@ public static class TextureImages
         return output.ToArray();
     }
 
-    private static IEnumerable<(byte[] Rgba, int W, int H)> Levels(TextureImage image)
+    private static IEnumerable<(byte[] Rgba, int W, int H)> Levels(TextureImage image, bool normal)
     {
         var level = (Rgba: image.Pixels, W: image.Width, H: image.Height);
         yield return level;
-        while (level.W > 4 || level.H > 4) { level = TreeAtlasBuilder.Downsample(level.Rgba, level.W, level.H); yield return level; }
+        while (level.W > 4 || level.H > 4) { level = TreeAtlasBuilder.Downsample(level.Rgba, level.W, level.H, alphaWeighted: !normal); yield return level; }
     }
 }

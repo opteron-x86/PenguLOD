@@ -175,10 +175,17 @@ public sealed class AssetIndex : IAssetSource
     }
 
     public bool TryOpen(string dataRelativePath, out Stream stream)
+        => TryOpen(dataRelativePath, out stream, true);
+
+    /// <summary>Read the installed source before explicitly attached generation outputs.</summary>
+    public bool TryOpenSource(string dataRelativePath, out Stream stream)
+        => TryOpen(dataRelativePath, out stream, false);
+
+    private bool TryOpen(string dataRelativePath, out Stream stream, bool generated)
     {
         var key = GamePath.Normalize(dataRelativePath);
-        if (Replaced(key) && !_overrides.ContainsKey(key)) { stream = Stream.Null; return false; }
-        if ((_overrides.GetValueOrDefault(key) ?? Loose(key)) is { } fi)
+        if (generated && Replaced(key) && !_overrides.ContainsKey(key)) { stream = Stream.Null; return false; }
+        if (((generated ? _overrides.GetValueOrDefault(key) : null) ?? Loose(key)) is { } fi)
         {
             stream = fi.OpenRead();
             return true;
