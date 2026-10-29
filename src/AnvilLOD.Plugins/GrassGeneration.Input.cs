@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Buffers;
+using System.Runtime.InteropServices;
 using AnvilLOD.Core.Paths;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.World;
@@ -8,7 +10,7 @@ using Mutagen.Bethesda.Skyrim;
 
 namespace AnvilLOD.Plugins;
 
-/// <summary>A disposable, case-normalized Data view. Only file links are made; source folders are never modified.</summary>
+/// <summary>A disposable, case-normalized Data view; source folders are never modified.</summary>
 internal sealed record GrassGenerationInput(string Data, string Plugins, string Inis, string Ngio,
     string Source, string WorldArgument, string LoadOrderFingerprint);
 
@@ -82,14 +84,17 @@ public static partial class GrassGeneration
         var data = Path.Combine(work, "Data");
         var iniDir = Path.Combine(work, "ini");
         Directory.CreateDirectory(data); Directory.CreateDirectory(iniDir);
-        int linked = 0;
+        int prepared = 0, copied = 0;
         foreach (var (relative, source) in files)
         {
             ct.ThrowIfCancellationRequested();
             var destination = GamePath.ToFileSystemPath(data, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.CreateSymbolicLink(destination, Path.GetFullPath(source));
-            if (++linked % 25000 == 0) progress?.Report($"Prepared {linked:N0} of {files.Count:N0} input files...");
+            StageInputFile(source, destination, ct, () =>
+            {
+                if (copied++ == 0) progress?.Report("Input links are unavailable; copying affected files. Keeping grass output on the same drive as source mods usually avoids copies on Windows.");
+            });
+            if (++prepared % 25000 == 0) progress?.Report($"Prepared {prepared:N0} of {files.Count:N0} input files...");
         }
         if (ccc is not null) File.Copy(ccc, Path.Combine(work, "Skyrim.ccc"));
 
@@ -121,8 +126,50 @@ public static partial class GrassGeneration
             ngio = Path.Combine(work, "GrassControl.ini");
         }
         else progress?.Report("No GrassControl.ini found; FasterNGIO will use its built-in defaults.");
-        progress?.Report($"Input ready: {files.Count:N0} winning files; source files remain read-only inputs.");
+        progress?.Report($"Input ready: {files.Count:N0} winning files ({copied:N0} copied); source files remain read-only inputs.");
         return new(data, pluginFile, iniDir, ngio, game.SourceDescription, selection, LoadOrderFingerprint(game));
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkW(string newFile, string existingFile, IntPtr security);
+
+    internal static void StageInputFile(string source, string destination, CancellationToken ct, Action copying)
+    {
+        ct.ThrowIfCancellationRequested();
+        source = Path.GetFullPath(source);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.CreateSymbolicLink(destination, source);
+            return;
+        }
+        // Read-only hard links cannot be cleaned up without changing the source's attributes.
+        if ((File.GetAttributes(source) & FileAttributes.ReadOnly) == 0)
+        {
+            if (CreateHardLinkW(destination, source, IntPtr.Zero)) return;
+            try { File.CreateSymbolicLink(destination, source); return; }
+            catch (Exception error) when (error is UnauthorizedAccessException or IOException) { }
+        }
+        copying();
+        CopyInputFile(source, destination, ct);
+    }
+
+    internal static void CopyInputFile(string source, string destination, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.SequentialScan);
+        using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.SequentialScan);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(1024 * 1024);
+        try
+        {
+            int length;
+            while ((length = input.Read(buffer)) > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                output.Write(buffer, 0, length);
+            }
+        }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
     }
 
     internal static string LoadOrderFingerprint(GameContext game) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(

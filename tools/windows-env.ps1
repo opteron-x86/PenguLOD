@@ -12,3 +12,7 @@ $env:DOTNET_NOLOGO = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:PYTHONUTF8 = '1'
 New-Item -ItemType Directory -Force .tools, .artifacts | Out-Null
+if (-not $env:VCPKG_DEFAULT_BINARY_CACHE) {
+    $env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path $PenguLODRoot '.tools/vcpkg-cache'
+}
+New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null

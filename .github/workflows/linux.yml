@@ -143,8 +143,20 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Check application version
         run: python tools/version.py
+      - name: Restore compiled native dependencies
+        id: native-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .tools/vcpkg-cache
+          key: windows-vs2026-static-${{ hashFiles('tools/windows/vcpkg.json') }}
       - name: Build and test Windows native backends
         run: ./tools/build-native-windows.ps1
+      - name: Save compiled native dependencies
+        if: always() && steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .tools/vcpkg-cache
+          key: windows-vs2026-static-${{ hashFiles('tools/windows/vcpkg.json') }}
       - name: Engine and rendered UI tests
         run: ./tools/test-windows.ps1
       - name: Publish self-contained Windows applications

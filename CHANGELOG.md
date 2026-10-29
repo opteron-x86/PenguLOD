@@ -15,6 +15,9 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 - Native dependencies are selected for the target OS. Windows builds retain UTF-8
   path support and use Windows configuration/cache locations. Grass process tests
   cover success, cancellation and recovery on both hosts, including Unicode paths.
+- Windows grass staging uses hard links with a cancellable copy fallback, avoiding
+  a requirement for administrator rights or Developer Mode. Steam discovery also
+  reads the default Windows Steam installation and its library manifests.
 - Windows desktop modlist testing and physical GPU validation remain open work.
 
 ## [0.4.0-alpha.1] - 2026-10-29

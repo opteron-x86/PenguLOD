@@ -145,7 +145,7 @@ public sealed partial class MainWindow : Window
         _pages["Preferences"] = Preferences();
         var nav = Stack(6);
         nav.Children.Add(new TextBlock { Text = "PENGULOD", FontSize = 24, FontWeight = FontWeight.Bold, Foreground = Accent, Margin = new Thickness(10, 8, 0, 0) });
-        nav.Children.Add(new TextBlock { Text = "NATIVE LINUX", FontSize = 10, LetterSpacing = 2, Foreground = Muted, Margin = new Thickness(12, 0, 0, 32) });
+        nav.Children.Add(new TextBlock { Text = "NATIVE " + ProductInfo.Platform.ToUpperInvariant(), FontSize = 10, LetterSpacing = 2, Foreground = Muted, Margin = new Thickness(12, 0, 0, 32) });
         foreach (var title in _pages.Keys)
         {
             var button = new Button { Content = title, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(12), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
@@ -185,9 +185,11 @@ public sealed partial class MainWindow : Window
         var source = Choice("Source", nameof(DesktopSettings.SourceMode), ["Mod Organizer 2", "Data folder / Vortex"]);
         var profileRow = Row(Button("Read profiles", LoadProfiles), _profiles);
         _profiles.SelectionChanged += (_, _) => { if (_profiles.SelectedItem is string p) _settings.Profile = p; };
+        var prefix = PathField("Wine / Proton prefix", nameof(DesktopSettings.WinePrefix), hint: "Optional pfx folder; resolves C: and custom drive mappings from MO2's INI.");
+        prefix.IsVisible = !OperatingSystem.IsWindows();
         var advanced = new Expander { Header = "Advanced source paths", HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = Stack(10,
-                PathField("Wine / Proton prefix", nameof(DesktopSettings.WinePrefix), hint: "Optional pfx folder; resolves C: and custom drive mappings from MO2's INI."),
+                prefix,
                 PathField("Mods folder override", nameof(DesktopSettings.ModsFolder)),
                 PathField("Profiles folder override", nameof(DesktopSettings.ProfilesFolder)),
                 PathField("Overwrite folder override", nameof(DesktopSettings.OverwriteFolder)),
@@ -346,7 +348,7 @@ public sealed partial class MainWindow : Window
     }
     private Control PathField(string label, string property, bool file = false, string? hint = null)
     {
-        var box = new TextBox { Name = property, PlaceholderText = "/path/to/" + (file ? "file" : "folder") }; Bind(box, TextBox.TextProperty, _settings, property);
+        var box = new TextBox { Name = property, PlaceholderText = (OperatingSystem.IsWindows() ? @"C:\path\to\" : "/path/to/") + (file ? "file" : "folder") }; Bind(box, TextBox.TextProperty, _settings, property);
         var browse = Button("Browse…", async () =>
         {
             var path = await Pick(file, label);

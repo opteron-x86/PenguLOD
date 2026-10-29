@@ -35,7 +35,8 @@ and AppImage instructions.
    with LOD settings. **Scan load order** shows coverage before LOD generation.
 
 Steam discovery is available in **Preferences**. It reads standard native/Flatpak Steam
-locations and library manifests. Explicit paths can be used for other installations.
+locations on Linux, `Program Files (x86)\Steam` on Windows, and their library manifests.
+Choose explicit paths for Steam installed elsewhere or for other game installations.
 
 ## Choose stages and outputs
 

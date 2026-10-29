@@ -21,6 +21,12 @@ The backend reads winning plugins, meshes, profile/plugin INIs, `GrassControl.in
 `*_NGIO.ini` and Seasons configuration through a temporary Data view. Missing enabled
 plugins or mod folders stop preparation. Source files remain unchanged.
 
+Windows uses hard links for staging where possible, without requiring administrator
+rights. If files are on another drive and symlinks are unavailable, affected inputs
+are copied temporarily; preparation reports this and remains cancellable. Place grass
+output on the same NTFS volume as most source mods to reduce temporary disk usage.
+Read-only source files are copied so cleanup never changes their attributes.
+
 **Advanced** offers a GrassControl.ini override, minimum grass size override (0 inherits
 settings), writer threads, experimental render-geometry rejection and an external native
 FasterNGIO executable. Worker limits follow Preferences. A compatible external GPU build
