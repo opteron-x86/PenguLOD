@@ -7,8 +7,8 @@ do not bump it simply to release PenguLOD.
 
 ## Prepare a release
 
-1. Set the next version, for example `python3 tools/version.py 0.2.0-alpha.3`.
-2. Add a matching `## [0.2.0-alpha.3] - YYYY-MM-DD` section to `CHANGELOG.md`. Update the
+1. Set the next version, for example `python3 tools/version.py 0.3.0-alpha.1`.
+2. Add a matching `## [0.3.0-alpha.1] - YYYY-MM-DD` section to `CHANGELOG.md`. Update the
    README version and provenance if needed. Explain limitations and any migration changes.
 3. Run `bash tools/test.sh` and `bash tools/build.sh`, then `xvfb-run -a bash tools/native-smoke.sh`.
    Verify settings import and representative generation workflows when their code changes.
@@ -17,8 +17,8 @@ do not bump it simply to release PenguLOD.
 5. Tag that commit and push only the new tag:
 
 ```bash
-git tag -a v0.2.0-alpha.3 -m 'PenguLOD 0.2.0-alpha.3'
-git push origin v0.2.0-alpha.3
+git tag -a v0.3.0-alpha.1 -m 'PenguLOD 0.3.0-alpha.1'
+git push origin v0.3.0-alpha.1
 ```
 
 The tag pipeline verifies `vVERSION`, runs the same build/tests, and publishes a GitHub release.

@@ -11,6 +11,7 @@ public sealed partial class MainWindow
     private readonly TextBlock _diagnosticSummary = Text("Run diagnostics for the stages selected on Pipeline.", true);
     private readonly DataGrid _diagnosticIssues = Table(("Severity", "Severity"), ("Finding", "Message"), ("Next step", "Action"), ("Asset", "Asset"), ("Winner", "Source"));
     private readonly DataGrid _diagnosticEstimates = Table(("Metric", "Name"), ("Value", "Value"), ("Unit", "Unit"), ("Basis", "Basis"));
+    private readonly DataGrid _seasonCoverage = Table(("Season", "Season"), ("Category", "Category"), ("Entries", "Entries"), ("Resolved", "Resolved"), ("Unresolved", "Unresolved"));
     private DiagnosticReport? _diagnostics;
     private string? _diagnosticFile;
     private Control DiagnosticsPage() => Scroll(Stack(16,
@@ -22,6 +23,7 @@ public sealed partial class MainWindow
             Field("Inspect asset precedence (optional)", nameof(DesktopSettings.DiagnosticAsset), "meshes\\landscape\\trees\\tree.nif"),
             Row(Primary("Run diagnostics", RunDiagnostics), Button("Export diagnostic report", ExportDiagnostics), Button("Open diagnostic report", () => Open(_diagnosticFile))))),
         Card("RESULTS", Stack(12, _diagnosticSummary, _diagnosticIssues)),
+        Card("SEASONAL SWAPS", Stack(12, _seasonCoverage)),
         Card("COUNTS & ESTIMATES", Stack(12, Text("Counts and geometry estimates do not predict elapsed time. Preparation and checks are measured separately from generation.", true), _diagnosticEstimates))));
 
     internal Task RunDiagnostics()
@@ -39,6 +41,7 @@ public sealed partial class MainWindow
     {
         _diagnostics = report; _diagnosticFile = path; _diagnosticIssues.ItemsSource = report.Issues; _diagnosticEstimates.ItemsSource = report.Estimates;
         _diagnosticSummary.Text = $"{report.Issues.Count(i => i.Severity == "Error")} errors · {report.Issues.Count(i => i.Severity == "Warning")} warnings · {report.Plugins:N0} plugins · {report.MeasuredSeconds:F1}s checking.\nRuntime: {report.GameVersion ?? "not detected"}";
+        _seasonCoverage.ItemsSource = report.Seasons;
         if (report.TreeCoverage.Count > 0) _treeCoverage.ItemsSource = report.TreeCoverage;
     }
     private async Task ExportDiagnostics()

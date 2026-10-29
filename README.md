@@ -9,7 +9,7 @@ A native Linux LOD toolkit for Skyrim, built on [CageTV’s AnvilLOD](https://gi
 PenguLOD combines an Avalonia desktop and CLI with native terrain, object, tree and grass LOD,
 texture generation, and offline grass caching. It reads Fluorine/MO2 profiles directly and runs without Wine.
 
-**Current version: 0.2.0-alpha.3**, incorporating AnvilLOD **0.2.70**.
+**Current version: 0.3.0-alpha.1**, incorporating AnvilLOD **0.2.70**.
 The all-in-one pipeline supports grass → textures → terrain → object/tree/grass LOD, with
 verified resume and safe output publication. New terrain and seasonal rendering need broader
 in-game validation; this alpha does not claim full TexGen or DynDOLOD parity.
@@ -44,13 +44,13 @@ settings, testing and current limitations.
 
 - Avalonia desktop with progress, cancellation, logs, presets and resource controls.
 - Direct Fluorine/MO2 profile reading, including Wine drive mappings; deployed Data-folder support.
-- Native terrain/water BTR meshes, diffuse/normal tiles and terrain-shadow heightmaps.
+- Native terrain/water BTR meshes, source normal detail, PBR colour/AO calibration and terrain-shadow heightmaps.
 - Incremental object LOD, billboard trees, 3D/hybrid models and native tree reduction with
-  per-level geometry budgets; grass LOD, occlusion and seasonal terrain/object/tree/grass output.
+  record texture variants, foliage coverage limits and per-level geometry budgets; grass LOD, occlusion and seasonal terrain/object/tree/grass output.
 - Native texture stitching, tree/grass billboards, hybrid trunk textures, material/normal baking,
   experimental object rendering and conservative paired object atlases.
 - Bundled FasterNGIO CPU grass caching without launching Skyrim.
-- Shared desktop/CLI presets and persistent jobs, dependency invalidation and measured stage timings.
+- Shared desktop/CLI presets, persistent jobs, verified terrain tile resume and measured phase timings.
 - Pipeline preflight, asset precedence and coverage diagnostics, mesh simplification,
   custom rules and native BC6H-to-BC7 texture repair.
 - Optional Vulkan encoding for large opaque BC7 textures, with quality/speed checks and CPU fallback.
@@ -83,7 +83,7 @@ bash tools/build.sh
 app and checks native startup. `v*` tags matching `VERSION` publish tested releases with
 checksums and source archives. See [release maintenance](docs/RELEASING.md).
 
-The [roadmap](docs/ROADMAP.md) lists upcoming quality, compatibility and performance work.
+The [roadmap](docs/ROADMAP.md) tracks delivered quality milestones and ongoing compatibility validation.
 Use the [transition checklist](docs/DIAGNOSTICS.md#repeatable-checks) when testing generated output in Skyrim.
 
 ## Credits and license

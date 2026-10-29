@@ -13,7 +13,7 @@ namespace AnvilLOD.Core.Tests;
 public class SeasonalGenerationTests
 {
     [Fact]
-    public void NativeTreeFallbackPreservesRecordSpecificTextureVariantsAsBillboards()
+    public void NativeTreesAndBillboardsPreserveSeasonalRecordSpecificTextureVariants()
     {
         using var f = new TerrainFixture(seasons: true, treeAlternates: true);
         Assert.True(TextureGeneration.Run(f.Textures.Request with { Stitched = false, Trees = true }).Published);
@@ -23,14 +23,18 @@ public class SeasonalGenerationTests
         var settings = new Tree3DSettings(Enabled: true);
         var scan = new MutagenReferenceScanner(game, assets).Scan(new(Worldspaces: ["FixtureWorld"], TreeLod: true, Tree3D: settings));
         var original = Assert.Single(scan.Trees!);
-        Assert.Null(original.Model3D);
-        // Exercise the seasonal replacement as if the original species had a usable 3D mesh.
-        var winter = SeasonalAssets.SwapTree(game, assets, original with { Model3D = @"meshes\trees\testtree.nif" },
+        Assert.NotNull(original.Model3D);
+        var winter = SeasonalAssets.SwapTree(game, assets, original,
             SeasonalAssets.Read(game, assets, "Trees")["WIN"], settings);
-        Assert.Null(winter.Model3D);
+        Assert.NotNull(winter.Model3D);
         Assert.NotEqual(original.Billboard.TexturePath, winter.Billboard.TexturePath);
+        var source = new Tree3DSource(assets, settings: settings);
         foreach (var (tree, dominant) in new[] { (original, 0), (winter, 1) })
         {
+            var selected = source.Select(tree.Model3D!, 4, tree.Model3DGenerated, tree.MaterialVariant);
+            Assert.NotNull(selected.MeshPath);
+            Assert.Contains(source.Build(selected.MeshPath)!.Parts, p => p.Material.Textures[0]
+                .Equals(dominant == 0 ? @"textures\red.dds" : @"textures\green.dds", StringComparison.OrdinalIgnoreCase));
             Assert.True(assets.TryOpen(tree.Billboard.TexturePath, out var stream));
             using (stream)
             {
@@ -99,11 +103,13 @@ public class SeasonalGenerationTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void FullScanBuildsSeasonalTreesWithAndWithoutNative3D(bool native)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void FullScanBuildsSeasonalTreesWithAndWithoutNative3D(bool native, bool alternates)
     {
-        using var f=new TerrainFixture(seasons:true);
+        using var f=new TerrainFixture(seasons:true, treeAlternates:alternates);
         Assert.True(TextureGeneration.Run(f.Textures.Request with {Stitched=false,Trees=true}).Published);
         string output=Path.Combine(f.Root,"lod");
         var request=new ScanRequest(f.Game,new(Worldspaces:["FixtureWorld"],TreeLod:true,DynamicLod:false,GridObjects:false,Tree3D:new(Enabled:native)),
@@ -116,7 +122,13 @@ public class SeasonalGenerationTests
             var seasonal=Assert.Single(Directory.GetFiles(output,"*.WIN.bto",SearchOption.AllDirectories));
             var mesh=NifGeometryReader.Read(seasonal,File.ReadAllBytes(seasonal),passthru:true);
             Assert.NotEmpty(mesh.Parts);
-            Assert.Contains(mesh.Parts,p=>p.Material.Textures.Any(t=>t.Contains("red.dds")));
+            Assert.Contains(mesh.Parts,p=>p.Material.Textures.Any(t=>t.Contains(alternates ? "green.dds" : "red.dds")));
+            if (alternates)
+            {
+                var defaultFile = Assert.Single(Directory.GetFiles(output, "*.bto", SearchOption.AllDirectories), p => !p.Contains(".WIN."));
+                var defaultMesh = NifGeometryReader.Read(defaultFile, File.ReadAllBytes(defaultFile), passthru: true);
+                Assert.Contains(defaultMesh.Parts, p => p.Material.Textures.Any(t => t.Contains("red.dds")));
+            }
         }
         else Assert.Single(Directory.GetFiles(output,"*.WIN.btt",SearchOption.AllDirectories));
     }

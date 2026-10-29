@@ -13,6 +13,24 @@ namespace AnvilLOD.Core.Tests;
 public class CliParityTests
 {
     [Fact]
+    public void TerrainMaterialControlsRoundTripThroughPresetAndInvalidatePipelineReuse()
+    {
+        using var f=new TerrainFixture();
+        var settings=new DesktopSettings {SourceMode="Data folder / Vortex",GameFolder=f.Textures.Data,PluginsFile=f.Textures.Plugins,
+            TerrainOutput=f.Output,Worldspaces="FixtureWorld",TerrainTextureSize=64,TerrainNormalStrength=.5m,TerrainPbr=true,TerrainPbrTwins=true,
+            TerrainPbrScale=.8m,TerrainPbrGamma=1.2m,TerrainAo=.4m,
+            PipelineGrass=false,PipelineTextures=false,PipelineTerrain=true,PipelineLod=false,CacheFolder=Path.Combine(f.Root,"cache")};
+        string preset=Path.Combine(f.Root,"preset.json"),request=Path.Combine(f.Root,"job.json"),report=Path.Combine(f.Root,"run.json");
+        SettingsStore.Write(preset,settings);
+        Assert.Equal(0,AnvilLOD.Cli.Program.Main(["export-job","--settings",preset,"--output",request]));
+        var exported=JsonSerializer.Deserialize<GenerationPipelineRequest>(File.ReadAllText(request))!;
+        Assert.Equal(new TerrainMaterialSettings(.5f,true,true,.8f,1.2f,.4f),exported.Terrain!.Materials);
+        Assert.Equal(0,AnvilLOD.Cli.Program.Main(["terrain","--request",request,"--cache-folder",settings.CacheFolder,"--report",report]));
+        Assert.True(GenerationPipeline.Run(exported,settings.CacheFolder).Journal.Stages.Single().Reused);
+        var changed=GenerationPipeline.Run(exported with {Terrain=exported.Terrain with {Materials=exported.Terrain.Materials! with {NormalStrength=0}}},settings.CacheFolder);
+        Assert.True(changed.Success,changed.Error);Assert.False(changed.Journal.Stages.Single().Reused);
+    }
+    [Fact]
     public void DesktopPresetExportsRunsAndResumesThroughCliWithoutAvalonia()
     {
         using var f=new TextureFixture();

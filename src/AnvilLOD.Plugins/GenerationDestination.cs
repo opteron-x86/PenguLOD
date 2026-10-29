@@ -7,6 +7,21 @@ namespace AnvilLOD.Plugins;
 /// <summary>Validate the source and destination before the first output mutation.</summary>
 public static class GenerationDestination
 {
+    public static void ValidateCache(GameContextOptions game,string cache)
+    {
+        if(string.IsNullOrWhiteSpace(cache))throw new ArgumentException("Choose a pipeline cache folder.");
+        string full=HostPath.Canonical(cache);var roots=new List<string>();
+        if(game.Mode==GameSourceMode.Mo2Instance)
+        {
+            var locations=(game.Mo2Locations??new()) with {WinePrefix=game.WinePrefix??game.Mo2Locations?.WinePrefix};
+            var instance=Mo2Instance.Open(game.Mo2InstanceFolder!,locations);
+            roots.AddRange([instance.GamePath,instance.ProfilesFolder,instance.OverwriteFolder]);
+            roots.AddRange(instance.OpenProfile(game.Mo2Profile).EnabledModFolders());
+        }
+        else if(game.DataFolder is { } data)roots.Add(Path.GetDirectoryName(GameContext.ResolveDataFolder(data,[]))!);
+        foreach(string root in roots)
+            if(HostPath.IsWithin(full,root)||HostPath.IsWithin(root,full))throw new InvalidOperationException("Keep the pipeline cache outside the game, profiles and input mods.");
+    }
     public static void Validate(GameContextOptions game, string output)
     {
         RunLimits.Check();

@@ -437,14 +437,15 @@ public static class ScanPipeline
                 tree3d = new Tree3DSource(assets, req.TreeBrightness, t3);
                 var withModel = allTrees.Where(t => t.Model3D is not null).ToList();
                 var reasons = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-                Parallel.ForEach(withModel.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase), RunLimits.Parallel(ct),
-                    m => reasons[m] = tree3d.Validate(m));
+                string ModelKey(TreeReference t) => t.Model3D + "|" + t.MaterialVariant?.Id + "|" + t.Model3DGenerated;
+                Parallel.ForEach(withModel.DistinctBy(ModelKey), RunLimits.Parallel(ct),
+                    t => reasons[ModelKey(t)] = tree3d.Validate(t.Model3D!, t.MaterialVariant, t.Model3DGenerated));
                 var t3Warnings = new List<string>();
                 var skippedTypes = reasons.Where(kv => kv.Value is not null).OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase).ToList();
                 long skippedTrees = 0;
                 foreach (var t in withModel)
                 {
-                    if (reasons[t.Model3D!] is not null) { skippedTrees++; continue; }
+                    if (reasons[ModelKey(t)] is not null) { skippedTrees++; continue; }
                     in3d.Add(t);
                 }
                 if (skippedTypes.Count > 0)
@@ -455,14 +456,14 @@ public static class ScanPipeline
                          + (missingTex > 0 ? $"; {missingTex} are missing textures (trunk billboards are made by TexGen from the model's _trunk.nif in DynDOLOD\\Render; run TexGen with it)" : "")
                          + $". First: {Path.GetFileName(first.Key)}: {first.Value}.");
                 }
-                int byName = in3d.Where(t => t.Model3DByName).Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-                int types = in3d.Select(t => t.Model3D!).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                int byName = in3d.Where(t => t.Model3DByName).Select(ModelKey).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                int types = in3d.Select(ModelKey).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 int nameOnly = scanner.Tree3DNameOnlyAvailable;
                 var coverage = tree3d.Report(in3d, t3);
                 long t3Tris = coverage.Sum(r => r.PlacedTriangles);
                 double t3Mb = coverage.Sum(r => r.ApproxMegabytes);
-                int nativeTypes = in3d.Where(t => t.Model3DGenerated).Select(t => t.Model3D).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-                int near3d = in3d.Count(t => tree3d.Select(t.Model3D!, 4, t.Model3DGenerated).MeshPath is not null);
+                int nativeTypes = in3d.Where(t => t.Model3DGenerated).Select(ModelKey).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                int near3d = in3d.Count(t => tree3d.Select(t.Model3D!, 4, t.Model3DGenerated, t.MaterialVariant).MeshPath is not null);
                 foreach (var fallback in coverage.Where(r => r.Fallback is not null))
                 {
                     string message = $"{fallback.Model} LOD{fallback.Level}: {fallback.Fallback}";
@@ -558,7 +559,8 @@ public static class ScanPipeline
             progress?.Report($"Generating {plan.Rebuild.Count:N0} blocks ({plan.Unchanged.Count:N0} unchanged, skipped) into {output}...");
             var pbrLod = req.PbrLod ? new PbrLodTextures(assets) : null;
             var opaqueLod = req.OpaqueAlpha ? new OpaqueLodTextures(assets, OpaqueLodStage.IsTranslucent) : null;
-            var generator = new LodGenerator(assets, cullTerrain?.Heights, new CompositeSyntheticSource(grass, cards, tree3d, ships)) { RemoveUnderwater = req.RemoveUnderwater, Brightness = req.ObjectBrightness, SnowShaderMode = req.SnowShaderMode, SnowCover = req.SnowCover, FitMountains = req.MountainFit && req.MountainInset > 0f, Pbr = pbrLod, Opaque = opaqueLod, Categorize = SizeBreakdown.Categorize, Inset = req.IceInset > 0f || req.MountainInset > 0f || req.ObjectInset > 0f || req.DetailedShips ? path => LodInset.For(path, req.IceInset, req.MountainInset, req.DetailedShips ? LodInset.DefaultShip : 0f, req.ObjectInset) : null, TextureVariants = scan.TextureVariants };
+            var seasonalVariants=scan.TextureVariants?.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.Ordinal);
+            var generator = new LodGenerator(assets, cullTerrain?.Heights, new CompositeSyntheticSource(grass, cards, tree3d, ships)) { RemoveUnderwater = req.RemoveUnderwater, Brightness = req.ObjectBrightness, SnowShaderMode = req.SnowShaderMode, SnowCover = req.SnowCover, FitMountains = req.MountainFit && req.MountainInset > 0f, Pbr = pbrLod, Opaque = opaqueLod, Categorize = SizeBreakdown.Categorize, Inset = req.IceInset > 0f || req.MountainInset > 0f || req.ObjectInset > 0f || req.DetailedShips ? path => LodInset.For(path, req.IceInset, req.MountainInset, req.DetailedShips ? LodInset.DefaultShip : 0f, req.ObjectInset) : null, TextureVariants = seasonalVariants };
             if (req.ObjectAtlas)
             {
                 var models=quads.Values.SelectMany(v=>v).SelectMany(r=>new[]{r.Meshes.Lod4,r.Meshes.Lod8,r.Meshes.Lod16,r.Meshes.Lod32})
@@ -603,7 +605,7 @@ public static class ScanPipeline
             if (req.Seasons)
             {
                 progress?.Report("Seasons: building seasonal object LOD from Data\\Seasons\\*_WIN/_SPR/_SUM/_AUT.ini...");
-                var seasonal = SeasonalLod.Build(game, assets, assets.EnumeratePaths, resolver, quads, generator, output, progress, ct, grass, sceneTrees, tree3d, req.Scan.Tree3D);
+                var seasonal = SeasonalLod.Build(game, assets, assets.EnumeratePaths, resolver, quads, generator, output, progress, ct, grass, sceneTrees, tree3d, req.Scan.Tree3D, seasonalVariants);
                 if (seasonal.Seasons == 0 && seasonal.Messages.Count == 0)
                     progress?.Report("Seasons: no season INI files found in Data\\Seasons; nothing written.");
             }

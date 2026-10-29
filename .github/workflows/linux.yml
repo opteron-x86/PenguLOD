@@ -40,6 +40,12 @@ jobs:
         env:
           PENGULOD_TEST_VULKAN: '1'
         run: bash tools/test.sh
+      - name: Synthetic terrain benchmarks
+        run: |
+          dotnet build tools/benchmarks/TerrainBenchmark.csproj -c Release --disable-build-servers -m:1 -nr:false -p:UseSharedCompilation=false
+          mkdir -p .artifacts/benchmarks
+          dotnet tools/benchmarks/bin/Release/net10.0/TerrainBenchmark.dll 512 3 > .artifacts/benchmarks/terrain-land.json
+          dotnet tools/benchmarks/bin/Release/net10.0/TerrainBenchmark.dll 512 3 fallback > .artifacts/benchmarks/terrain-existing.json
       - name: Build backend, test and publish portable Linux applications
         env:
           CC: gcc-14
@@ -69,6 +75,7 @@ jobs:
           path: |
             .artifacts/test-results
             .artifacts/screenshots
+            .artifacts/benchmarks
             .tools/fasterngio-build/Testing/Temporary/LastTest.log
   compatibility:
     name: Package compatibility (${{ matrix.image }})

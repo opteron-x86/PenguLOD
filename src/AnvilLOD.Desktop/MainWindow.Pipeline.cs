@@ -78,7 +78,11 @@ public sealed partial class MainWindow
             {
                 _settings.UseGeneratedTerrain = true;
                 _terrainResults.ItemsSource = terrain.Worlds;
-                _terrainSummary.Text = $"{terrain.Tiles.Count:N0} terrain tiles · {terrain.Warnings.Count:N0} warnings · {terrain.Seconds:F1}s generation.\nPrevious output: {terrain.PreviousOutput ?? "none"}";
+                bool stageReused=result.Journal.Stages.Any(stage=>stage.Plan.Id=="terrain"&&stage.Reused);
+                string detail=stageReused ? "Completed terrain output verified and reused." : terrain.Performance is { } performance
+                    ? $"{performance.BuiltTiles} tiles generated · {performance.ReusedTiles} tiles restored · {performance.Timings.GetValueOrDefault("terrain-sampling"):F2}s sampling · {performance.Timings.GetValueOrDefault("terrain-encoding"):F2}s encoding."
+                    : $"{terrain.Seconds:F1}s generation.";
+                _terrainSummary.Text = $"{terrain.Tiles.Count:N0} terrain tiles · {terrain.Warnings.Count:N0} warnings.\n{detail}\nPrevious output: {terrain.PreviousOutput ?? "none"}";
                 File.WriteAllText(Path.Combine(folder, "terrain-report.json"), JsonSerializer.Serialize(terrain, PersistentPipeline.Json));
             }
             if (result.Lod is { } summary)

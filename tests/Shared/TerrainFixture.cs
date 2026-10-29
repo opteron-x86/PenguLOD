@@ -15,7 +15,7 @@ public sealed class TerrainFixture : IDisposable
     public string Output => Path.Combine(Root, "Terrain output");
     public GameContextOptions Game => Textures.Game;
     public TerrainGenerationRequest Request => new(Game, Output, ["FixtureWorld"], TextureSize:64);
-    public TerrainFixture(bool missingCell=false, bool seasons=false, bool treeAlternates=false, Action<Landscape>? editLandscape=null)
+    public TerrainFixture(bool missingCell=false, bool seasons=false, bool treeAlternates=false, Action<Landscape>? editLandscape=null, Action<SkyrimMod>? editMod=null)
     {
         var mod = new SkyrimMod(ModKey.FromNameAndExtension("Skyrim.esm"), SkyrimRelease.SkyrimSE);
         var water = mod.Waters.AddNew(); water.EditorID="FixtureWater";
@@ -55,6 +55,7 @@ public sealed class TerrainFixture : IDisposable
             }
             cell.Landscape=land;sub.Items.Add(cell);
         }
+        editMod?.Invoke(mod);
         mod.WriteToBinary(Path.Combine(Textures.Data,"Skyrim.esm"));
         TextureFixture.Put(Textures.Data,@"lodsettings\FixtureWorld.lod",new LodSettings(-4,-4,4,4,4).ToBytes());
     }

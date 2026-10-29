@@ -5,6 +5,24 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.3.0-alpha.1] - 2026-10-28
+
+- Native 3D trees and automatic billboards preserve record-specific texture variants.
+  Missing or ambiguous shape mappings produce explicit fallback reasons.
+- Optional foliage reduction removes whole cards within configurable sampled alpha-coverage
+  limits (1% near, 3% far by default), preserving surviving UVs and reporting removed geometry.
+- Terrain combines source normal detail with slope normals, honors the default landscape normal
+  INI setting, and supports PBR albedo/AO calibration with opt-in texture twin lookup.
+  Colour mipmaps average in linear light without treating material alpha as transparency.
+- Seasonal diagnostics report resolved swaps and grass-cache gaps. Pipeline reports count
+  default/WIN/SPR/SUM/AUT output. Invalid seasonal records or required meshes stop publication.
+- Interrupted terrain jobs resume verified mesh/diffuse/normal tile sets, including seasons.
+  Corrupt tiles are rebuilt individually; source, settings or version changes invalidate reuse.
+- Added terrain phase timings, bounded sampling caches, synthetic benchmarks and CI reports.
+  Pipeline caches are kept outside source game files and input mods.
+- Shared desktop/CLI controls and neutral user guides cover the new features. In-game terrain/tree
+  appearance and physical GPU validation remain separate open work.
+
 ## [0.2.0-alpha.3] - 2026-10-28
 
 - Reorganized documentation into setup, grass, textures and troubleshooting guides, with

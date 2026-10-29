@@ -188,6 +188,9 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
         var texGenListed = new Lazy<HashSet<string>>(() => _assets is AssetIndex ai ? TexGenLists.Read(ai) : []);
         int renderedTrees = 0;
         var tooSmallTrees = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        var treeVariants = new ConcurrentDictionary<FormKey, TreeMaterialVariant?>();
+        TreeMaterialVariant? TreeVariant(FormKey key) => treeVariants.GetOrAdd(key, k =>
+            linkCache.TryResolve<ITreeGetter>(k, out var record) ? TreeMaterials.Read(_game, record.Model) : null);
 
         TreeBillboard? ReadTree(FormKey fk)
         {
@@ -224,7 +227,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             // No TexGen billboard: draw one from the tree's own model, unless TexGen listed the tree and left it out on purpose (too small).
             if (found is null && treeSynth is not null
                 && !texGenListed.Value.Contains(TexGenLists.Key($"{fk.ModKey.FileName}\\{name}"))
-                && treeSynth.TryRender(model.DataRelativePath.Path, fk.ModKey.FileName.String.ToLowerInvariant(), name, out why))
+                && treeSynth.TryRender(model.DataRelativePath.Path, fk.ModKey.FileName.String.ToLowerInvariant(), name, out why, TreeVariant(fk)))
             {
                 Interlocked.Increment(ref renderedTrees);
                 found = Find();
@@ -265,6 +268,10 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
                 ms0.CopyTo(buf);
                 bytes = buf.ToArray();
             }
+            // Authored LOD can have different UVs and shape names. A record variant uses its
+            // full model so alternate textures are applied before reduction.
+            if (TreeVariant(fk) is not null && tree3d.GenerateMissing)
+                return new Tree3DModels.Match(modelPath, Tree3DModels.MatchKind.Native);
             // Asked for: the tree mod's own LOD model (<tree>_LOD_0.nif) wins over a DynDOLOD-style one.
             if (tree3d.PreferNamedLod && _resolver?.Index.Find(modelPath) is { } own
                 && own.FirstOrDefault(p => !string.IsNullOrEmpty(p)) is { } ownPath)
@@ -282,13 +289,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
                 && named.FirstOrDefault(p => !string.IsNullOrEmpty(p)) is { } namedPath)
                 match = new Tree3DModels.Match(namedPath, Tree3DModels.MatchKind.NamedLod);
             if (match is null && tree3d.GenerateMissing)
-            {
-                // Raw full models do not contain per-record alternate texture sets. Keep the
-                // record-specific billboard instead of silently rendering the wrong tree variant.
-                if (tree.Model?.AlternateTextures is { Count: > 0 })
-                    progress?.Report($"3D tree {fk}: using its billboard because the full model has alternate textures.");
-                else match = new Tree3DModels.Match(modelPath, Tree3DModels.MatchKind.Native);
-            }
+                match = new Tree3DModels.Match(modelPath, Tree3DModels.MatchKind.Native);
             return match;
         }
 
@@ -564,7 +565,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
                     var tr = new TreeReference(r.FormKey.ToString(), wsId,
                         new Vector3(tp.Position.X, tp.Position.Y, tp.Position.Z), tp.Rotation.Z, r.Scale ?? 1f,
                         runtimeIds.Resolve(r.FormKey), bb, ObjectLod: copy is not null,
-                        Model3D: m3?.Path, Model3DByName: m3?.Kind is Tree3DModels.MatchKind.PlainName or Tree3DModels.MatchKind.NamedLod, Model3DGenerated: m3?.Kind is Tree3DModels.MatchKind.Native, BaseFormKey: baseKey.Value.ToString());
+                        Model3D: m3?.Path, Model3DByName: m3?.Kind is Tree3DModels.MatchKind.PlainName or Tree3DModels.MatchKind.NamedLod, Model3DGenerated: m3?.Kind is Tree3DModels.MatchKind.Native, BaseFormKey: baseKey.Value.ToString(), MaterialVariant: TreeVariant(baseKey.Value));
                     if (copy is not null)
                     {
                         copiedTrees.Add(tr);

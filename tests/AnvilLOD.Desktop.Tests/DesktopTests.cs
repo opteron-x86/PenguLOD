@@ -94,6 +94,34 @@ public sealed class DesktopTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void TerrainMaterialControlsRemainBoundAfterPresetReplacement()
+    {
+        var window=Window();window.Show();
+        try
+        {
+            foreach(bool replace in new[]{false,true})
+            {
+                if(replace)window.ReplaceSettings(window.Settings.Snapshot());
+                Click(window,"Terrain");
+                foreach(var (label,value) in new[]{("Source normal strength",.6m),("PBR scale",.8m),("PBR gamma",1.3m),("PBR ambient occlusion",.4m)})
+                {
+                    var input=LabeledInput<NumericUpDown>(window,label);input.SetCurrentValue(NumericUpDown.ValueProperty,value);
+                    Assert.False(DataValidationErrors.GetHasErrors(input));
+                }
+                Assert.Equal(.6m,window.Settings.TerrainNormalStrength);Assert.Equal(.8m,window.Settings.TerrainPbrScale);
+                Assert.Equal(1.3m,window.Settings.TerrainPbrGamma);Assert.Equal(.4m,window.Settings.TerrainAo);
+            }
+            LabeledInput<NumericUpDown>(window,"PBR ambient occlusion").BringIntoView();
+            Dispatcher.UIThread.RunJobs();window.UpdateLayout();
+            if(Environment.GetEnvironmentVariable("ANVILLOD_SCREENSHOTS") is { } folder)
+            {
+                Directory.CreateDirectory(folder);using var image=window.CaptureRenderedFrame();image!.Save(Path.Combine(folder,"terrain-materials.png"));
+            }
+        }
+        finally {window.Close();}
+    }
+
+    [AvaloniaFact]
     public async Task GenerationSettingsRemainEditableAndPersistAfterGarbageCollection()
     {
         var window = Window(); window.Show();
