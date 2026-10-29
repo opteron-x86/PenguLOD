@@ -1,8 +1,7 @@
 # Material baking and brightness
 
 Texture generation renders source UV transforms and clamp modes, alpha-tested foliage,
-vertex colours, and tangent-space normal maps. Alternate texture sets replace both
-diffuse and normal maps. Normal-map alpha is treated as gloss, not transparency, during
+vertex colours, and tangent-space normal maps. Alternate texture sets preserve the NIF texture-slot mapping, including diffuse, normal and material maps. Normal-map alpha is treated as gloss, not transparency, during
 resizing. Output normals are transformed into the billboard's frame and renormalized.
 
 **Material calibration** on the texture page controls source normals, ambient/directional
@@ -26,3 +25,5 @@ not be assumed to use the same numeric value.
 
 Regression fixtures check source-normal orientation, PBR/AO calibration, preserved cutout
 alpha, UV transforms/clamping, and distinct material keys after texture replacement.
+
+Terrain has separate source-normal and PBR calibration controls; see [terrain generation](TERRAIN.md).

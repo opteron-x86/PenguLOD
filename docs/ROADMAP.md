@@ -4,21 +4,21 @@ PenguLOD currently provides a native grass → textures → terrain → object/t
 pipeline, with resumable stages, diagnostics, a desktop and CLI. The project is in alpha.
 The [user guide](USER-GUIDE.md) and feature guides describe the supported workflows and limits.
 
-## Next priorities
+## v0.3 quality milestones
 
-1. **3D tree quality and coverage.** Improve reduction of dense foliage and support
-   record-specific texture variants in native models. Compare near/far silhouettes,
-   hybrid trunk alignment and billboard transitions. Keep per-level budgets and explicit
-   fallback reasons. Track transition validation in [#3](https://github.com/opteron-x86/PenguLOD/issues/3).
-2. **Terrain material matching.** Add source normal detail and broader terrain PBR material
-   handling. Check brightness, shorelines, mixed-distance seams and terrain shadows against
-   loaded terrain. Track terrain validation in [#2](https://github.com/opteron-x86/PenguLOD/issues/2).
-3. **Seasonal consistency.** Exercise terrain, grass, billboards and 3D tree replacements
-   together across seasons. Improve coverage reporting for missing swaps and unsupported
-   materials. Runtime-generated swaps currently require saved INI files.
-4. **Performance and recovery.** Measure scan, texture, terrain and publication costs on
-   representative workloads. Prioritize the slowest stages and finer-grained resume for
-   expensive stages. Retain cancellation, output verification and reliable CPU fallbacks.
+| Milestone | Delivered | Tracking |
+| --- | --- | --- |
+| 3D tree quality | Record texture variants, whole-card foliage reduction with configurable sampled coverage limits, near/far cost reports | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/2), [#10](https://github.com/opteron-x86/PenguLOD/issues/10), [#11](https://github.com/opteron-x86/PenguLOD/issues/11) |
+| Terrain materials | Source-normal detail, default normal INI support, PBR albedo/AO calibration and optional twin lookup | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/3), [#12](https://github.com/opteron-x86/PenguLOD/issues/12) |
+| Seasonal consistency | Swap diagnostics, Default/WIN/SPR/SUM/AUT integration tests, output counts and failure preservation | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/4), [#13](https://github.com/opteron-x86/PenguLOD/issues/13) |
+| Performance and recovery | Verified per-tile terrain resume, phase timings, bounded sample caches and reproducible synthetic benchmarks | [Milestone](https://github.com/opteron-x86/PenguLOD/milestone/5), [#14](https://github.com/opteron-x86/PenguLOD/issues/14) |
+
+These milestones cover implementation and automated acceptance. In-game terrain appearance,
+shorelines, mixed-distance seams and shader compatibility remain tracked in
+[#2](https://github.com/opteron-x86/PenguLOD/issues/2). Tree silhouettes, hybrid trunk alignment,
+foliage shading and billboard transitions remain tracked in
+[#3](https://github.com/opteron-x86/PenguLOD/issues/3). Seasonal swaps use written INI files;
+runtime automatic snow generation is outside the native generator.
 
 ## Hardware and distribution
 
