@@ -92,7 +92,12 @@ public static class BillboardRenderer
                     al *= (part.Material.Passthru?.Alpha ?? 1) * (effect?.Tint.W ?? 1);
                     if (effect is not null && (part.Material.ShaderFlags1 & 8u) != 0 && part.Colors is { } alphaColors)
                         al *= ((alphaColors[i0] >> 24) * w0 + (alphaColors[i1] >> 24) * w1 + (alphaColors[i2] >> 24) * w2) / 255f;
-                    if ((part.Material.HasAlpha && (al < threshold || al <= 0)) || part.Material.Passthru?.Alpha == 0 || effect?.Tint.W == 0) continue;
+                    if (effect is not null)
+                    {
+                        if (part.Material.HasAlpha && (part.Material.AlphaFlags & 0x200) != 0
+                            && !AlphaPasses(al, part.Material.AlphaThreshold, (part.Material.AlphaFlags >> 10) & 7)) continue;
+                    }
+                    else if (part.Material.HasAlpha && (al < threshold || al <= 0)) continue;
                     if (effect is not null) { r *= effect.Tint.X; g *= effect.Tint.Y; bl *= effect.Tint.Z; }
                     if (pbr)
                     {
@@ -297,6 +302,12 @@ public static class BillboardRenderer
     }
 
     private static float Edge(Vector3 a, Vector3 b, float px, float py) => (b.X - a.X) * (py - a.Y) - (b.Y - a.Y) * (px - a.X);
+
+    private static bool AlphaPasses(float alpha, byte threshold, int function) => function switch
+    {
+        0 => true, 1 => alpha < threshold, 2 => alpha == threshold, 3 => alpha <= threshold,
+        4 => alpha > threshold, 5 => alpha != threshold, 6 => alpha >= threshold, _ => false
+    };
 
     private static Vector3 Unpack(uint c) => new((c & 0xFF) / 255f, ((c >> 8) & 0xFF) / 255f, ((c >> 16) & 0xFF) / 255f);
 

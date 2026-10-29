@@ -12,7 +12,7 @@ public static class ModelNifFixture
 
     internal static byte[] Create(Geometry geometry, bool skinned = false, bool missingBone = false,
         float weight = .25f, bool badIndex = false, bool truncate = false, bool le = false, bool effect = false,
-        bool unsupportedEffect = false, bool modelNormals = false)
+        bool unsupportedEffect = false, bool modelNormals = false, ushort? alphaFlags = null, byte alphaThreshold = 128)
     {
         bool legacy = geometry is Geometry.Triangles or Geometry.Strips;
         bool partitioned = geometry is Geometry.Partition or Geometry.DynamicPartition;
@@ -27,6 +27,7 @@ public static class ModelNifFixture
         int partition = partitioned ? w.Reserve("NiSkinPartition") : -1;
         int shader = w.Reserve(effect ? "BSEffectShaderProperty" : "BSLightingShaderProperty");
         int textures = w.Reserve("BSShaderTextureSet");
+        int alpha = alphaFlags.HasValue ? w.Reserve("NiAlphaProperty") : -1;
         int name = w.String("test shape");
         void Node(int index, float x, params int[] children) => w.Set(index, b =>
         {
@@ -58,12 +59,12 @@ public static class ModelNifFixture
             NifWriter.WriteObjectNet(b, name); NifWriter.WriteAvObject(b, 14, new(skinned ? 999 : 7, 0, 0), 1);
             if (legacy)
             {
-                b.Write(data); b.Write(skin); b.Write(0u); b.Write(-1); b.Write((byte)0); b.Write(shader); b.Write(-1);
+                b.Write(data); b.Write(skin); b.Write(0u); b.Write(-1); b.Write((byte)0); b.Write(shader); b.Write(alpha);
             }
             else
             {
                 for (int i = 0; i < 4; i++) b.Write(0f);
-                b.Write(skin); b.Write(shader); b.Write(-1); b.Write(descriptor);
+                b.Write(skin); b.Write(shader); b.Write(alpha); b.Write(descriptor);
                 b.Write((ushort)2); b.Write((ushort)vertices); b.Write(partitioned ? 0u : (uint)(stride * vertices + 12));
                 if (!partitioned) { VertexData(b); foreach (var index in triangles) b.Write(index); }
                 b.Write(0u); // no particle data
@@ -142,6 +143,7 @@ public static class ModelNifFixture
             }
         });
         w.Set(textures, b => { b.Write(2u); NifWriter.WriteSizedString(b, @"textures\green.dds"); NifWriter.WriteSizedString(b, @"textures\green_n.dds"); });
+        if (alpha >= 0) w.Set(alpha, b => { NifWriter.WriteObjectNet(b, -1); b.Write(alphaFlags!.Value); b.Write(alphaThreshold); });
         var bytes = w.ToBytes(root);
         if (le) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(Array.IndexOf(bytes, (byte)'\n') + 14), 83);
         if (truncate)

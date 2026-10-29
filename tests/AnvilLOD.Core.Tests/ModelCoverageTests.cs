@@ -189,6 +189,30 @@ public class ModelCoverageTests
         Assert.Throws<NotSupportedException>(() => BillboardRenderer.Render(mesh, _ => null));
     }
 
+    [Theory]
+    [InlineData(0x1200, 0, 10, true)]
+    [InlineData(0x1200, 128, 128, false)]
+    [InlineData(0x0e00, 128, 128, true)]
+    [InlineData(0x1e00, 0, 255, false)]
+    [InlineData(0, 128, 0, true)]
+    public void StaticEffectsRespectAlphaTestFunctionAndZeroThreshold(ushort flags, byte threshold, byte alpha, bool visible)
+    {
+        var bytes = ModelNifFixture.Create(ModelNifFixture.Geometry.Packed, effect: true, alphaFlags: flags, alphaThreshold: threshold);
+        var mesh = NifGeometryReader.Read("effect", bytes, renderEffects: true);
+        Assert.Empty(mesh.Warnings);
+        var image = BillboardRenderer.Render(mesh, _ => (new byte[] { 10, 100, 10, alpha }, 1, 1), 32);
+        Assert.Equal(visible, image is not null);
+    }
+
+    [Fact]
+    public void BlendedEffectMaterialCannotBeRenderedAsOpaque()
+    {
+        var bytes = ModelNifFixture.Create(ModelNifFixture.Geometry.Packed, effect: true, alphaFlags: 0xed);
+        var mesh = NifGeometryReader.Read("blend", bytes, renderEffects: true);
+        Assert.True(mesh.HasIncompleteGeometry);
+        Assert.Contains(mesh.Warnings, w => w.Contains("depth-sorted compositing"));
+    }
+
     [Fact]
     public void OpaqueDiffuseAlphaIsNotTreatedAsTransparency()
     {
