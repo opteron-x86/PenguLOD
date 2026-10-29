@@ -83,6 +83,18 @@ public sealed class DesktopSettings : ObservableObject
     public decimal TerrainBrightness { get => _terrainBrightness; set => Set(ref _terrainBrightness, value); }
     private decimal _terrainVertexColor = 1;
     public decimal TerrainVertexColor { get => _terrainVertexColor; set => Set(ref _terrainVertexColor, value); }
+    private decimal _terrainNormalStrength = 1;
+    public decimal TerrainNormalStrength { get => _terrainNormalStrength; set => Set(ref _terrainNormalStrength, value); }
+    private bool _terrainPbr = true;
+    public bool TerrainPbr { get => _terrainPbr; set => Set(ref _terrainPbr, value); }
+    private bool _terrainPbrTwins = false;
+    public bool TerrainPbrTwins { get => _terrainPbrTwins; set => Set(ref _terrainPbrTwins, value); }
+    private decimal _terrainPbrScale = .65m;
+    public decimal TerrainPbrScale { get => _terrainPbrScale; set => Set(ref _terrainPbrScale, value); }
+    private decimal _terrainPbrGamma = 1.15m;
+    public decimal TerrainPbrGamma { get => _terrainPbrGamma; set => Set(ref _terrainPbrGamma, value); }
+    private decimal _terrainAo = .5m;
+    public decimal TerrainAo { get => _terrainAo; set => Set(ref _terrainAo, value); }
     private decimal _terrainRepeats = 24;
     public decimal TerrainRepeats { get => _terrainRepeats; set => Set(ref _terrainRepeats, value); }
     private decimal _terrainSkirt = 512;

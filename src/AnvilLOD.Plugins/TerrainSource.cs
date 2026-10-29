@@ -11,7 +11,7 @@ namespace AnvilLOD.Plugins;
 /// <summary>Winning LAND plus existing BTR/texture coverage for the landscape stripped from Bethesda plugins.</summary>
 internal sealed class TerrainSource
 {
-    internal sealed record Layer(string Texture, string? Normal, int Quadrant, int Order, float[]? Opacity);
+    internal sealed record Layer(string Texture, string? Normal, int Quadrant, int Order, float[]? Opacity, string? Occlusion = null);
     internal sealed record Cell(float[] Heights, Vector3[]? Colors, Layer[] Layers)
     {
         internal Layer?[] Bases { get; } = Enumerable.Range(0, 4).Select(q => Layers.FirstOrDefault(l => l.Quadrant == q && l.Opacity is null)).ToArray();
@@ -19,6 +19,11 @@ internal sealed class TerrainSource
     }
     private readonly string? _season;
     private readonly string _defaultDiffuse;
+    private readonly string _defaultNormal;
+    private readonly TerrainMaterials _materials;
+    private readonly TerrainMaterialSettings _materialSettings;
+    internal IReadOnlyCollection<string> MaterialWarnings => _materials.Warnings;
+    internal IEnumerable<TerrainMaterialReport> MaterialReports => _materials.Reports;
     private readonly AssetIndex _assets;
     private readonly string _world;
     private readonly LodGrid _grid;
@@ -30,15 +35,16 @@ internal sealed class TerrainSource
     private readonly Dictionary<QuadKey, TriangleField?> _meshes = [];
     private readonly Dictionary<QuadKey, TriangleField?> _waterMeshes = [];
     private readonly HashSet<CellCoord> _knownCells = [];
-    private readonly Dictionary<string, TextureImage> _images = new(StringComparer.Ordinal);
-    private readonly Dictionary<(string, int), TextureImage> _mips = [];
     private readonly HashSet<QuadKey> _fallbackUsed = [];
     public IReadOnlyCollection<QuadKey> FallbackUsed => _fallbackUsed;
     internal bool HasLodWater { get; }
 
-    internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null, string defaultDiffuse = TerrainDefaultTexture.SkyrimDefault)
+    internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null, string defaultDiffuse = TerrainDefaultTexture.SkyrimDefault,
+        string defaultNormal = TerrainDefaultTexture.SkyrimNormal, TerrainMaterialSettings? materials = null)
     {
         _season = season; _defaultDiffuse = defaultDiffuse; _assets = assets; _world = grid.Worldspace; _grid = grid; _fallback = fallback; _ct = ct;
+        _defaultNormal = defaultNormal; _materialSettings = materials ?? new(); _materialSettings.Validate();
+        _materials = new(assets, _materialSettings, ct);
         HasLodWater = world.LodWater.FormKeyNullable is { IsNull: false };
         foreach (var ctx in game.LoadOrder.PriorityOrder.Landscape().WinningContextOverrides(game.LinkCache))
         {
@@ -54,7 +60,7 @@ internal sealed class TerrainSource
             foreach (var layer in ctx.Record.Layers)
             {
                 var header = layer.Header ?? throw new InvalidDataException("Missing landscape layer header.");
-                string diffuse = _defaultDiffuse; string? normal = null;
+                string diffuse = _defaultDiffuse; string? normal = _defaultNormal, occlusion = null;
                 if (!header.Texture.IsNull)
                 {
                     if (!game.LinkCache.TryResolve<ILandscapeTextureGetter>(swaps?.GetValueOrDefault(header.Texture.FormKey,header.Texture.FormKey) ?? header.Texture.FormKey, out var ltex)
@@ -62,7 +68,8 @@ internal sealed class TerrainSource
                         || !game.LinkCache.TryResolve<ITextureSetGetter>(txKey, out var tx))
                         throw new InvalidDataException($"Unresolved landscape texture {header.Texture.FormKey} in {_world} {coord}.");
                     diffuse = PathOf(tx.Diffuse?.DataRelativePath.Path ?? throw new InvalidDataException("Landscape texture has no diffuse map."));
-                    if (tx.NormalOrGloss is { IsNull: false }) normal = PathOf(tx.NormalOrGloss.DataRelativePath.Path);
+                    normal = tx.NormalOrGloss is { IsNull: false } n ? PathOf(n.DataRelativePath.Path) : null;
+                    if (tx.EnvironmentMaskOrSubsurfaceTint is { IsNull: false } ao) occlusion = PathOf(ao.DataRelativePath.Path);
                 }
                 float[]? opacity = null;
                 if (layer is IAlphaLayerGetter alpha)
@@ -74,7 +81,7 @@ internal sealed class TerrainSource
                         opacity[a.Position] = Math.Clamp(a.Opacity, 0, 1);
                     }
                 }
-                layers.Add(new(diffuse, normal, (int)header.Quadrant, header.LayerNumber, opacity));
+                layers.Add(new(diffuse, normal, (int)header.Quadrant, header.LayerNumber, opacity, occlusion));
             }
             Vector3[]? colors = null;
             if (ctx.Record.VertexColors is { } vclr)
@@ -165,7 +172,8 @@ internal sealed class TerrainSource
             if(Height(x*4096f+ix*128,y*4096f+iy*128) is {} ground && ground<h) return h;
         return null;
     }
-    internal Vector3 Color(float x,float y,float footprint,float repeats,float colorStrength)
+    internal Vector3 Color(float x,float y,float footprint,float repeats,float colorStrength) => Surface(x,y,footprint,repeats,colorStrength).Color;
+    internal TerrainSample Surface(float x,float y,float footprint,float repeats,float colorStrength)
     {
         var coord=CellCoord.FromWorld(x,y);
         if(!Cells.TryGetValue(coord,out var cell))
@@ -175,7 +183,14 @@ internal sealed class TerrainSource
                 var tile=_grid.QuadFor(coord,level); string path=$@"textures\terrain\{_world}\{_world}.{(int)level}.{tile.X}.{tile.Y}.dds";
                 if (_season is not null && _assets.Exists(path[..^4] + "." + _season + ".dds")) path = path[..^4] + "." + _season + ".dds";
                 if(!_assets.Exists(path))continue;
-                var im=Image(path,0); return SrgbToLinear(Sample(im,(x/4096-tile.X)/(int)level,1-(y/4096-tile.Y)/(int)level,false));
+                float u=(x/4096-tile.X)/(int)level, v=1-(y/4096-tile.Y)/(int)level;
+                Vector3? existingNormal = null;
+                if (_materialSettings.NormalStrength > 0 && _materials.Optional(path[..^4] + "_n.dds", "normal", out var npath))
+                {
+                    var n = _materials.Read(npath,u,v,footprint/((int)level*4096),false,false)*2-Vector3.One;
+                    if (n.LengthSquared() > 1e-8f) existingNormal = Vector3.Normalize(n);
+                }
+                return new(_materials.Read(path,u,v,footprint/((int)level*4096),true,false),Vector3.UnitZ,existingNormal);
             }
             throw new InvalidDataException($"Missing landscape texture coverage in {_world} {coord}.");
         }
@@ -183,14 +198,14 @@ internal sealed class TerrainSource
         int quadrant=(vx>=16?1:0)+(vy>=16?2:0);
         float qx=vx%16,qy=vy%16;
         var baseLayer=cell.Bases[quadrant];
-        float total=0; Vector3 color=Vector3.Zero;
+        float total=0; Vector3 color=Vector3.Zero, detail=Vector3.Zero;
         foreach(var layer in cell.Alpha[quadrant])
         {
             float weight=Bilinear(layer.Opacity!,17,qx,qy);
-            if(weight>0) { total+=weight; color+=Material(layer.Texture)*weight; }
+            if(weight>0) { var sample=Material(layer); total+=weight; color+=sample.Color*weight; detail+=sample.Detail*weight; }
         }
         float baseWeight = Math.Max(0, 1 - total);
-        if (baseWeight > 0) color += Material(baseLayer?.Texture ?? _defaultDiffuse) * baseWeight;
+        if (baseWeight > 0) { var sample=Material(baseLayer); color+=sample.Color*baseWeight; detail+=sample.Detail*baseWeight; }
         color/=Math.Max(1,total);
         if(cell.Colors is {} colors)
         {
@@ -198,30 +213,13 @@ internal sealed class TerrainSource
             var v=Vector3.Lerp(Vector3.Lerp(colors[iy*33+ix],colors[iy*33+ix+1],fx),Vector3.Lerp(colors[(iy+1)*33+ix],colors[(iy+1)*33+ix+1],fx),fy);
             color*=Vector3.Lerp(Vector3.One,v,colorStrength);
         }
-        return color;
-        Vector3 Material(string path) {
-            TextureImage original;
-            try { original = Image(path, 0); }
-            catch (FileNotFoundException e) { throw new FileNotFoundException($"Missing landscape texture: {path} (world {_world}, cell {coord.X},{coord.Y}, quadrant {quadrant}).", path, e); }
-            int lod=Math.Max(0,(int)MathF.Floor(MathF.Log2(Math.Max(1,footprint*repeats*original.Width/4096))));
-            return SrgbToLinear(Sample(Image(path,lod),x/4096*repeats,-y/4096*repeats,true)); }
-    }
-    private TextureImage Image(string path,int lod)
-    {
-        _ct.ThrowIfCancellationRequested(); path=GamePath.Normalize(path);
-        if(!_images.TryGetValue(path,out var image))
-        {
-            if(!_assets.TryOpen(path,out var stream)) throw new FileNotFoundException("Missing landscape texture: "+path);
-            using(stream) { using var ms=new MemoryStream();stream.CopyTo(ms); image=TextureImages.Decode(ms.ToArray()); }
-            // Bound decoded memory independently of the number of LAND records. LOD baking never needs 8K source mips.
-            while(image.Width>512 || image.Height>512) {var d=TreeAtlasBuilder.Downsample(image.Pixels,image.Width,image.Height);image=new(d.Rgba,d.W,d.H);}
-            if(_images.Count>=96) { _images.Clear();_mips.Clear(); }
-            _images[path]=image;
+        return new(color, detail / Math.Max(1,total));
+        TerrainSample Material(Layer? layer) {
+            string path=layer?.Texture ?? _defaultDiffuse;
+            try { return _materials.Sample(path,layer is null ? _defaultNormal : layer.Normal,layer?.Occlusion,
+                x/4096*repeats,-y/4096*repeats,footprint*repeats/4096); }
+            catch (FileNotFoundException e) { throw new FileNotFoundException($"Missing landscape texture: {e.FileName ?? path} (world {_world}, cell {coord.X},{coord.Y}, quadrant {quadrant}).", e.FileName ?? path, e); }
         }
-        if(lod==0) return image;
-        if(_mips.TryGetValue((path,lod),out var mip))return mip;
-        for(int i=0;i<lod && (image.Width>1 || image.Height>1);i++) {var d=TreeAtlasBuilder.Downsample(image.Pixels,image.Width,image.Height);image=new(d.Rgba,d.W,d.H);}
-        _mips[(path,lod)]=image;return image;
     }
     internal static Vector3 Sample(TextureImage image,float u,float v,bool wrap)
     {

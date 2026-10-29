@@ -17,11 +17,12 @@ public sealed record TerrainGenerationRequest(GameContextOptions Game, string Ou
     IReadOnlyCollection<string>? Worldspaces = null, IReadOnlyCollection<LodLevel>? Levels = null,
     int TextureSize = 512, float Brightness = 1, float VertexColorStrength = 1, float TextureRepeatsPerCell = 24,
     float SkirtDepth = 512, bool Water = true, bool UseExistingTerrain = true, bool ExportHeightmaps = true,
-    int HeightmapMaximumSize = 8192, bool Seasons = false);
+    int HeightmapMaximumSize = 8192, bool Seasons = false, TerrainMaterialSettings? Materials = null);
 public sealed record TerrainTileResult(string Worldspace, int Level, int X, int Y, int Triangles, int WaterCells);
 public sealed record TerrainWorldResult(string Worldspace, int LandscapeCells, int ExistingTilesUsed, int Tiles, string? Heightmap);
 public sealed record TerrainGenerationResult(string OutputFolder, IReadOnlyList<TerrainWorldResult> Worlds,
-    IReadOnlyList<TerrainTileResult> Tiles, IReadOnlyList<string> Warnings, double Seconds, string? PreviousOutput, OutputSnapshot Output);
+    IReadOnlyList<TerrainTileResult> Tiles, IReadOnlyList<string> Warnings, double Seconds, string? PreviousOutput, OutputSnapshot Output,
+    IReadOnlyList<TerrainMaterialReport>? Materials = null);
 
 public static class TerrainGeneration
 {
@@ -29,6 +30,7 @@ public static class TerrainGeneration
     public static void Validate(TerrainGenerationRequest r)
     {
         GenerationDestination.Validate(r.Game, r.OutputFolder);
+        (r.Materials ?? new()).Validate();
         if(r.TextureSize is <64 or >2048 || (r.TextureSize&(r.TextureSize-1))!=0) throw new ArgumentException("Terrain texture size must be a power of two from 64 to 2048.");
         if(r.HeightmapMaximumSize is <128 or >16384 || (r.HeightmapMaximumSize&(r.HeightmapMaximumSize-1))!=0)throw new ArgumentException("Heightmap size limit must be a power of two from 128 to 16384.");
         if(!float.IsFinite(r.Brightness) || r.Brightness is <.1f or >4 || !float.IsFinite(r.VertexColorStrength) || r.VertexColorStrength is <0 or >1
@@ -50,12 +52,14 @@ public static class TerrainGeneration
         var assets=game.BuildAssets(p=>p.StartsWith("textures\\") || p.StartsWith("meshes\\terrain\\") || p.StartsWith("lodsettings\\") || p.StartsWith("seasons\\"));
         if(assets.SkippedArchives.Count>0)throw new InvalidDataException("Terrain generation cannot read required archives: "+string.Join(", ",assets.SkippedArchives));
         string defaultDiffuse = TerrainDefaultTexture.Resolve(request.Game, game.DataFolder);
+        string defaultNormal = TerrainDefaultTexture.Resolve(request.Game, game.DataFolder, normal: true);
         progress?.Report("Default landscape diffuse: " + defaultDiffuse);
         var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures") : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         var wanted=request.Worldspaces is {Count:>0}?new HashSet<string>(request.Worldspaces,StringComparer.OrdinalIgnoreCase):null;
         var worlds=game.LoadOrder.PriorityOrder.Worldspace().WinningOverrides().Where(w=>!w.IsDeleted && w.EditorID is {} id && (wanted is null||wanted.Contains(id))).ToArray();
         var owned = new OutputSnapshot();
         var reports=new List<TerrainWorldResult>();var tiles=new List<TerrainTileResult>();var warnings=new List<string>(game.Warnings);
+        var materialReports = new HashSet<TerrainMaterialReport>();
         void Warn(string s){warnings.Add(s);progress?.Report("WARNING: "+s);}
         using var stage=new StagedOutput(request.OutputFolder,false,progress,ct);
         preparation.Dispose();using var generation=WorkTiming.Measure("generation");
@@ -67,7 +71,7 @@ public static class TerrainGeneration
             LodSettings settings;using(s){var bytes=new byte[16];s.ReadExactly(bytes);settings=LodSettings.Parse(bytes);}
             if(settings.Stride is <4 or >4096 || (settings.Stride&(settings.Stride-1))!=0)throw new InvalidDataException(name+": invalid LOD grid bounds.");
             var levels=(request.Levels??new[]{LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32}).Where(settings.Supports).Distinct().ToArray();
-            var grid=new LodGrid(name,settings);var source=new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,defaultDiffuse:defaultDiffuse);
+            var grid=new LodGrid(name,settings);var source=new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,defaultDiffuse:defaultDiffuse,defaultNormal:defaultNormal,materials:request.Materials);
             var planned=source.Tiles(levels).ToArray();
             if(planned.Length==0){Warn(name+": no landscape or existing terrain in the selected grid/levels; skipped.");continue;}
             if(request.Water && !source.HasLodWater) Warn(name+": no worldspace LOD-water record; water meshes are omitted to avoid invalid engine references.");
@@ -84,7 +88,7 @@ public static class TerrainGeneration
             }
             foreach (var (season, swaps) in seasons)
             {
-                var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season,defaultDiffuse);
+                var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season,defaultDiffuse,defaultNormal,request.Materials);
                 foreach (var tile in planned)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -97,6 +101,7 @@ public static class TerrainGeneration
                     Write($@"textures\terrain\{name}\{stem}_n.dds",TextureImages.Encode(normal,normal:true));
                 }
                 if (seasonal.FallbackUsed.Count>0) Warn($"{name} {season}: missing LAND uses installed seasonal terrain textures where present, otherwise the installed default terrain. Check these areas in game.");
+                Collect(seasonal);
             }
             string? heightmap=null;
             if(request.ExportHeightmaps)
@@ -109,16 +114,19 @@ public static class TerrainGeneration
             reports.Add(new(name,source.Cells.Count,source.FallbackUsed.Count,planned.Length,heightmap));
             if(source.FallbackUsed.Count>0)Warn($"{name}: sampled {source.FallbackUsed.Count} existing terrain tiles for missing LAND. Those areas retain the source terrain's detail.");
             Write(LodSettings.RelativePathFor(name),settings.ToBytes());
+            Collect(source);
         }
         if(tiles.Count==0)throw new InvalidDataException("No terrain tiles were generated. Check worldspace selection, LOD settings and landscape coverage.");
         if(wanted is not null && wanted.Except(reports.Select(r=>r.Worldspace),StringComparer.OrdinalIgnoreCase).Any())
             throw new InvalidDataException("Not all explicitly selected worldspaces generated terrain. Review the warnings; previous output was preserved.");
         generation.Dispose();
-        var manifest=new {Version=1,ApplicationVersion=ProductInfo.Version,GeneratedAt=DateTimeOffset.UtcNow,Request=request,Worlds=reports,Tiles=tiles,Warnings=warnings,Files=owned.Files};
+        var materials = materialReports.OrderBy(m=>m.Source,StringComparer.Ordinal).ThenBy(m=>m.Diffuse,StringComparer.Ordinal).ToArray();
+        var manifest=new {Version=1,ApplicationVersion=ProductInfo.Version,GeneratedAt=DateTimeOffset.UtcNow,Request=request,Worlds=reports,Tiles=tiles,Materials=materials,Warnings=warnings,Files=owned.Files};
         Write(ManifestName,JsonSerializer.SerializeToUtf8Bytes(manifest,PersistentPipeline.Json));
         OutputSnapshot output;using(WorkTiming.Measure("output-verification"))output=OutputSnapshot.Capture(stage.Payload,progress,ct);
         stage.Commit(progress);
-        return new(request.OutputFolder,reports,tiles,warnings,watch.Elapsed.TotalSeconds,stage.PreviousOutput,output);
+        return new(request.OutputFolder,reports,tiles,warnings,watch.Elapsed.TotalSeconds,stage.PreviousOutput,output,materials);
+        void Collect(TerrainSource source) { materialReports.UnionWith(source.MaterialReports); foreach(string warning in source.MaterialWarnings) if(!warnings.Contains(warning)) Warn(warning); }
         void Write(string relative,byte[] bytes){ct.ThrowIfCancellationRequested();using var timing=WorkTiming.Measure("file-write-worker");
             string path=GamePath.ToFileSystemPath(stage.Payload,relative);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,bytes);owned.Files[Path.GetRelativePath(stage.Payload,path).Replace('\\','/')]=OutputSnapshot.HashFile(path,ct);}
     }
@@ -131,6 +139,7 @@ public static class TerrainGeneration
     }
     private static (TextureImage Diffuse,TextureImage Normal) Bake(QuadKey tile,TerrainSource source,TerrainGenerationRequest settings,CancellationToken ct)
     {
+        float strength = (settings.Materials ?? new()).NormalStrength;
         int size=settings.TextureSize;var diffuse=TextureImages.Blank(size,size);var normal=TextureImages.Blank(size,size);
         float span=(int)tile.Level*4096f,footprint=span/size;
         for(int y=0;y<size;y++)
@@ -139,13 +148,15 @@ public static class TerrainGeneration
             for(int x=0;x<size;x++)
             {
                 float wx=tile.X*4096f+(x+.5f)*footprint,wy=tile.Y*4096f+span-(y+.5f)*footprint;
-                var color=source.Color(wx,wy,footprint,settings.TextureRepeatsPerCell,settings.VertexColorStrength)*settings.Brightness;
+                var sample=source.Surface(wx,wy,footprint,settings.TextureRepeatsPerCell,settings.VertexColorStrength);
+                var color=sample.Color*settings.Brightness;
                 int o=(y*size+x)*4;diffuse.Pixels[o]=TerrainSource.Srgb(color.X);diffuse.Pixels[o+1]=TerrainSource.Srgb(color.Y);diffuse.Pixels[o+2]=TerrainSource.Srgb(color.Z);diffuse.Pixels[o+3]=255;
                 float h=source.Height(wx,wy)??throw new InvalidDataException("Missing height while baking terrain normals.");
                 float step=Math.Max(128,footprint*.5f);
                 float dx=((source.Height(wx+step,wy)??h)-(source.Height(wx-step,wy)??h))/(2*step);
                 float dy=((source.Height(wx,wy+step)??h)-(source.Height(wx,wy-step)??h))/(2*step);
                 var n=Vector3.Normalize(new Vector3(-dx,1,-dy)); // terrain convention: east, up, north
+                n = sample.ExistingNormal is { } existing ? Vector3.Normalize(Vector3.Lerp(n,existing,Math.Min(1,strength))) : TerrainMaterials.Normal(n,sample.Detail,strength);
                 normal.Pixels[o]=(byte)Math.Clamp(MathF.Round((n.X+1)*127.5f),0,255);normal.Pixels[o+1]=(byte)Math.Clamp(MathF.Round((n.Y+1)*127.5f),0,255);
                 normal.Pixels[o+2]=(byte)Math.Clamp(MathF.Round((n.Z+1)*127.5f),0,255);normal.Pixels[o+3]=255;
             }

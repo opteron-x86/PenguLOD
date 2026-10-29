@@ -43,7 +43,8 @@ public static class RequestFactory
         var request = new TerrainGenerationRequest(Game(s), RequiredPath(s.TerrainOutput, "a terrain output folder", s), worlds.Length == 0 ? null : worlds,
             TextureSize: Whole(s.TerrainTextureSize), Brightness: (float)s.TerrainBrightness, VertexColorStrength: (float)s.TerrainVertexColor,
             TextureRepeatsPerCell: (float)s.TerrainRepeats, SkirtDepth: (float)s.TerrainSkirt, Water: s.TerrainWater,
-            UseExistingTerrain: s.TerrainFallback, ExportHeightmaps: s.TerrainHeightmaps, HeightmapMaximumSize: Whole(s.TerrainHeightmapSize), Seasons: s.Seasons);
+            UseExistingTerrain: s.TerrainFallback, ExportHeightmaps: s.TerrainHeightmaps, HeightmapMaximumSize: Whole(s.TerrainHeightmapSize), Seasons: s.Seasons,
+            Materials: new((float)s.TerrainNormalStrength, s.TerrainPbr, s.TerrainPbrTwins, (float)s.TerrainPbrScale, (float)s.TerrainPbrGamma, (float)s.TerrainAo));
         TerrainGeneration.Validate(request);
         return request;
     }

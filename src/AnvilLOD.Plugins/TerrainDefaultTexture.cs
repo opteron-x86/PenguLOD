@@ -9,8 +9,9 @@ internal static class TerrainDefaultTexture
 {
     // Skyrim's unpainted LAND uses the Landscape INI setting, not Oblivion's Default.dds.
     internal const string SkyrimDefault = @"textures\landscape\dirt02.dds";
+    internal const string SkyrimNormal = @"textures\landscape\dirt02_n.dds";
 
-    internal static string Resolve(GameContextOptions options, string dataFolder)
+    internal static string Resolve(GameContextOptions options, string dataFolder, bool normal = false)
     {
         string? ini = options.GameIniPath is { } path ? HostPath.Resolve(path, winePrefix: options.WinePrefix) : null;
         IReadOnlyList<string> candidates;
@@ -21,10 +22,10 @@ internal static class TerrainDefaultTexture
             candidates = instance.OpenProfile(options.Mo2Profile).IniPaths(ini, options.Release == GameRelease.SkyrimVR);
         }
         else candidates = GameContext.IniPaths(options with { GameIniPath = ini }, dataFolder);
-        return Read(candidates);
+        return Read(candidates, normal);
     }
 
-    internal static string Read(IEnumerable<string> candidates)
+    internal static string Read(IEnumerable<string> candidates, bool normal = false)
     {
         foreach (var candidate in candidates.Distinct(StringComparer.Ordinal))
         {
@@ -32,13 +33,13 @@ internal static class TerrainDefaultTexture
             var file = GamePath.ResolveExisting(Path.GetDirectoryName(full)!, Path.GetFileName(full));
             if (file is null || !File.Exists(file)
                 || !Mo2Instance.ReadIni(file).TryGetValue("Landscape", out var section)
-                || !section.TryGetValue("sDefaultLandDiffuseTexture", out var value)
+                || !section.TryGetValue(normal ? "sDefaultLandNormalTexture" : "sDefaultLandDiffuseTexture", out var value)
                 || string.IsNullOrWhiteSpace(value)) continue;
             var path = GamePath.Normalize(value);
             GamePath.ValidateRelative(path);
             if (path.StartsWith("textures\\", StringComparison.Ordinal)) return path;
             return path.StartsWith("landscape\\", StringComparison.Ordinal) ? "textures\\" + path : @"textures\landscape\" + path;
         }
-        return SkyrimDefault;
+        return normal ? SkyrimNormal : SkyrimDefault;
     }
 }
