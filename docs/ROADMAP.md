@@ -18,7 +18,7 @@ shorelines, mixed-distance seams and shader compatibility remain tracked in
 [#2](https://github.com/opteron-x86/PenguLOD/issues/2). Tree silhouettes, hybrid trunk alignment,
 foliage shading and billboard transitions remain tracked in
 [#3](https://github.com/opteron-x86/PenguLOD/issues/3). Seasonal swaps use written INI files;
-runtime automatic snow generation is outside the native generator.
+the terrain/tree/object stages require runtime automatic swaps to be saved first.
 
 ## Hardware and distribution
 

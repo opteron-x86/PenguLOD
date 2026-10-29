@@ -26,8 +26,10 @@ when available and otherwise retain default terrain, with a warning. Missing lan
 data cannot be reconstructed as seasonal layers from a baked default texture.
 
 Runtime-generated winter swaps must first be saved by Seasons of Skyrim as INIs and
-available to the selected profile. PenguLOD does not execute SKSE or recreate the runtime's
-automatic snow rules. Dynamic shader snow remains a runtime effect.
+available to the selected profile. The terrain/tree/object stages do not execute SKSE or
+recreate its automatic snow rules. The bundled FasterNGIO grass backend can derive automatic
+winter swaps; save the runtime's matching `MainFormSwap_WIN.ini` before generating the other
+stages so they can use those replacements too. Dynamic shader snow remains a runtime effect.
 
 Follow [the transition checks](DIAGNOSTICS.md#repeatable-checks) in each configured season.
 Compare loaded-cell textures and trees with the corresponding distant output.

@@ -18,6 +18,14 @@ namespace AnvilLOD.Core.Tests;
 
 public class SeasonalPipelineTests
 {
+    [Fact]
+    public void AutomaticGrassWithoutSeasonRuntimeDoesNotRequireSeasonalInputs()
+    {
+        using var f=new GrassFixture();
+        var result=PipelineDiagnostics.Run(new(Grass:f.Request));
+        Assert.DoesNotContain(result.Issues,i=>i.Code=="no-seasonal-swaps");
+        Assert.Empty(result.Seasons!);
+    }
     [Theory]
     [InlineData(false)] [InlineData(true)]
     public void PipelineBuildsAllFourSeasonsAcrossTerrainTreesObjectsAndGrass(bool native)

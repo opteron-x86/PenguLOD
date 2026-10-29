@@ -39,11 +39,11 @@ internal static class SeasonalCoverage
                 p.Value.Count(v=>v is not null),p.Value.OfType<string>().ToArray())).ToArray();
     }
 
-    internal static bool Affects(GenerationPipelineRequest r,string category) => category switch
+    internal static bool Affects(GenerationPipelineRequest r,string category,bool seasonalGrass) => category switch
     {
-        "landtextures" => r.Terrain?.Seasons == true || r.Grass is {Seasons: not "off"},
+        "landtextures" => r.Terrain?.Seasons == true || seasonalGrass,
         "trees" => r.Lod is {Seasons:true,Scan.TreeLod:true},
-        "grasses" => r.Grass is {Seasons:not "off"},
+        "grasses" => seasonalGrass,
         _ => r.Lod?.Seasons == true
     };
     internal static bool Supported(string section) => section.ToLowerInvariant() is "trees" or "landtextures" or "grasses"

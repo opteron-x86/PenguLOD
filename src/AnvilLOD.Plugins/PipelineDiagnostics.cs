@@ -70,14 +70,15 @@ public static class PipelineDiagnostics
             assets=game.BuildAssets(p=>p.StartsWith("skse\\") || seasonal && (p.StartsWith("seasons\\") || p.StartsWith("grass\\")) || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null);
             archives=assets.ArchiveCount;
             foreach(var archive in assets.SkippedArchives)Add("Warning","archive-unreadable",archive,"Repair or remove the unreadable archive before generating.");
-            if(seasonal)
+            bool seasonalGrass=request.Grass?.Seasons=="on" || request.Grass?.Seasons=="auto" && assets.Exists(@"skse\plugins\po3_seasonsofskyrim.dll");
+            if(request.Lod?.Seasons==true || request.Terrain?.Seasons==true || seasonalGrass)
             {
                 seasons=SeasonalCoverage.Inspect(game,assets,ct);
                 foreach(var row in seasons)
                 {
                     Add("Info","seasonal-swaps",$"{row.Season} {row.Category}: {row.Resolved}/{row.Entries} entries resolve.","Later INI entries win; identity entries restore the original record.");
                     foreach(string problem in row.Problems)
-                        Add(SeasonalCoverage.Affects(request,row.Category)?"Error":"Warning","unresolved-seasonal-swap",problem,
+                        Add(SeasonalCoverage.Affects(request,row.Category,seasonalGrass)?"Error":"Warning","unresolved-seasonal-swap",problem,
                             "Correct the seasonal INI or restore its required plugin. Runtime-generated swaps must first be saved as INIs.");
                 }
                 if(seasons.Count==0)Add("Warning","no-seasonal-swaps","No supported written seasonal swaps were found.",
