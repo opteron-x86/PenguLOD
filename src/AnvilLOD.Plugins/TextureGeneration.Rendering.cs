@@ -106,19 +106,8 @@ public static partial class TextureGeneration
                 if (rule is null && bounds.Max.Z - bounds.Min.Z < (isGrass ? request.MinGrassHeight : request.MinTreeHeight))
                 { Skip("Below minimum model height"); continue; }
 
-                // Alternate texture sets belong to the winning plugin record, not the base NIF.
-                var replacements = new Dictionary<string, ITextureSetGetter>(StringComparer.OrdinalIgnoreCase);
-                foreach (var alt in model.AlternateTextures ?? [])
-                    if (game.LinkCache.TryResolve<ITextureSetGetter>(alt.NewTexture.FormKey, out var set)) replacements[alt.Name] = set;
-                if (replacements.Count > 0)
-                    mesh = new LodMesh { Path = path, Parts = mesh.Parts.Select(p =>
-                    {
-                        if (!replacements.TryGetValue(p.Name ?? "", out var set)) return p;
-                        var textures = p.Material.Textures.Concat(Enumerable.Repeat("", Math.Max(0, 2 - p.Material.Textures.Count))).ToArray();
-                        if (set.Diffuse is { IsNull: false } diffuse) textures[0] = GamePath.NormalizeTexture(diffuse.DataRelativePath.Path);
-                        if (set.NormalOrGloss is { IsNull: false } normal) textures[1] = GamePath.NormalizeTexture(normal.DataRelativePath.Path);
-                        return CopyPart(p, p.Material with { Textures = textures });
-                    }).ToArray() };
+                if (!TreeMaterials.TryApply(mesh, TreeMaterials.Read(game, model), out mesh, out var variantError))
+                    throw new InvalidDataException(variantError);
                 float scale = rule?.Scale ?? 1;
                 var img = BillboardRenderer.Render(mesh, loader, request.BillboardMaxSize, vertexColors: !isGrass,
                     unitsPerPixel: request.UnitsPerPixel / scale, brightness: request.Brightness, materials: request.Materials)

@@ -45,7 +45,7 @@ public sealed partial class MainWindow : Window
     private readonly ComboBox _profiles = new() { MinWidth = 180, PlaceholderText = "Available profiles" };
     private readonly TextBlock _counts = new() { Text = "Scan your load order to inspect worldspaces and missing assets.", TextWrapping = TextWrapping.Wrap };
     private readonly DataGrid _worlds = Table(("Worldspace", "World"), ("LOD 4", "Lod4"), ("LOD 8", "Lod8"), ("LOD 16", "Lod16"), ("LOD 32", "Lod32"));
-    private readonly DataGrid _treeCoverage = Table(("Model", "Model"), ("Level", "Level"), ("Instances", "Instances"), ("Triangles/model", "OutputTriangles"), ("Placed triangles", "PlacedTriangles"), ("Method", "Method"), ("Fallback", "Fallback"));
+    private readonly DataGrid _treeCoverage = Table(("Model", "Model"), ("Level", "Level"), ("Instances", "Instances"), ("Triangles/model", "OutputTriangles"), ("Placed triangles", "PlacedTriangles"), ("Leaf triangles removed", "FoliageTrianglesRemoved"), ("Coverage loss (%)", "FoliageCoveragePercent"), ("Method", "Method"), ("Fallback", "Fallback"));
     private readonly TextBox _issues = new() { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 220, PlaceholderText = "Scan warnings and missing assets appear here." };
     private readonly DataGrid _textures = Table(("Mod", "Mod"), ("Texture", "Relative"), ("Format", "Format"), ("Width", "Width"), ("Height", "Height"), ("Mips", "Mips"));
     private readonly Dictionary<string, Control> _pages = [];

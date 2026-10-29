@@ -76,9 +76,12 @@ internal static class SeasonalAssets
                     lod = Tree3DModels.Resolve(path,Tree3DModels.Crc32(bytes.ToArray()),settings.PlainNameFallback,assets.Exists)?.Path; }
             }
             if (lod is null && assets.Exists(named)) lod = named;
-            if (lod is null && settings.GenerateMissing && record.Model.AlternateTextures is not { Count: > 0 }
+            if (lod is null && settings.GenerateMissing
                 && assets.Exists(path)) {lod = path; native = true;}
+            if (record.Model.AlternateTextures is { Count: > 0 } && settings.GenerateMissing && assets.Exists(path))
+            { lod = path; native = true; }
         }
-        return tree with {BaseFormKey=target.ToString(),Billboard=billboard,Model3D=lod,Model3DGenerated=native,Model3DByName=false};
+        return tree with {BaseFormKey=target.ToString(),Billboard=billboard,Model3D=lod,Model3DGenerated=native,Model3DByName=false,
+            MaterialVariant=TreeMaterials.Read(game,record.Model)};
     }
 }

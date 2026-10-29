@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using AnvilLOD.Core.Pipeline;
+using AnvilLOD.Core.Lod;
 using AnvilLOD.Core.World;
 using AnvilLOD.Meshes;
 using AnvilLOD.Meshes.Authoring;
@@ -37,7 +38,7 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
     /// <summary>Renders (or finds up to date) the billboard for <paramref name="model"/>. False with a reason when there is nothing to draw.</summary>
     /// <param name="pluginFolder">Lower-case plugin file name: the lodgen sub folder.</param>
     /// <param name="name">"model_formid" (formid as 8 hex digits, lower case).</param>
-    public bool TryRender(string model, string pluginFolder, string name, out string reason)
+    public bool TryRender(string model, string pluginFolder, string name, out string reason, TreeMaterialVariant? variant = null)
     {
         reason = "";
         model = GamePath.Normalize(model.StartsWith("meshes", StringComparison.OrdinalIgnoreCase) ? model : "meshes\\" + model);
@@ -46,19 +47,25 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
         using (st) { using var ms = new MemoryStream(); st.CopyTo(ms); bytes = ms.ToArray(); }
 
         LodMesh mesh;
-        try { mesh = NifGeometryReader.Read(model, bytes); }
+        try { mesh = NifGeometryReader.Read(model, bytes, passthru: true); }
         catch (Exception ex) when (ex is NotSupportedException or InvalidDataException or IndexOutOfRangeException or ArgumentException or EndOfStreamException)
         { reason = "model unreadable: " + ex.Message; return false; }
         if (mesh.Parts.Count == 0) { reason = "model has no drawable shapes"; return false; }
+        if (mesh.Warnings.Any(w => w.Contains("skipped", StringComparison.OrdinalIgnoreCase)))
+        { reason = "model contains unsupported shapes"; return false; }
+        if (!TreeMaterials.TryApply(mesh, variant, out mesh, out var variantError)) { reason = variantError!; return false; }
+        foreach (var part in mesh.Parts)
+            if (part.Material.Textures.Count == 0 || LoadTexture(part.Material.Textures[0]) is null)
+            { reason = "missing or unreadable diffuse texture"; return false; }
 
         var (min, max) = LodMeshAuthor.Bounds(mesh);
         if (max.Z - min.Z < MinHeight) { reason = TooSmall; return false; }
 
         // What the picture depends on: the model and its textures.
-        var sb = new StringBuilder().Append(Convert.ToHexString(SHA256.HashData(bytes)));
-        foreach (var t in mesh.Parts.SelectMany(p => p.Material.Textures.Take(1)).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
+        var sb = new StringBuilder().Append(Convert.ToHexString(SHA256.HashData(bytes))).Append('|').Append(variant?.Id);
+        foreach (var t in mesh.Parts.SelectMany(p => p.Material.Textures).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
             sb.Append('|').Append(assets.Fingerprint(TexturePath(t)));
-        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v2|" + sb))).ToLowerInvariant()[..24];
+        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v3|" + sb))).ToLowerInvariant()[..24];
 
         var dir = Path.Combine(_root, "textures", "terrain", "lodgen", pluginFolder);
         var main = Path.Combine(dir, name + ".dds");
