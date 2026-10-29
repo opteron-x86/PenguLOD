@@ -247,6 +247,16 @@ public sealed class LodGenerator
                 var inputs = new List<TextureMatchInput>();
                 if (shapes.GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1 && variant.Alternates.Any(a => ShapeNameMatches(a.ShapeName, g.Key))))
                     throw new InvalidDataException("Alternate texture is ambiguous because full-model shape names are duplicated: " + p.Name);
+                // Mesh replacers can reuse a shape name for unrelated materials. For
+                // an exact name match, the existing LOD material can identify one of
+                // them. Never use this to discard contributors to a merged A - B shape.
+                if (shapes.Count > 1 && shapes.All(s => ShapeNameMatches(s.Name, p.Name)))
+                {
+                    var candidates = shapes.Where(s => SamePath(s.Diffuse, p.Material.Textures[0])).ToArray();
+                    if (candidates.Length > 1 && p.Material.Textures.Count > 1)
+                        candidates = candidates.Where(s => SamePath(s.Normal, p.Material.Textures[1])).ToArray();
+                    if (candidates.Length == 1) shapes = candidates;
+                }
                 foreach (var shape in shapes.Where(s => !string.IsNullOrWhiteSpace(s.Diffuse)))
                 {
                     string diffuse = shape.Diffuse!; string? normal = shape.Normal; bool alternate = false;

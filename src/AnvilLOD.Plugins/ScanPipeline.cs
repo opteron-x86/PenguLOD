@@ -518,7 +518,7 @@ public static class ScanPipeline
                 }
                 recipeMapper = new(recipeSet, assets, req.OutputFolder ?? Path.GetTempPath(), RecipeSource);
                 progress?.Report("Fingerprinting recipe sources and record texture variants...");
-                req = req with { SettingsFingerprint = req.SettingsFingerprint + "|recipes2:" + recipeMapper.InputFingerprint(scan.TextureVariants?.Values ?? []) };
+                req = req with { SettingsFingerprint = req.SettingsFingerprint + "|recipes3:" + recipeMapper.InputFingerprint(scan.TextureVariants?.Values ?? []) };
             }
         }
 

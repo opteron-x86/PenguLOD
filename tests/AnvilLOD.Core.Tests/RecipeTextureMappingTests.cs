@@ -181,4 +181,91 @@ public class RecipeTextureMappingTests
         TextureFixture.Put(f.Data, Red, TextureFixture.Solid(200, 20, 25)); File.SetLastWriteTimeUtc(file, stamp);
         Assert.Equal(size, new FileInfo(file).Length); Assert.NotEqual(before, Mapper(f, rules).InputFingerprint([]));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SingleSourceAtlasVariantsPreserveWrappingUvs(bool copied)
+    {
+        using var f = new TextureFixture();
+        TextureFixture.Put(f.Data, Blue, TextureFixture.Solid(10, 20, 240));
+        var rules = Recipes(TextureFixture.Tile(Red, Atlas, 0), TextureFixture.Tile(Red, Atlas, 1));
+        if (copied) rules.Entries = [new("copy", 1, Copy: new(Red, Atlas))];
+        var part = TextureFixture.Card("shape", Atlas);
+        part = RecipeTextureMapper.Copy(part, part.Material, part.UVs.Select(uv => uv * 2 - new Vector2(.2f)).ToArray());
+        // The patched full model names a different source; the atlas still has just one contributor.
+        var mapper = Mapper(f, rules);
+        var mapped = mapper.Map(part, [Input(Green, Blue)])!;
+        Assert.Equal(part.UVs, mapped.UVs);
+        Assert.Same(part.Positions, mapped.Positions);
+        var image = Image(Path.Combine(f.Root, "lod"), mapped.Material.Textures[0]);
+        for (int i = 0; i < image.Pixels.Length; i += 4) Assert.True(image.Pixels[i + 2] > 220);
+        mapper.ThrowIfFailed();
+    }
+
+    [Fact]
+    public void FullShapeAlreadyUsingAtlasDoesNotSubstituteAtlasIntoItsOwnTiles()
+    {
+        using var f = new TextureFixture();
+        TextureFixture.Put(f.Data, Atlas, TextureFixture.Solid(10, 20, 240));
+        string normal = TextureRecipeRenderer.Normal(Atlas);
+        TextureFixture.Put(f.Data, normal, TextureFixture.Solid(128, 128, 255));
+        var mapper = Mapper(f, Recipes(TextureFixture.Tile(Red, Atlas, 0), TextureFixture.Tile(Green, Atlas, 1)));
+        var part = TextureFixture.Card("platform", Atlas);
+        part = RecipeTextureMapper.Copy(part, part.Material with { Textures = [Atlas, normal] },
+            part.UVs.Select(uv => uv with { X = uv.X * .5f }).ToArray());
+        Assert.Same(part, mapper.Map(part, [new("platform", Atlas, normal, Atlas, normal, false)]));
+        Assert.Empty(mapper.Report);
+        Assert.False(Directory.Exists(Path.Combine(f.Root, "lod")));
+    }
+
+    [Fact]
+    public void WrappingUnknownAlternateCannotChooseBetweenDifferentAtlasSources()
+    {
+        using var f = new TextureFixture();
+        TextureFixture.Put(f.Data, Blue, TextureFixture.Solid(10, 20, 240));
+        var mapper = Mapper(f, Recipes(TextureFixture.Tile(Red, Atlas, 0), TextureFixture.Tile(Green, Atlas, 1)));
+        var part = TextureFixture.Card("shape", Atlas);
+        part = RecipeTextureMapper.Copy(part, part.Material, part.UVs.Select(uv => uv * 2).ToArray());
+        Assert.Throws<InvalidDataException>(() => mapper.Map(part, [Input("textures\\patched.dds", Blue)]));
+        Assert.Contains(mapper.Report, r => r.Status == "Failed" && r.Detail.Contains("cannot be associated"));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void DuplicateFullShapeNamesRequireAUniqueMaterialAndNoAmbiguousAlternate(bool alternate, bool unknownLodTexture)
+    {
+        using var f = new TextureFixture();
+        string full = @"meshes\fixture\duplicate.nif", lod = @"meshes\fixture\duplicate_lod_0.nif";
+        TextureFixture.Put(f.Data, full, LodNifWriter.Write("full",
+            [TextureFixture.Card("roof", Green), TextureFixture.Card("roof", Red)], preserveShapeNames: true));
+        TextureFixture.Put(f.Data, lod, LodNifWriter.Write("lod",
+            [TextureFixture.Card("roof", unknownLodTexture ? Blue : Red)], preserveShapeNames: true));
+        var variant = TextureVariant.Create(full, alternate ? [new("roof", Blue, null)] : []);
+        var generator = new LodGenerator(AssetIndex.Build(GameRelease.SkyrimSE, f.Data))
+        { TextureVariants = new Dictionary<string, TextureVariant> { [variant.Id] = variant } };
+        if (alternate || unknownLodTexture)
+        {
+            var error = Assert.Throws<InvalidDataException>(() => generator.GetMesh(LodMeshKey.Make(lod, variant.Id)));
+            Assert.Contains(alternate ? "duplicated" : "conflicting full textures", error.Message);
+        }
+        else Assert.Equal(Red, Assert.Single(generator.GetMesh(LodMeshKey.Make(lod, variant.Id))!.Parts).Material.Textures[0]);
+    }
+
+    [Fact]
+    public void ExistingLodMaterialCannotDiscardOtherNamedContributorsToMergedShape()
+    {
+        using var f = new TextureFixture();
+        string full = @"meshes\fixture\merged.nif", lod = @"meshes\fixture\merged_lod_0.nif";
+        TextureFixture.Put(f.Data, full, LodNifWriter.Write("full",
+            [TextureFixture.Card("A", Red), TextureFixture.Card("B", Green)], preserveShapeNames: true));
+        TextureFixture.Put(f.Data, lod, LodNifWriter.Write("lod", [TextureFixture.Card("A - B", Red)], preserveShapeNames: true));
+        var variant = TextureVariant.Create(full, []);
+        var generator = new LodGenerator(AssetIndex.Build(GameRelease.SkyrimSE, f.Data))
+        { TextureVariants = new Dictionary<string, TextureVariant> { [variant.Id] = variant } };
+        Assert.Contains("conflicting full textures",
+            Assert.Throws<InvalidDataException>(() => generator.GetMesh(LodMeshKey.Make(lod, variant.Id))).Message);
+    }
 }
