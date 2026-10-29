@@ -8,7 +8,7 @@ its copyright notices and GPL-3.0-only license. The application version is recor
 
 | Component | Use | Distribution |
 | --- | --- | --- |
-| .NET and Avalonia | Managed runtime, desktop UI and rendering | Included in Linux packages |
+| .NET and Avalonia | Managed runtime, desktop UI and rendering | Included in Linux and Windows packages |
 | Mutagen and texture libraries | Plugin/archive access and texture processing | Included; versions and notices accompany each package |
 | [FasterNGIO](https://github.com/panthuncia/FasterNGIO) | Offline CPU grass generation | Included as a separate native executable, with corresponding patched source and licenses |
 | Vulkan texture helper | Optional BC7 encoding | Included; requires a host Vulkan driver |
@@ -16,8 +16,13 @@ its copyright notices and GPL-3.0-only license. The application version is recor
 
 FasterNGIO is pinned to `5a1bff6ad3e44b5b9c4b5acdd0663ae20860ca40`. Checksums,
 dependency pins and maintained patches are under `tools/fasterngio` in the source
-checkout. Linux packages include these changes and dependency sources in
+checkout. Both packages include these changes and dependency submodules in
 `backends/fasterngio/FasterNGIO-source.tar.gz`.
+
+Windows native dependencies use the vcpkg baseline pinned in `tools/windows/vcpkg.json`
+and the `x64-windows-static` triplet. Exact installed versions and license notices ship
+with the backend. The Windows headless build embeds the upstream UTF-8 application
+manifest, preserving non-ASCII paths without changing system locale settings.
 
 `THIRD-PARTY-PACKAGES.txt`, published `.deps.json` files and packaged license notices
 identify managed dependencies and versions. Native runtime notices accompany the backend.
@@ -29,13 +34,14 @@ licensed by this repository. Game assets and generated mod output are not distri
 Dynamic LOD and runtime quality controls require the separate AnvilLOD SKSE plugin
 matching the Skyrim runtime. The integrated upstream version is **0.2.70**, available
 from [upstream releases](https://github.com/CageTV/AnvilLOD/releases/tag/v0.2.70).
-The Windows DLL runs inside Skyrim under Proton/Wine and is not in the Linux package.
+The Windows DLL runs inside Skyrim (under Proton/Wine on Linux) and is installed separately
+from either generator package.
 PenguLOD's application version does not select the game-plugin DLL.
 
 Game-facing identifiers such as `AnvilLOD.esp`, `AnvilLOD.esm`, runtime data paths,
 ownership markers and manifests retain their names for compatibility. Source namespaces
-and project names also remain `AnvilLOD`. The inherited WPF application and PowerShell
-scripts are outside the supported Linux release pipeline.
+and project names also remain `AnvilLOD`. Both generator packages use Avalonia. The inherited
+WPF application and root-level upstream release scripts are outside PenguLOD's release pipeline.
 
 ## AppImage components
 

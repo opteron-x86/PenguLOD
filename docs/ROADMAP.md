@@ -45,9 +45,10 @@ timing, decoded image quality and device-failure recovery. Track results in
 [#6](https://github.com/opteron-x86/PenguLOD/issues/6). Software-driver tests establish
 correctness but do not establish hardware performance. CPU remains the default.
 
-Maintain portable and AppImage compatibility checks on Ubuntu, Debian and Fedora.
-Flatpak, additional architectures and Windows packages require separate packaging and
-platform validation; they are not current release targets.
+Maintain portable and AppImage compatibility checks on Ubuntu, Debian and Fedora, plus
+Windows x64 ZIP checks on separate Windows build and runtime runners. Windows desktop
+modlists and physical GPU drivers still need broader validation. Flatpak and additional
+architectures are not current release targets.
 
 ## Acceptance criteria
 

@@ -1,14 +1,15 @@
 # PenguLOD user guide
 
-PenguLOD generates Skyrim LOD on Linux from installed game and mod assets. The desktop,
-CLI, texture processing and bundled CPU grass backend run without Wine. Skyrim and its
-game-side plugins still run through Proton/Wine.
+PenguLOD generates Skyrim LOD on Linux and Windows from installed game and mod assets.
+The desktop, CLI, texture processing and bundled CPU grass backend run natively.
+On Linux, Skyrim and its game-side plugins still run through Proton/Wine.
 
 ## Install and launch
 
-Download a portable archive or AppImage from
+Download a portable archive, Windows ZIP or Linux AppImage from
 [Releases](https://github.com/opteron-x86/PenguLOD/releases).
-For the archive, extract it into a new directory, keep the `linux-x64` folder together,
+On Windows, extract the entire ZIP into a new directory and launch `win-x64/PenguLOD.Desktop.exe`.
+On Linux, extract the archive into a new directory, keep the `linux-x64` folder together,
 and run `linux-x64/run-pengulod.sh`. After moving it to its permanent location,
 `linux-x64/install-desktop.sh` can add an application-menu entry; this requires Python 3.
 The .NET runtime is included. See [package compatibility](PACKAGING.md) for requirements
@@ -22,10 +23,11 @@ and AppImage instructions.
    **Read profiles** and select a profile. A blank profile uses the instance's selected
    profile. PenguLOD reads enabled mods, archives, loose-file overrides, Overwrite and
    plugin order directly; the mod manager does not need to be running.
-3. If the instance uses Windows paths, expand **Advanced source paths** and select its
+3. On Linux, if the instance uses Windows paths, expand **Advanced source paths** and select its
    Wine/Proton prefix (`pfx`, or the containing compatdata directory). `C:` and custom
    drives use the prefix's `dosdevices` mappings. Without a prefix, `Z:` maps to `/`.
-   Native game, mods, profiles and overwrite path overrides take precedence.
+   Native game, mods, profiles and overwrite path overrides take precedence. On Windows,
+   native drive paths work directly without a Wine prefix.
 4. For a Data-folder source, select the game/Data directory and `plugins.txt`. An empty
    plugin list is valid for a vanilla game; installed implicit masters are added.
    Only deployed mods are visible in this mode.
@@ -68,7 +70,7 @@ type. Replace superseded output rather than merging it, so obsolete files do not
 Use the selected mod manager's normal conflict and plugin-order controls.
 
 Dynamic LOD and runtime quality controls require the separate **AnvilLOD SKSE plugin**
-matching the game runtime. The Linux package does not include that Windows DLL. See
+matching the game runtime. Generator packages do not include that game DLL. See
 [dependencies and compatibility](PROVENANCE.md) for its source and version relationship.
 Choosing SKSE installation **None** means the plugin is installed separately; it does
 not disable runtime-dependent features. The **Objects only** preset disables those features.
@@ -92,7 +94,8 @@ and brightness using the [in-game checklist](DIAGNOSTICS.md#repeatable-checks).
 - **Preferences** controls workers, cache location, presets and optional
   [Vulkan texture encoding](COMPUTE.md). Worker count 0 leaves one logical processor free.
 
-Settings use `$XDG_CONFIG_HOME/PenguLOD/settings.json` (normally
+On Windows, settings use `%APPDATA%\PenguLOD\settings.json`; caches and run history use
+`%LOCALAPPDATA%\PenguLOD`. On Linux, settings use `$XDG_CONFIG_HOME/PenguLOD/settings.json` (normally
 `~/.config/PenguLOD/settings.json`). Cache and run history use `$XDG_CACHE_HOME/PenguLOD`
 (normally `~/.cache/PenguLOD`) unless overridden. Each run saves logs, settings and reports.
 These local files contain paths and profile information; review them before sharing.

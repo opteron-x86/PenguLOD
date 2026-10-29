@@ -20,6 +20,8 @@ if [[ -z "$DOTNET" || ! -x "$DOTNET" ]]; then
 fi
 
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_ROOT="$(dirname -- "$(readlink -f "$DOTNET")")"
+export DOTNET_ROOT_X64="$DOTNET_ROOT"
 export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$ANVILLOD_ROOT/.tools/cli-home}"
 export NUGET_PACKAGES="${NUGET_PACKAGES:-$ANVILLOD_ROOT/.tools/nuget}"
 RESTORE_ARGS=()
