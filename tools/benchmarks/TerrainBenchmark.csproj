@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AnvilLOD.Plugins/AnvilLOD.Plugins.csproj" />
+    <Compile Include="../../tests/Shared/TextureFixture.cs" Link="TextureFixture.cs" />
+    <Compile Include="../../tests/Shared/TerrainFixture.cs" Link="TerrainFixture.cs" />
+  </ItemGroup>
+</Project>

@@ -15,7 +15,9 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
     private sealed record Material(string Diffuse, string? Normal, string? Ao, bool Pbr);
     private readonly Dictionary<(string, string?, string?), Material> _materials = [];
     private readonly Dictionary<(string, bool), List<Image>> _images = [];
+    private readonly Dictionary<(string, bool, float), Image> _samples = [];
     private readonly HashSet<string> _missing = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _available = new(StringComparer.Ordinal);
     private readonly HashSet<string> _warnings = new(StringComparer.Ordinal);
     private long _bytes;
     private static readonly float[] Linear = Enumerable.Range(0,256).Select(i => TerrainSource.SrgbToLinear(new Vector3(i/255f)).X).ToArray();
@@ -62,6 +64,7 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
     internal Vector3 Read(string path, float u, float v, float footprint, bool color, bool wrap = true)
     {
         ct.ThrowIfCancellationRequested();
+        if (_samples.TryGetValue((path,color,footprint),out var selected)) return Sample(selected,u,v,wrap);
         var key = (path, color);
         if (!_images.TryGetValue(key, out var mips))
         {
@@ -91,21 +94,23 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
             }
             var image = new Image(pixels,width,height);
             // Cache complete mip chains under 192 MiB. Material records do not retain evicted images.
-            if (_bytes >= 192L * 1024 * 1024) { _images.Clear(); _bytes = 0; }
+            if (_bytes >= 192L * 1024 * 1024) { _images.Clear(); _samples.Clear(); _bytes = 0; }
             mips = [image]; _images[key] = mips; _bytes += image.Pixels.LongLength * 12;
         }
         int lod = Math.Max(0, (int)MathF.Floor(MathF.Log2(Math.Max(1, footprint * mips[0].Width))));
         while (mips.Count <= lod && (mips[^1].Width > 1 || mips[^1].Height > 1))
         { var mip = Downsample(mips[^1]); mips.Add(mip); _bytes += mip.Pixels.LongLength * 12; }
-        return Sample(mips[Math.Min(lod, mips.Count - 1)], u, v, wrap);
+        selected=mips[Math.Min(lod, mips.Count - 1)];_samples[(path,color,footprint)]=selected;
+        return Sample(selected, u, v, wrap);
     }
 
     internal bool Optional(string? path, string kind, out string found)
     {
         found = path!;
         if (path is null) return false;
+        if (_available.Contains(path)) return true;
         if (_missing.Contains(path)) return false;
-        if (assets.Exists(path)) return true;
+        if (assets.Exists(path)) { _available.Add(path); return true; }
         _missing.Add(path); _warnings.Add($"Missing optional terrain {kind}: {path}; using {(kind == "normal" ? "surface slope" : "unoccluded colour")}.");
         return false;
     }

@@ -34,10 +34,13 @@ internal sealed class TerrainSource
     private readonly Dictionary<CellCoord, float> _water = [];
     private readonly Dictionary<QuadKey, TriangleField?> _meshes = [];
     private readonly Dictionary<QuadKey, TriangleField?> _waterMeshes = [];
+    private readonly Dictionary<(int X,int Y),float?> _fallbackVertices = [];
+    private static readonly LodLevel[] TerrainLevels = [LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32];
     private readonly HashSet<CellCoord> _knownCells = [];
     private readonly HashSet<QuadKey> _fallbackUsed = [];
     public IReadOnlyCollection<QuadKey> FallbackUsed => _fallbackUsed;
     internal bool HasLodWater { get; }
+    internal void RestoreFallbackTiles(IEnumerable<QuadKey> tiles) => _fallbackUsed.UnionWith(tiles);
 
     internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null, string defaultDiffuse = TerrainDefaultTexture.SkyrimDefault,
         string defaultNormal = TerrainDefaultTexture.SkyrimNormal, TerrainMaterialSettings? materials = null)
@@ -126,22 +129,40 @@ internal sealed class TerrainSource
     {
         float gx=x/128, gy=y/128; int ix=(int)MathF.Floor(gx), iy=(int)MathF.Floor(gy);
         float fx=gx-ix, fy=gy-iy;
-        float? Vertex(int a,int b) => Heights.VertexAt(_world,a,b) ?? FallbackHeight(a*128f,b*128f);
+        float? Vertex(int a,int b)
+        {
+            var land=LandVertex(a,b);if(land is not null || !_fallback)return land;
+            if(_fallbackVertices.TryGetValue((a,b),out var known))return known;
+            // High-resolution texture pixels repeatedly interpolate the same 128-unit terrain vertices.
+            if(_fallbackVertices.Count>=65536)_fallbackVertices.Clear();
+            return _fallbackVertices[(a,b)]=FallbackHeight(a*128f,b*128f);
+        }
         var a=Vertex(ix,iy); if(a is null) return null;
         var b=fx<.00001f ? a : Vertex(ix+1,iy); var c=fy<.00001f ? a : Vertex(ix,iy+1);
         var d=fy<.00001f ? b : fx<.00001f ? c : Vertex(ix+1,iy+1);
         if(b is null || c is null || d is null) return null;
         return (a.Value*(1-fx)+b.Value*fx)*(1-fy)+(c.Value*(1-fx)+d.Value*fx)*fy;
     }
+    private float? LandVertex(int gx,int gy)
+    {
+        int cx=gx>>5,cy=gy>>5; // signed shift is floor division by 32, including negative coordinates
+        if(Cells.TryGetValue(new(cx,cy),out var cell))return cell.Heights[(gy-cy*32)*33+gx-cx*32];
+        // Match TerrainHeights.VertexAt's north/east ownership, including the outermost LAND border.
+        for(int dy=0;dy>=-1;dy--)for(int dx=0;dx>=-1;dx--)
+            if((dx==0||gx%32==0)&&(dy==0||gy%32==0)&&Cells.TryGetValue(new(cx+dx,cy+dy),out cell))
+                return cell.Heights[(gy-(cy+dy)*32)*33+gx-(cx+dx)*32];
+        return null;
+    }
     private float? FallbackHeight(float x,float y, bool water = false)
     {
         if (!_fallback) return null;
-        foreach(var level in new[]{LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32})
+        foreach(var level in TerrainLevels)
         {
             var center = _grid.QuadFor(CellCoord.FromWorld(x,y),level);
             // At the grid's east/north limit, try the tile on the other side of the shared edge.
-            foreach(var tile in new[]{center,center with{X=center.X-(int)level},center with{Y=center.Y-(int)level},center with{X=center.X-(int)level,Y=center.Y-(int)level}})
+            for(int neighbor=0;neighbor<4;neighbor++)
             {
+                var tile=center with {X=center.X-(neighbor%2)*(int)level,Y=center.Y-(neighbor/2)*(int)level};
                 float lx=x-tile.X*4096f, ly=y-tile.Y*4096f;
                 if(lx<0 || ly<0 || lx>(int)level*4096 || ly>(int)level*4096) continue;
                 if(!_meshes.TryGetValue(tile,out var field))
@@ -178,7 +199,7 @@ internal sealed class TerrainSource
         var coord=CellCoord.FromWorld(x,y);
         if(!Cells.TryGetValue(coord,out var cell))
         {
-            if(_fallback) foreach(var level in new[]{LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32})
+            if(_fallback) foreach(var level in TerrainLevels)
             {
                 var tile=_grid.QuadFor(coord,level); string path=$@"textures\terrain\{_world}\{_world}.{(int)level}.{tile.X}.{tile.Y}.dds";
                 if (_season is not null && _assets.Exists(path[..^4] + "." + _season + ".dds")) path = path[..^4] + "." + _season + ".dds";

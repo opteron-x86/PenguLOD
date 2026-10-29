@@ -65,3 +65,8 @@ Format references: [Community Shaders normal and RMAOS decoding](https://github.
 [terrain conversion format observations](https://github.com/bryantmh/tes4skyrim/blob/master/docs/commentary/asset_convert_terrain.md),
 [Bottled Shaders heightmap reader](https://github.com/InTheBottle/Bottled-Shaders/blob/f0deaabe1f5d8c675bce06927a5c257f4af4e94d/src/Features/TerrainShadows.cpp).
 No game assets are included in the tests or repository.
+
+Pipeline and desktop terrain jobs save verified per-tile checkpoints. An interrupted job
+can restore completed default/seasonal tiles while rebuilding the remaining ones. The
+Terrain result shows generated/restored counts and sampling/encoding times. See
+[persistent generation](PIPELINE.md) for cache storage, verification and benchmark commands.

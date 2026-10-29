@@ -26,6 +26,7 @@ public static class GenerationPipeline
         using var compute = AnvilLOD.Textures.TextureCompute.Enter(request.TextureCompute, progress);
         var source = request.Grass?.Game ?? request.Textures?.Game ?? request.Lod?.Game ?? request.Terrain?.Game
             ?? throw new ArgumentException("Select at least one pipeline stage.");
+        GenerationDestination.ValidateCache(source,cache);
         var outputs = new[] { request.Grass?.OutputFolder, request.Textures?.OutputFolder, request.Lod?.OutputFolder, request.Terrain?.OutputFolder }.OfType<string>().ToArray();
         foreach (var output in outputs)
         {
@@ -100,7 +101,9 @@ public static class GenerationPipeline
             if (terrain is not null)
             {
                 active = "terrain";
-                terrainResult = job.Run("terrain", Fingerprint(terrain), () => TerrainGeneration.Run(terrain, progress, ct), r => r.Output);
+                string terrainFingerprint=Fingerprint(terrain);
+                terrainResult = job.Run("terrain", terrainFingerprint, () => TerrainGeneration.RunWithCheckpoints(terrain,
+                    Path.Combine(job.Folder,"terrain-tiles"),terrainFingerprint,request.Resume,progress,ct), r => r.Output);
             }
             if (lod is not null)
             {
