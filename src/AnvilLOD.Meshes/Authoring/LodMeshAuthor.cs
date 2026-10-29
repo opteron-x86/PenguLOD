@@ -27,6 +27,7 @@ public static class LodMeshAuthor
 
     public static List<LevelResult> Build(LodMesh full, IReadOnlyList<AuthorLevel>? levels = null)
     {
+        if (full.HasIncompleteGeometry) throw new InvalidDataException("Cannot author an incomplete model: " + string.Join("; ", full.Warnings));
         levels ??= DefaultLevels;
         var results = new List<LevelResult>();
         var usable = full.Parts.Where(p => p.TriangleCount > 0 && !IsBlended(p.Material)).ToList();

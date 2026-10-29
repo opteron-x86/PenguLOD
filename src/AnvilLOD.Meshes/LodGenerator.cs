@@ -201,6 +201,11 @@ public sealed class LodGenerator
                 }
             }
             var mesh = Tidy(NifGeometryReader.Read(path, bytes));
+            if (mesh.HasIncompleteGeometry)
+            {
+                _meshErrors[path] = "Incomplete model: " + string.Join("; ", mesh.Warnings.Distinct());
+                return null;
+            }
             if (FitMountains) mesh = FitToFullModel(path, mesh);
             if (mapTextures) mesh = MapMaterials(mesh);
             if (mesh.Parts.Count == 0 && !mesh.NoShapesInFile)

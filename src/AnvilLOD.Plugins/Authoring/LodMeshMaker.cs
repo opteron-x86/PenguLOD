@@ -197,6 +197,8 @@ public static class LodMeshMaker
             {
                 return new LodMakerItem(src.Relative, "Unreadable: " + ex.Message, 0, 0, "");
             }
+            if (mesh.HasIncompleteGeometry)
+                return new LodMakerItem(src.Relative, "Unsupported model: " + string.Join("; ", mesh.Warnings), 0, 0, "");
             if (mesh.Parts.Count == 0)
                 return new LodMakerItem(src.Relative, "Nothing drawable in this model", 0, 0, "");
 

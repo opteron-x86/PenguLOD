@@ -97,10 +97,10 @@ public static partial class TextureGeneration
             {
                 var bytes = read(path);
                 if (bytes is null) { Skip("Model file missing"); warn("Billboard model missing: " + path); continue; }
-                var mesh = NifGeometryReader.Read(path, bytes, passthru: true);
+                var mesh = NifGeometryReader.Read(path, bytes, passthru: true, renderEffects: true);
                 foreach (var warning in mesh.Warnings) warn(path + ": " + warning);
-                if (mesh.Warnings.Any(w => w.Contains("skipped", StringComparison.OrdinalIgnoreCase)))
-                { Skip("Unsupported model shapes; retain an existing billboard instead of rendering an incomplete tree or plant"); continue; }
+                if (mesh.HasIncompleteGeometry)
+                { throw new NotSupportedException("Unsupported model shapes; existing output was preserved: " + string.Join("; ", mesh.Warnings)); }
                 if (mesh.Parts.Count == 0) { Skip("Model has no supported shapes"); continue; }
                 var bounds = LodMeshAuthor.Bounds(mesh);
                 if (rule is null && bounds.Max.Z - bounds.Min.Z < (isGrass ? request.MinGrassHeight : request.MinTreeHeight))
@@ -190,10 +190,10 @@ public static partial class TextureGeneration
                     items.Add(new("Rendered object", path, destination, "Skipped", "Optional resource has no matching installed LOD texture"));
                     continue;
                 }
-                var mesh = NifGeometryReader.Read(path, model.Load(), includeTexGenPlane: true, passthru: true);
+                var mesh = NifGeometryReader.Read(path, model.Load(), includeTexGenPlane: true, passthru: true, renderEffects: true);
                 foreach (var warning in mesh.Warnings) warn(path + ": " + warning);
-                if (mesh.Warnings.Any(w => w.Contains("skipped", StringComparison.OrdinalIgnoreCase)))
-                    throw new NotSupportedException("The render model contains unsupported shapes; incomplete object textures were not generated.");
+                if (mesh.HasIncompleteGeometry)
+                    throw new NotSupportedException("The render model contains unsupported shapes; incomplete object textures were not generated: " + string.Join("; ", mesh.Warnings));
                 var plane = mesh.Parts.FirstOrDefault(p => p.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true)
                     ?? throw new InvalidDataException("Render model has no supported TexGen Plane.");
                 if (plane.VertexCount != 4) throw new InvalidDataException("TexGen Plane must have four vertices.");

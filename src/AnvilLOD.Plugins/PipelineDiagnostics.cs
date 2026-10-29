@@ -185,6 +185,7 @@ public static class PipelineDiagnostics
                     {
                         byte[] bytes;using(stream){using var ms=new MemoryStream();stream.CopyTo(ms);bytes=ms.ToArray();}
                         var model=NifGeometryReader.Read(path,bytes,passthru:true);
+                        if(model.HasIncompleteGeometry)Add("Warning","unsupported-model-geometry",string.Join("; ",model.Warnings),"Use a compatible static model or retain existing LOD; incomplete geometry will not be generated.",path,assets.DescribeOrigin(path));
                         foreach(var texture in model.Parts.SelectMany(p=>p.Material.Textures.Take(2)).Where(p=>!string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase))
                             if(!assets.Exists(texture) && missingTextures++<250)Add("Warning","missing-model-texture","Selected model references a missing texture: "+path,"Generate its LOD textures or install the required texture resource.",texture,assets.DescribeOrigin(path));
                     }

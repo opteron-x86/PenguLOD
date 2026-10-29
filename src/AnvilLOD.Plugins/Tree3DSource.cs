@@ -42,7 +42,7 @@ public sealed record Tree3DLevelReport(string Model, int Level, string SourceMod
 public sealed class Tree3DSource : ISyntheticMeshSource
 {
     public const string Prefix = "~anvillod-tree3d|";
-    private const int Version = 5;
+    private const int Version = 6;
 
     private readonly AssetIndex _assets;
     private readonly float _brightness;
@@ -111,7 +111,7 @@ public sealed class Tree3DSource : ISyntheticMeshSource
         if (mesh is null) return "could not be found";
         if (mesh.Parts.Count == 0)
             return mesh.Warnings.Count > 0 ? "no usable shapes (" + string.Join("; ", mesh.Warnings.Distinct().Take(2)) + ")" : "no usable shapes";
-        if (mesh.Warnings.Any(w => w.Contains("Skinned shape", StringComparison.Ordinal) || w.Contains("could not be read", StringComparison.Ordinal) || w.Contains("not supported", StringComparison.Ordinal)))
+        if (mesh.HasIncompleteGeometry)
             return "unsupported geometry: " + string.Join("; ", mesh.Warnings.Take(3));
         if (!TreeMaterials.TryApply(mesh, variant, out mesh, out var reason)) return reason;
         foreach (var texture in variant?.Overrides.SelectMany(o => o.Slots).Where(s => !string.IsNullOrEmpty(s)) ?? [])
@@ -204,8 +204,10 @@ public sealed class Tree3DSource : ISyntheticMeshSource
             Name = p.Name, Positions = p.Positions,
             UVs = p.Material.Passthru is { } uv ? p.UVs.Select(v => v * new Vector2(uv.UvScaleX, uv.UvScaleY) + new Vector2(uv.UvOffsetX, uv.UvOffsetY)).ToArray() : p.UVs, Normals = p.Normals, Tangents = p.Tangents, Bitangents = p.Bitangents,
             Colors = p.Colors, Triangles = p.Triangles,
-            Material = p.Material with { ShaderFlags1 = 0x80000300u | (p.Material.ShaderFlags1 & 0x1008u),
-                ShaderFlags2 = 5u | (p.Material.ShaderFlags2 & 0x50u), Passthru = null }
+            Material = p.Material with { Textures = ShaderGuard.BakedSlots(p.Material.Textures.Take(2).ToArray()),
+                ShaderFlags1 = 0x80000300u | (p.Material.ShaderFlags1 & 0x1008u),
+                ShaderFlags2 = 5u | (p.Material.ShaderFlags2 & 0x10u),
+                EmissiveColor = Vector3.Zero, EmissiveMultiple = 1, Passthru = null }
         }).ToArray()
     };
 

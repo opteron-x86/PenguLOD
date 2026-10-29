@@ -16,7 +16,7 @@ Copy-Item LICENSE.txt, VERSION, UPSTREAM_VERSION $package
 Copy-Item assets/pengulod-256.png "$package/pengulod.png"
 Copy-Item packaging/README-WINDOWS.md $package
 New-Item -ItemType Directory -Force "$package/docs" | Out-Null
-foreach ($guide in @('USER-GUIDE', 'GRASS', 'TEXTURES', 'TERRAIN', 'TREES', 'MATERIALS', 'SEASONS', 'ATLASES', 'PIPELINE', 'CLI', 'DIAGNOSTICS', 'TROUBLESHOOTING', 'COMPUTE', 'PACKAGING', 'PROVENANCE', 'ROADMAP')) {
+foreach ($guide in @('USER-GUIDE', 'GRASS', 'TEXTURES', 'TERRAIN', 'TREES', 'MODEL-SUPPORT', 'MATERIALS', 'SEASONS', 'ATLASES', 'PIPELINE', 'CLI', 'DIAGNOSTICS', 'TROUBLESHOOTING', 'COMPUTE', 'PACKAGING', 'PROVENANCE', 'ROADMAP')) {
     Copy-Item "docs/$guide.md" "$package/docs/"
 }
 $env:PENGULOD_PACKAGE_DIR = $package

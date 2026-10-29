@@ -27,7 +27,7 @@ public class BillboardNormalTests
     [Fact]
     public void Normal_map_follows_the_model_in_TexGens_DirectX_orientation()
     {
-        var img = BillboardRenderer.Render(Card(), _ => null, maxPixels: 64);
+        var img = BillboardRenderer.Render(Card(), _ => (new byte[] { 128, 128, 128, 255 }, 1, 1), maxPixels: 64);
         Assert.NotNull(img);
         var n = img!.NormalRgba;
         Assert.NotNull(n);
@@ -47,7 +47,7 @@ public class BillboardNormalTests
     [Fact]
     public void Every_normal_in_the_map_is_a_unit_vector_towards_the_viewer()
     {
-        var n = BillboardRenderer.Render(Card(), _ => null, maxPixels: 64)!.NormalRgba!;
+        var n = BillboardRenderer.Render(Card(), _ => (new byte[] { 128, 128, 128, 255 }, 1, 1), maxPixels: 64)!.NormalRgba!;
         for (int i = 0; i < n.Length; i += 4)
         {
             float x = (n[i] - 128f) / 127f, y = (n[i + 1] - 128f) / 127f, z = (n[i + 2] - 128f) / 127f;

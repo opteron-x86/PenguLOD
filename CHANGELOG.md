@@ -5,6 +5,23 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.3] - 2026-10-29
+
+- Added native triangle-strip reading, self-contained static skin poses, SSE skin
+  partition buffers and separate dynamic vertex positions on Linux and Windows.
+- Scene traversal honors active switch branches, avoiding duplicate static/animated
+  tree geometry. Invalid indices, weights and truncated blocks report precise failures.
+- Texture rendering supports static effect textures, tint, UV transforms and lighting
+  influence. Animated, blended and view-dependent effect resources remain unsupported.
+- Incomplete visible models cannot publish partial LOD or required texture output.
+  Deep diagnostics report rejected geometry with its source. Existing texture output
+  is preserved when a required model fails; optional valid texture pairs can be retained.
+- Native full-tree reduction uses plain diffuse/normal LOD materials, avoiding inherited
+  PBR, environment, parallax and glow settings. Authored passthrough materials are preserved.
+- Geometry and automatic billboard cache versions changed; affected LOD must regenerate.
+  Animation evaluation and external skeletons are not supported; in-game visual validation
+  remains ongoing.
+
 ## [0.4.0-alpha.2] - 2026-10-29
 
 - Added a self-contained Windows x64 ZIP with the Avalonia desktop, CLI, native

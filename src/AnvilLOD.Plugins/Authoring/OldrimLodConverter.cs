@@ -100,10 +100,10 @@ public static class OldrimLodConverter
             try { mesh = NifGeometryReader.Read(key, bytes, passthru: true); }
             catch (Exception ex) when (ex is NotSupportedException or InvalidDataException or IndexOutOfRangeException or ArgumentException or EndOfStreamException)
             { skipped++; report.AppendLine($"SKIPPED  {key}: {ex.Message}"); continue; }
-            if (mesh.Parts.Count == 0)
+            if (mesh.Parts.Count == 0 || mesh.HasIncompleteGeometry)
             {
                 skipped++;
-                report.AppendLine($"SKIPPED  {key}: no usable shapes" + (mesh.Warnings.Count > 0 ? " (" + string.Join("; ", mesh.Warnings.Distinct().Take(2)) + ")" : ""));
+                report.AppendLine($"SKIPPED  {key}: incomplete or empty model" + (mesh.Warnings.Count > 0 ? " (" + string.Join("; ", mesh.Warnings.Distinct().Take(2)) + ")" : ""));
                 continue;
             }
 

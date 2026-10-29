@@ -59,9 +59,11 @@ public sealed class NifFile
         r.ExportString(); // export script
 
         int numTypes = r.U16();
+        r.Require(numTypes * 4);
         var types = new string[numTypes];
         for (int i = 0; i < numTypes; i++) types[i] = r.SizedString();
 
+        r.Require(checked((int)numBlocks * 6));
         var typeIndex = new ushort[numBlocks];
         for (int i = 0; i < numBlocks; i++) typeIndex[i] = r.U16();
         var sizes = new uint[numBlocks];
@@ -69,18 +71,21 @@ public sealed class NifFile
 
         uint numStrings = r.U32();
         r.U32(); // max string length
+        r.Require(checked((int)numStrings * 4));
         var strings = new List<string>((int)numStrings);
         for (int i = 0; i < numStrings; i++) strings.Add(r.SizedString());
 
         uint numGroups = r.U32();
-        r.Position += (int)numGroups * 4;
+        r.Skip(checked((int)numGroups * 4));
 
         var blocks = new List<NifBlock>((int)numBlocks);
         int pos = r.Position;
         for (int i = 0; i < numBlocks; i++)
         {
-            blocks.Add(new NifBlock(i, types[typeIndex[i] & 0x7FFF], pos, (int)sizes[i]));
-            pos += (int)sizes[i];
+            int type = typeIndex[i] & 0x7FFF;
+            if (type >= types.Length || sizes[i] > data.Length - pos) throw new InvalidDataException("Invalid NIF block type or size.");
+            blocks.Add(new NifBlock(i, types[type], pos, (int)sizes[i]));
+            pos = checked(pos + (int)sizes[i]);
         }
         if (pos > data.Length) throw new InvalidDataException("NIF is truncated.");
 
@@ -89,7 +94,8 @@ public sealed class NifFile
         if (r.Remaining >= 4)
         {
             uint numRoots = r.U32();
-            for (int i = 0; i < numRoots && r.Remaining >= 4; i++) roots.Add(r.I32());
+            r.Require(checked((int)numRoots * 4));
+            for (int i = 0; i < numRoots; i++) roots.Add(r.I32());
         }
         if (roots.Count == 0 && blocks.Count > 0) roots.Add(0);
 
@@ -98,7 +104,7 @@ public sealed class NifFile
 
     public string? String(int index) => index >= 0 && index < Strings.Count ? Strings[index] : null;
 
-    public NifSpanReader ReaderFor(NifBlock b) => new(Data, b.Offset);
+    public NifSpanReader ReaderFor(NifBlock b) => new(Data, b.Offset, b.Size);
 }
 
 public readonly record struct NifBlock(int Index, string Type, int Offset, int Size);
@@ -107,27 +113,44 @@ public readonly record struct NifBlock(int Index, string Type, int Offset, int S
 public struct NifSpanReader
 {
     private readonly byte[] _d;
-    public int Position;
-
-    public NifSpanReader(byte[] data, int position)
+    private readonly int _start, _end;
+    private int _position;
+    public int Position
     {
-        _d = data;
-        Position = position;
+        readonly get => _position;
+        set
+        {
+            if (value < _start || value > _end) throw new InvalidDataException("NIF block is truncated or has an invalid offset.");
+            _position = value;
+        }
     }
 
-    public readonly int Remaining => _d.Length - Position;
+    public NifSpanReader(byte[] data, int position, int? length = null)
+    {
+        _d = data;
+        _start = _position = position;
+        _end = length is { } size ? checked(position + size) : data.Length;
+        if (position < 0 || _end < position || _end > data.Length) throw new InvalidDataException("NIF block is outside the file.");
+    }
 
-    public byte U8() => _d[Position++];
-    public ushort U16() { var v = BitConverter.ToUInt16(_d, Position); Position += 2; return v; }
-    public uint U32() { var v = BitConverter.ToUInt32(_d, Position); Position += 4; return v; }
-    public int I32() { var v = BitConverter.ToInt32(_d, Position); Position += 4; return v; }
-    public ulong U64() { var v = BitConverter.ToUInt64(_d, Position); Position += 8; return v; }
-    public float F32() { var v = BitConverter.ToSingle(_d, Position); Position += 4; return v; }
-    public Half F16() { var v = BitConverter.ToHalf(_d, Position); Position += 2; return v; }
+    public readonly int Remaining => _end - Position;
+    public readonly void Require(int count)
+    {
+        if (count < 0 || count > Remaining) throw new InvalidDataException("NIF block is truncated or has an invalid count.");
+    }
+
+    public byte U8() { Require(1); return _d[_position++]; }
+    public ushort U16() { Require(2); var v = BitConverter.ToUInt16(_d, Position); _position += 2; return v; }
+    public uint U32() { Require(4); var v = BitConverter.ToUInt32(_d, Position); _position += 4; return v; }
+    public int I32() { Require(4); var v = BitConverter.ToInt32(_d, Position); _position += 4; return v; }
+    public ulong U64() { Require(8); var v = BitConverter.ToUInt64(_d, Position); _position += 8; return v; }
+    public float F32() { Require(4); var v = BitConverter.ToSingle(_d, Position); _position += 4; return v; }
+    public Half F16() { Require(2); var v = BitConverter.ToHalf(_d, Position); _position += 2; return v; }
 
     public string SizedString()
     {
         int n = (int)U32();
+        Require(n);
         var s = Encoding.Latin1.GetString(_d, Position, n);
         Position += n;
         return s;
@@ -136,10 +159,11 @@ public struct NifSpanReader
     public string ExportString()
     {
         int n = U8();
+        Require(n);
         var s = Encoding.Latin1.GetString(_d, Position, n).TrimEnd('\0');
         Position += n;
         return s;
     }
 
-    public void Skip(int n) => Position += n;
+    public void Skip(int n) { Require(n); _position += n; }
 }

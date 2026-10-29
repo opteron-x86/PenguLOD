@@ -51,8 +51,8 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
         catch (Exception ex) when (ex is NotSupportedException or InvalidDataException or IndexOutOfRangeException or ArgumentException or EndOfStreamException)
         { reason = "model unreadable: " + ex.Message; return false; }
         if (mesh.Parts.Count == 0) { reason = "model has no drawable shapes"; return false; }
-        if (mesh.Warnings.Any(w => w.Contains("skipped", StringComparison.OrdinalIgnoreCase)))
-        { reason = "model contains unsupported shapes"; return false; }
+        if (mesh.HasIncompleteGeometry)
+        { reason = "model contains unsupported shapes: " + string.Join("; ", mesh.Warnings); return false; }
         if (!TreeMaterials.TryApply(mesh, variant, out mesh, out var variantError)) { reason = variantError!; return false; }
         foreach (var part in mesh.Parts)
             if (part.Material.Textures.Count == 0 || LoadTexture(part.Material.Textures[0]) is null)
@@ -65,7 +65,7 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
         var sb = new StringBuilder().Append(Convert.ToHexString(SHA256.HashData(bytes))).Append('|').Append(variant?.Id);
         foreach (var t in mesh.Parts.SelectMany(p => p.Material.Textures).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
             sb.Append('|').Append(assets.Fingerprint(TexturePath(t)));
-        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v3|" + sb))).ToLowerInvariant()[..24];
+        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v4|" + sb))).ToLowerInvariant()[..24];
 
         var dir = Path.Combine(_root, "textures", "terrain", "lodgen", pluginFolder);
         var main = Path.Combine(dir, name + ".dds");
