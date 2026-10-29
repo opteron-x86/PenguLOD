@@ -18,7 +18,7 @@ internal static class SeasonalAssets
             if (!result.TryGetValue(season, out var swaps)) result[season] = swaps = [];
             foreach (var swap in SeasonSwaps.Parse(reader.ReadToEnd()).Where(s => s.Section.Equals(section, StringComparison.OrdinalIgnoreCase)))
             {
-                var from = Resolve(swap.Base); var to = Resolve(swap.Swap);
+                var from = SeasonalCoverage.Resolve(game,section,swap.Base); var to = SeasonalCoverage.Resolve(game,section,swap.Swap);
                 if (from is null || to is null) throw new InvalidDataException($"{path}: unresolved {section} swap {swap.Base} → {swap.Swap}.");
                 // Identity entries deliberately cancel an earlier file's replacement.
                 swaps[from.Value] = to.Value;
@@ -26,20 +26,6 @@ internal static class SeasonalAssets
         }
         return result;
 
-        FormKey? Resolve(SeasonFormRef form)
-        {
-            if (form.Plugin is { } plugin)
-            {
-                var key = SeasonalLod.PluginForm(plugin, form.LocalId);
-                if (key is null) return null;
-                return section.Equals("Trees",StringComparison.OrdinalIgnoreCase)
-                    ? game.LinkCache.TryResolve<ITreeGetter>(key.Value,out _) ? key : null
-                    : game.LinkCache.TryResolve<ILandscapeTextureGetter>(key.Value,out _) ? key : null;
-            }
-            if (section.Equals("Trees",StringComparison.OrdinalIgnoreCase))
-                return game.LinkCache.TryResolve<ITreeGetter>(form.EditorId!,out var tree) ? tree.FormKey : null;
-            return game.LinkCache.TryResolve<ILandscapeTextureGetter>(form.EditorId!,out var land) ? land.FormKey : null;
-        }
     }
 
     public static TreeReference SwapTree(GameContext game, AssetIndex assets, TreeReference tree, IReadOnlyDictionary<FormKey,FormKey> swaps, Tree3DSettings settings)
@@ -75,7 +61,7 @@ internal static class SeasonalAssets
                 using(stream) { using var bytes = new MemoryStream();stream.CopyTo(bytes);
                     lod = Tree3DModels.Resolve(path,Tree3DModels.Crc32(bytes.ToArray()),settings.PlainNameFallback,assets.Exists)?.Path; }
             }
-            if (lod is null && assets.Exists(named)) lod = named;
+            if (lod is null && settings.PlainNameFallback && assets.Exists(named)) lod = named;
             if (lod is null && settings.GenerateMissing
                 && assets.Exists(path)) {lod = path; native = true;}
             if (record.Model.AlternateTextures is { Count: > 0 } && settings.GenerateMissing && assets.Exists(path))

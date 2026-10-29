@@ -45,7 +45,7 @@ public static class SeasonalLod
 
             // Base FormKey → replacement LOD meshes (null = the swap has no object LOD: drop the reference).
             var swaps = new Dictionary<string, LodMeshSet?>(StringComparer.OrdinalIgnoreCase);
-            int unresolved = 0;
+
             foreach (var f in seasonFiles)
             {
                 if (!assets.TryOpen(f, out var st)) continue;
@@ -54,20 +54,13 @@ public static class SeasonalLod
                 foreach (var s in SeasonSwaps.Parse(text))
                 {
                     if (!SeasonSwaps.ObjectSections.Contains(s.Section)) continue;
-                    var baseKey = Resolve(game, s.Section, s.Base);
-                    var swapKey = Resolve(game, s.Section, s.Swap);
-                    if (baseKey is null || swapKey is null) { unresolved++; continue; }
+                    var baseKey = SeasonalCoverage.Resolve(game, s.Section, s.Base);
+                    var swapKey = SeasonalCoverage.Resolve(game, s.Section, s.Swap);
+                    if (baseKey is null || swapKey is null) throw new InvalidDataException($"{f}: unresolved [{s.Section}] seasonal object swap. Correct the INI or restore its required plugin.");
                     // Identity entries cancel earlier swaps.
                     swaps[baseKey.Value.ToString()] = MeshesFor(game, resolver, swapKey.Value);
                 }
             }
-            if (swaps.Count == 0 && !seasonalGrass && seasonFiles.Count == 0)
-            {
-                messages.Add($"Seasons ({name}): {seasonFiles.Count} INI file(s) but no object swaps"
-                    + (unresolved > 0 ? $" ({unresolved} entries name forms that aren't loaded)" : "") + "; no seasonal LOD written.");
-                continue;
-            }
-
             // Which blocks change this season.
             var changed = new Dictionary<QuadKey, IReadOnlyList<LodReference>>();
             foreach (var (quad, refs) in quads)
@@ -102,6 +95,10 @@ public static class SeasonalLod
             }
 
             var gen = generator.Generate(changed, changed.Keys.ToList(), outputFolder, progress, ct, suffix);
+            if (gen.BlocksFailed > 0) throw new InvalidDataException($"Season {suffix}: {gen.BlocksFailed} object blocks failed. " + string.Join("; ",gen.BlockErrors.Values.Take(5)));
+            var requiredModels=changed.SelectMany(p=>p.Value.Select(r=>r.Meshes.For(p.Key.Level))).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var failures=gen.MeshErrors.Where(p=>requiredModels.Contains(p.Key)).ToArray();
+            if(failures.Length>0)throw new InvalidDataException($"Season {suffix}: required LOD models failed. " + string.Join("; ",failures.Take(5).Select(p=>p.Key+": "+p.Value)));
             rebuilt += gen.BlocksWritten;
 
             // Everything else: the normal block under the seasonal name.
@@ -115,7 +112,7 @@ public static class SeasonalLod
             }
             seasons++;
             messages.Add($"Seasons ({name}): {swaps.Count:N0} swapped object types from {seasonFiles.Count} INI file(s)" + (seasonalGrass ? ", seasonal grass cache" : "") + $", {changed.Count:N0} blocks rebuilt"
-                + (unresolved > 0 ? $", {unresolved} entries skipped (forms not loaded)" : ""));
+               );
         }
         foreach (var m in messages) progress?.Report(m);
         return new Result(seasons, rebuilt, linked, messages);
@@ -155,21 +152,6 @@ public static class SeasonalLod
     {
         try { return new FormKey(ModKey.FromFileName(plugin.Trim()), localId); }
         catch (ArgumentException) { return null; }
-    }
-
-    private static FormKey? Resolve(GameContext game, string section, SeasonFormRef f)
-    {
-        if (f.Plugin is not null) return PluginForm(f.Plugin, f.LocalId);
-        var edid = f.EditorId!;
-        var cache = game.LinkCache;
-        return section.ToLowerInvariant() switch
-        {
-            "statics" => cache.TryResolve<IStaticGetter>(edid, out var a) ? a.FormKey : null,
-            "movablestatics" => cache.TryResolve<IMoveableStaticGetter>(edid, out var b) ? b.FormKey : null,
-            "activators" => cache.TryResolve<IActivatorGetter>(edid, out var c) ? c.FormKey : null,
-            "furniture" => cache.TryResolve<IFurnitureGetter>(edid, out var d) ? d.FormKey : null,
-            _ => (FormKey?)null,
-        };
     }
 
     /// <summary>LOD meshes for a (swap) base object, the same way the scanner resolves them.</summary>

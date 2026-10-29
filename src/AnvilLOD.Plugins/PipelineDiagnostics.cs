@@ -15,7 +15,8 @@ public sealed record DiagnosticIssue(string Severity,string Code,string Message,
 public sealed record DiagnosticEstimate(string Name,long Value,string Unit,string Basis);
 public sealed record DiagnosticReport(string Application,string OperatingSystem,string GameRelease,string? GameVersion,
     DateTimeOffset CreatedAt,double MeasuredSeconds,int Plugins,int Archives,bool DeepScan,bool VerifiedOutputs,
-    IReadOnlyList<DiagnosticIssue> Issues,IReadOnlyList<DiagnosticEstimate> Estimates,IReadOnlyList<Tree3DLevelReport> TreeCoverage)
+    IReadOnlyList<DiagnosticIssue> Issues,IReadOnlyList<DiagnosticEstimate> Estimates,IReadOnlyList<Tree3DLevelReport> TreeCoverage,
+    IReadOnlyList<SeasonalSwapCoverage>? Seasons = null)
 {
     public bool CanGenerate => Issues.All(i=>i.Severity!="Error");
     public void Write(string path)
@@ -28,6 +29,7 @@ public static class PipelineDiagnostics
     public static DiagnosticReport Run(GenerationPipelineRequest request,bool deepScan=false,bool verifyOutputs=false,string? inspectAsset=null,
         IProgress<string>? progress=null,CancellationToken ct=default)
     {
+        IReadOnlyList<SeasonalSwapCoverage> seasons=[]; bool seasonal=SeasonalCoverage.Requested(request);
         var clock=Stopwatch.StartNew();var issues=new List<DiagnosticIssue>();var estimates=new List<DiagnosticEstimate>();
         var source=request.Grass?.Game??request.Textures?.Game??request.Terrain?.Game??request.Lod?.Game??throw new ArgumentException("Select at least one pipeline stage.");
         var outputs=new[]{request.Grass?.OutputFolder,request.Textures?.OutputFolder,request.Terrain?.OutputFolder,request.Lod?.OutputFolder}.OfType<string>().ToArray();
@@ -58,16 +60,48 @@ public static class PipelineDiagnostics
                 catch(IOException e){Add("Warning","free-space-unavailable",e.Message,"Check destination free space before generation.");}
             }
         }
-        source=source with{ExcludeFolders=(source.ExcludeFolders??[]).Concat(outputs).Distinct().ToArray(),ExtraLooseRoots=(source.ExtraLooseRoots??[]).Concat(deepScan || inspectAsset is {Length:>0} ? ["skse","textures"] : new[]{"skse"}).Distinct().ToArray()};
+        source=source with{ExcludeFolders=(source.ExcludeFolders??[]).Concat(outputs).Distinct().ToArray(),ExtraLooseRoots=(source.ExtraLooseRoots??[]).Concat(seasonal ? ["seasons","grass"] : Array.Empty<string>()).Concat(deepScan || inspectAsset is {Length:>0} ? ["skse","textures"] : new[]{"skse"}).Distinct().ToArray()};
         int plugins=0,archives=0;string? version=null;AssetIndex assets;
         using(var game=GameContext.Open(source,progress))
         {
             plugins=game.PluginsLoaded;version=SksePluginInstaller.GameVersion(game.DataFolder)?.ToString();
             foreach(var missing in game.MissingPlugins)Add("Error","missing-plugin","Enabled plugin is unavailable: "+missing,"Restore the plugin or correct the profile before generating.",missing);
             foreach(var warning in game.Warnings)Add("Warning","source-warning",warning,"Check the selected game and profile paths.");
-            assets=game.BuildAssets(p=>p.StartsWith("skse\\") || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null);
+            assets=game.BuildAssets(p=>p.StartsWith("skse\\") || seasonal && (p.StartsWith("seasons\\") || p.StartsWith("grass\\")) || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null);
             archives=assets.ArchiveCount;
             foreach(var archive in assets.SkippedArchives)Add("Warning","archive-unreadable",archive,"Repair or remove the unreadable archive before generating.");
+            if(seasonal)
+            {
+                seasons=SeasonalCoverage.Inspect(game,assets,ct);
+                foreach(var row in seasons)
+                {
+                    Add("Info","seasonal-swaps",$"{row.Season} {row.Category}: {row.Resolved}/{row.Entries} entries resolve.","Later INI entries win; identity entries restore the original record.");
+                    foreach(string problem in row.Problems)
+                        Add(SeasonalCoverage.Affects(request,row.Category)?"Error":"Warning","unresolved-seasonal-swap",problem,
+                            "Correct the seasonal INI or restore its required plugin. Runtime-generated swaps must first be saved as INIs.");
+                }
+                if(seasons.Count==0)Add("Warning","no-seasonal-swaps","No supported written seasonal swaps were found.",
+                    "Make the Seasons of Skyrim INIs available to this profile. Runtime automatic snow is not generated here.");
+                if(request.Lod is {GrassLod:true,Seasons:true})
+                {
+                    var cacheCells=new Dictionary<string,HashSet<string>>(StringComparer.Ordinal);
+                    foreach(string path in assets.EnumeratePaths(@"grass\"))
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        if(!GrassCache.TryParseFileName(GamePath.GetFileName(path),out var ws,out int x,out int y,out var season))continue;
+                        if(!cacheCells.TryGetValue(season??"Default",out var cells))cacheCells[season??"Default"]=cells=[];
+                        cells.Add($"{ws.ToLowerInvariant()}:{x}:{y}");
+                    }
+                    var baseline=cacheCells.GetValueOrDefault("Default")??[];
+                    foreach(string season in seasons.Select(s=>s.Season).Concat(cacheCells.Keys.Where(k=>k!="Default")).Distinct())
+                    {
+                        var cells=cacheCells.GetValueOrDefault(season)??[];
+                        int missing=baseline.Except(cells).Count(),orphan=cells.Except(baseline).Count();
+                        Add(missing+orphan>0?"Warning":"Info","seasonal-grass-coverage",$"{season}: {cells.Count} seasonal grass cells; {missing} default cells without seasonal cache; {orphan} seasonal cells without default cache.",
+                            request.Grass is not null?"The selected grass stage will rebuild caches. Review the final seasonal output counts.":"Generate grass caches for every intended season. Missing seasonal cells retain default grass; cells without a default cache cannot enter LOD.");
+                    }
+                }
+            }
             if(request.Lod is {} lod)
             {
                 bool runtime=lod.Scan.DynamicLod || lod.Scan.ParentCopies || lod.Scan.GlowWindows || lod.Scan.GridObjects&&!lod.NativeGridObjects;
@@ -160,7 +194,7 @@ public static class PipelineDiagnostics
         }
         progress?.Report($"Preflight completed in {clock.Elapsed.TotalSeconds:F1}s: {issues.Count(i=>i.Severity=="Error")} errors, {issues.Count(i=>i.Severity=="Warning")} warnings.");
         return new(ProductInfo.Description,RuntimeInformation.OSDescription,source.Release.ToString(),version,DateTimeOffset.UtcNow,
-            clock.Elapsed.TotalSeconds,plugins,archives,deepScan,verifyOutputs,issues.Distinct().ToArray(),estimates,trees);
+            clock.Elapsed.TotalSeconds,plugins,archives,deepScan,verifyOutputs,issues.Distinct().ToArray(),estimates,trees,seasons);
     }
 
     private sealed class ReportRedactor

@@ -12,7 +12,7 @@ public sealed record LodStageReceipt(string OutputFolder, int Files, int BlocksW
     long Triangles, IReadOnlyList<string> Warnings, string? PreviousOutput);
 public sealed record GenerationPipelineResult(string JobFolder, PipelineInputSnapshot Inputs, PipelineJournal Journal,
     GrassGenerationResult? Grass, TextureGenerationResult? Textures, LodStageReceipt? LodReceipt, ScanSummary? Lod,
-    string? FailedStage, string? Error, TerrainGenerationResult? Terrain = null, DiagnosticReport? Diagnostics = null)
+    string? FailedStage, string? Error, TerrainGenerationResult? Terrain = null, DiagnosticReport? Diagnostics = null, IReadOnlyList<SeasonalOutputCoverage>? Seasons = null)
 {
     public bool Success => Error is null;
 }
@@ -64,7 +64,7 @@ public static class GenerationPipeline
         GrassGenerationResult? grassResult = null; TextureGenerationResult? textureResult = null;
         TerrainGenerationResult? terrainResult = null; DiagnosticReport? diagnostics = null;
         ScanSummary? summary = null; LodStageReceipt? receipt = null;
-        string? active = null, error = null;
+        string? active = null, error = null; IReadOnlyList<SeasonalOutputCoverage>? seasonalOutput = null;
         string Fingerprint<T>(T value, params string?[] extra) => inputs.Fingerprint + (value is GrassGenerationRequest ? "" : "|compute:" + request.TextureCompute) + "|" + JsonSerializer.Serialize(value)
             + "|" + PipelineInputs.ExternalFingerprint(extra, request.VerifySourceContents, ct);
         try
@@ -127,11 +127,18 @@ public static class GenerationPipeline
                         summary.Plan.Unchanged.Count, summary.Generation?.Triangles ?? 0, summary.Warnings, staged.PreviousOutput);
                 }, _ => output!, allowReuse: !lod.CleanOutput);
             }
+            if (SeasonalCoverage.Requested(request))
+            {
+                active="seasonal-report";
+                seasonalOutput=SeasonalCoverage.Outputs(request,ct);
+                File.WriteAllText(Path.Combine(job.Folder,"seasonal-output.json"),JsonSerializer.Serialize(seasonalOutput,PersistentPipeline.Json));
+                foreach(var season in seasonalOutput) progress?.Report($"{season.Season} output: {season.TerrainTiles} terrain tiles, {season.ObjectBlocks} object blocks, {season.TreeBlocks} tree blocks, {season.GrassCells} grass cells.");
+            }
             active = null;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         { error = e.Message; progress?.Report("Pipeline stopped at " + active + ": " + e); }
-        return new(job.Folder, inputs, job.Journal, grassResult, textureResult, receipt, summary, active, error, terrainResult, diagnostics);
+        return new(job.Folder, inputs, job.Journal, grassResult, textureResult, receipt, summary, active, error, terrainResult, diagnostics, seasonalOutput);
     }
 
     private static OutputSnapshot ManifestSnapshot(string root, string manifest, Dictionary<string, string> files, CancellationToken ct)
