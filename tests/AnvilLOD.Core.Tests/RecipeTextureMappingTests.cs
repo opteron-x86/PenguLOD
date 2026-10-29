@@ -62,6 +62,19 @@ public class RecipeTextureMappingTests
     }
 
     [Fact]
+    public void NormalOverridesFlowThroughExplicitNormalCopyRecipes()
+    {
+        using var f = new TextureFixture(); using var limits = RunLimits.Enter(2);
+        string normal = @"textures\custom_n.dds"; TextureFixture.Put(f.Data, normal, TextureFixture.Solid(255, 128, 128));
+        var rules = Recipes(TextureFixture.Tile(Red, Atlas, 0), TextureFixture.Tile(Green, Atlas, 1));
+        rules.Entries.Add(new("normal", 3, Copy: new(@"textures\red_n.dds", @"textures\lod\atlas_n.dds")));
+        var mapper = Mapper(f, rules);
+        var mapped = mapper.Map(TextureFixture.Card("shape", Atlas), [Input(Red, Red, normal)])!;
+        var normals = Image(Path.Combine(f.Root, "lod"), mapped.Material.Textures[1]);
+        Assert.True(normals.Pixels[0] > 245); Assert.InRange(normals.Pixels[2], 125, 132);
+    }
+
+    [Fact]
     public void CopyAndNestedAtlasKeepUvProvenanceAndReplacementNormals()
     {
         using var f = new TextureFixture(); using var limits = RunLimits.Enter(2);

@@ -83,6 +83,17 @@ public class TextureConversionTests
     }
 
     [Fact]
+    public void ExplicitNormalRecipeWinsOverAutomaticAtlasCompanion()
+    {
+        using var f = new TextureFixture(); using var limits = RunLimits.Enter(2);
+        TextureFixture.Put(f.Data, @"textures\custom_n.dds", TextureFixture.Solid(255, 128, 128));
+        string source = @"textures\custom_n.dds", destination = @"textures\lod\atlas_n.dds";
+        File.WriteAllText(Path.Combine(f.Resources, "Configs", "DynDOLOD_SSE_TexGen_copy_skyrimesm.txt"), source + "," + destination);
+        Assert.True(TextureGeneration.Run(f.Request).Published);
+        Assert.Equal(File.ReadAllBytes(GamePath.ToFileSystemPath(f.Data, source)), File.ReadAllBytes(GamePath.ToFileSystemPath(f.Output, destination)));
+    }
+
+    [Fact]
     public void ConversionCopyAndStitchChainsResolveInDependencyOrderAndCyclesFail()
     {
         var set = new TextureRecipeSet { BaseSize = 4, Entries = [

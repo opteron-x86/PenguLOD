@@ -80,7 +80,9 @@ public sealed class TextureRecipeRenderer
                 bool alpha = plan.Tiles.Any(t => t.Alpha);
                 if (!alpha) for (int i = 3; i < image.Pixels.Length; i += 4) image.Pixels[i] = 255;
                 Save(new(destination, TextureImages.Encode(image, alpha: alpha), "Stitched", string.Join(", ", inputs.Distinct()), w, h));
-                Save(new(Normal(destination), TextureImages.Encode(normal, normal: true), "Normal", string.Join(", ", inputs.Distinct()), w, h));
+                // An explicit normal producer wins regardless of evaluation order.
+                if (!_plans.ContainsKey(Normal(destination)))
+                    Save(new(Normal(destination), TextureImages.Encode(normal, normal: true), "Normal", string.Join(", ", inputs.Distinct()), w, h));
             }
             return Saved(destination);
         }

@@ -18,6 +18,7 @@ public sealed class RecipeTextureMapper
     private readonly TextureRecipeSet _recipes;
     private readonly string _recipeFingerprint;
     private readonly IReadOnlyDictionary<string, TextureRecipePlan> _plans;
+    private readonly HashSet<string> _explicitInputs;
     private readonly TextureRecipeLayout _layout;
     private readonly IAssetSource _assets;
     private readonly Func<string, byte[]?> _read;
@@ -32,6 +33,8 @@ public sealed class RecipeTextureMapper
     public RecipeTextureMapper(TextureRecipeSet recipes, IAssetSource assets, string output, Func<string, byte[]?>? readSource = null)
     {
         _recipes = recipes; _plans = recipes.Compile(); _recipeFingerprint = recipes.Fingerprint; _assets = assets; _output = output;
+        _explicitInputs = recipes.Entries.Select(e => e.Copy?.Source ?? e.Tile?.Source ?? e.Conversion!.Source)
+            .SelectMany(p => p.Split('|')).ToHashSet(StringComparer.OrdinalIgnoreCase);
         _read = readSource ?? ReadAsset;
         _layout = new(recipes, assets.Exists);
     }
@@ -139,6 +142,17 @@ public sealed class RecipeTextureMapper
             if (replacements.TryGetValue(original, out var previous) && previous != replacement)
                 throw new InvalidDataException("Merged shapes assign different textures to the same atlas source " + original + ". Separate their LOD shapes or supply separate source tiles.");
             replacements[original] = replacement;
+            // Explicit copy/conversion recipes can name the normal slot directly.
+            // Carry normal aliases into those dependencies as well as automatic companions.
+            if (normal is not null)
+                foreach (string normalSource in new[] { input.Normal, TextureRecipeRenderer.Normal(original) }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+                    if (_explicitInputs.Contains(normalSource) && !Same(normalSource, normal))
+                    {
+                        var normalReplacement = new RecipeTextureReplacement(normal, null);
+                        if (replacements.TryGetValue(normalSource, out var previousNormal) && previousNormal != normalReplacement)
+                            throw new InvalidDataException("Merged shapes assign different normals to the same recipe source " + normalSource);
+                        replacements[normalSource] = normalReplacement;
+                    }
         }
         // Retain unchanged source normals as well: their names need not follow the _n convention.
         bool needsVariant = replacements.Any(p => !Same(p.Key, p.Value.Diffuse)
