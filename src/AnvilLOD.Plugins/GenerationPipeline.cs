@@ -31,6 +31,8 @@ public static class GenerationPipeline
         foreach (var output in outputs)
         {
             GenerationDestination.Validate(source, output);
+            ResourceCatalog.ValidateFolders(request.Textures?.DynDolodFolder, request.Textures?.ResourcePacks, output);
+            ResourceCatalog.ValidateFolders(request.Lod?.DynDolodFolder, request.Lod?.ResourcePacks, output);
             if (outputs.Count(other => HostPath.IsWithin(output, other) || HostPath.IsWithin(other, output)) != 1)
                 throw new ArgumentException("Pipeline stages need separate output folders; none may contain another.");
             if (HostPath.IsWithin(cache, output) || HostPath.IsWithin(output, cache))
@@ -89,7 +91,7 @@ public static class GenerationPipeline
             if (textures is not null)
             {
                 active = "textures";
-                textureResult = job.Run("textures", Fingerprint(textures, textures.DynDolodFolder), () =>
+                textureResult = job.Run("textures", Fingerprint(textures, ResourceCatalog.ExternalFiles(textures.DynDolodFolder, textures.ResourcePacks).ToArray()), () =>
                 {
                     var result = TextureGeneration.Run(textures, progress, ct);
                     textureResult = result;
@@ -109,8 +111,8 @@ public static class GenerationPipeline
             {
                 active = "lod";
                 OutputSnapshot? output = null;
-                receipt = job.Run("lod", Fingerprint(lod, lod.DynDolodFolder, lod.CustomRulesFile,
-                    grass is null ? lod.GeneratedGrassFolder : null, textures is null ? lod.GeneratedTextureFolder : null, terrain is null ? lod.GeneratedTerrainFolder : null), () =>
+                receipt = job.Run("lod", Fingerprint(lod, ResourceCatalog.ExternalFiles(lod.DynDolodFolder, lod.ResourcePacks).Concat(new[] { lod.CustomRulesFile,
+                    grass is null ? lod.GeneratedGrassFolder : null, textures is null ? lod.GeneratedTextureFolder : null, terrain is null ? lod.GeneratedTerrainFolder : null }).ToArray()), () =>
                 {
                     // The engine verifies generated inputs before writing to the isolated destination.
                     using var staged = new StagedOutput(lod.OutputFolder!, !lod.CleanOutput, progress, ct);

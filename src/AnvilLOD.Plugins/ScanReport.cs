@@ -24,6 +24,7 @@ public static class ScanReport
             treeCoverage = s.Tree3D,
             baseObjectSwaps = s.BaseObjectSwaps,
             automaticObjects = s.AutomaticObjects,
+            resources = s.Resources,
             s.Stats.PlacedObjectsVisited,
             s.Stats.LodReferencesFound,
             s.Stats.SkippedDisabled,

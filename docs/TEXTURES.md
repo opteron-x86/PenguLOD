@@ -1,9 +1,10 @@
 # Texture generation
 
-On **Texture generation**, choose the installed **DynDOLOD installation / resources**
-folder and a separate **Texture output mod folder**. PenguLOD reads recipes and render
-resources from that installation and enabled mods; it does not launch TexGen or Wine.
-Game/mod assets and DynDOLOD resources are supplied separately.
+On **Texture generation**, choose a separate **Texture output mod folder**. Recipes and
+render models in enabled mods are discovered automatically. Use **Primary resource folder**
+and **Additional resource folders** for standalone data packs; existing DynDOLOD resource
+bundles also work. See [resource packs](RESOURCE-PACKS.md) for layouts and precedence.
+PenguLOD does not launch TexGen or Wine. Game/mod assets and resource packs are supplied separately.
 
 **Generate textures** runs this stage alone. **Textures, then LOD** connects the generated
 textures to LOD immediately. Pipeline can also combine textures with grass and terrain.

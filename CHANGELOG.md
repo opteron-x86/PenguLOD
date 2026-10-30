@@ -5,6 +5,18 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.12] - 2026-10-30
+
+- Discover compatible rules, recipes, mesh lookups, world exclusions, child-world settings
+  and render models in enabled mods and resource-only folders. Structured Data/DynDOLOD
+  folders and legacy layouts work without any executable requirement.
+- Scan-only requests no longer start occlusion generation or terrain preparation for
+  an enabled underside/occlusion option. These operations require generation.
+- Multiple external packs have explicit priority, with enabled mods winning. Overview and
+  JSON reports identify selected files and replaced sources; preflight explains missing data.
+- Desktop, presets, JSON and CLI expose additional resource folders. Resource content
+  changes invalidate saved jobs; unrelated bundle executables are not resource inputs.
+
 ## [0.4.0-alpha.11] - 2026-10-30
 
 - Optional native hybrid tree authoring creates aligned front/side trunk cards and normal

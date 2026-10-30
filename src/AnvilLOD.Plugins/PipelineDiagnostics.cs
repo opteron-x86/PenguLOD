@@ -33,7 +33,7 @@ public static class PipelineDiagnostics
         var clock=Stopwatch.StartNew();var issues=new List<DiagnosticIssue>();var estimates=new List<DiagnosticEstimate>();
         var source=request.Grass?.Game??request.Textures?.Game??request.Terrain?.Game??request.Lod?.Game??throw new ArgumentException("Select at least one pipeline stage.");
         var outputs=new[]{request.Grass?.OutputFolder,request.Textures?.OutputFolder,request.Terrain?.OutputFolder,request.Lod?.OutputFolder}.OfType<string>().ToArray();
-        var redact=new ReportRedactor(source,outputs);
+        var redact=new ReportRedactor(source,outputs,ResourceCatalog.Folders(request.Textures?.DynDolodFolder, request.Textures?.ResourcePacks).Concat(ResourceCatalog.Folders(request.Lod?.DynDolodFolder, request.Lod?.ResourcePacks)).ToArray());
         void Add(string severity,string code,string message,string action,string? asset=null,string? origin=null)
         { issues.Add(new(severity,code,redact.Apply(message),redact.Apply(action),asset is null?null:redact.Apply(asset),origin is null?null:redact.Apply(origin))); }
         progress?.Report("Preflight: checking selected outputs and profile...");
@@ -60,16 +60,33 @@ public static class PipelineDiagnostics
                 catch(IOException e){Add("Warning","free-space-unavailable",e.Message,"Check destination free space before generation.");}
             }
         }
-        source=source with{ExcludeFolders=(source.ExcludeFolders??[]).Concat(outputs).Distinct().ToArray(),ExtraLooseRoots=(source.ExtraLooseRoots??[]).Concat(seasonal ? ["seasons","grass"] : Array.Empty<string>()).Concat(deepScan || inspectAsset is {Length:>0} ? ["skse","textures"] : new[]{"skse"}).Distinct().ToArray()};
+        source=source with{ExcludeFolders=(source.ExcludeFolders??[]).Concat(outputs).Distinct().ToArray(),ExtraLooseRoots=(source.ExtraLooseRoots??[]).Concat(seasonal ? ["seasons","grass"] : Array.Empty<string>()).Concat(new[]{"dyndolod"}).Concat(deepScan || inspectAsset is {Length:>0} ? ["skse","textures"] : new[]{"skse"}).Distinct().ToArray()};
         int plugins=0,archives=0;string? version=null;AssetIndex assets;
         using(var game=GameContext.Open(source,progress))
         {
             plugins=game.PluginsLoaded;version=SksePluginInstaller.GameVersion(game.DataFolder)?.ToString();
             foreach(var missing in game.MissingPlugins)Add("Error","missing-plugin","Enabled plugin is unavailable: "+missing,"Restore the plugin or correct the profile before generating.",missing);
             foreach(var warning in game.Warnings)Add("Warning","source-warning",warning,"Check the selected game and profile paths.");
-            assets=game.BuildAssets(p=>p.StartsWith("skse\\") || seasonal && (p.StartsWith("seasons\\") || p.StartsWith("grass\\")) || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null);
+            assets=game.BuildAssets(p=>p.StartsWith("dyndolod\\") || p.StartsWith("skse\\") || seasonal && (p.StartsWith("seasons\\") || p.StartsWith("grass\\")) || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null);
             archives=assets.ArchiveCount;
             foreach(var archive in assets.SkippedArchives)Add("Warning","archive-unreadable",archive,"Repair or remove the unreadable archive before generating.");
+            foreach (var stage in new[] {
+                (Name: "Textures", Folder: request.Textures?.DynDolodFolder, Packs: request.Textures?.ResourcePacks, Output: request.Textures?.OutputFolder),
+                (Name: "LOD", Folder: request.Lod?.DynDolodFolder, Packs: request.Lod?.ResourcePacks, Output: request.Lod?.OutputFolder) }.Where(s => s.Output is not null))
+            {
+                try
+                {
+                    ResourceCatalog.ValidateFolders(stage.Folder, stage.Packs, stage.Output);
+                    var resources = ResourceCatalog.Load(game, assets, stage.Folder, stage.Packs, ct);
+                    estimates.Add(new(stage.Name + " resource files", resources.Report.Files.Count, "files", "Winning compatible rules, configurations and render models from resource folders and enabled mods."));
+                    if (stage.Name == "Textures" && request.Textures?.Stitched == true && TextureGeneration.ReadRules(game, resources).Program.Entries.Count == 0)
+                        Add("Error", "missing-texture-recipes", "No stitching recipes match the enabled plugins.", "Add a compatible resource pack or turn off stitched textures.");
+                    if (stage.Name == "Textures" && request.Textures?.RenderedObjects == true && !resources.RenderModels("objects").Any())
+                        Add("Error", "missing-render-models", "No object render models were found.", "Add a compatible resource pack or turn off rendered objects.");
+                }
+                catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
+                { Add("Error", "invalid-resource-pack", stage.Name + ": " + e.Message, "Select a resource folder containing Rules, Configs or Render, or compatible data files."); }
+            }
             bool seasonalGrass=request.Grass?.Seasons=="on" || request.Grass?.Seasons=="auto" && assets.Exists(@"skse\plugins\po3_seasonsofskyrim.dll");
             if(request.Lod?.Seasons==true || request.Terrain?.Seasons==true || seasonalGrass)
             {
@@ -202,7 +219,7 @@ public static class PipelineDiagnostics
     private sealed class ReportRedactor
     {
         private readonly (string Path,string Label)[] _paths;
-        public ReportRedactor(GameContextOptions game,IReadOnlyList<string> outputs)
+        public ReportRedactor(GameContextOptions game,IReadOnlyList<string> outputs,IReadOnlyList<string> resources)
         {
             var paths=new List<(string?,string)>{(game.DataFolder,"<game>"),(game.Mo2InstanceFolder,"<instance>"),(game.PluginsTxt,"<plugins.txt>"),(game.WinePrefix,"<wine-prefix>"),
                 (game.Mo2Locations?.ModsFolder,"<mods>"),(game.Mo2Locations?.ProfilesFolder,"<profiles>"),(game.Mo2Locations?.OverwriteFolder,"<overwrite>"),(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"<home>")};
@@ -216,6 +233,7 @@ public static class PipelineDiagnostics
                 catch (Exception e) when (e is IOException or InvalidDataException or ArgumentException or UnauthorizedAccessException) { }
             }
             paths.AddRange(outputs.Select((p,i)=>((string?)p,$"<output-{i+1}>")));
+            paths.AddRange(resources.Select((p,i)=>((string?)p,$"<resource-{i+1}>")));
             _paths=paths.Where(p=>!string.IsNullOrWhiteSpace(p.Item1)).Select(p=>(p.Item1!,p.Item2)).OrderByDescending(p=>p.Item1.Length).ToArray();
         }
         public string Apply(string value)

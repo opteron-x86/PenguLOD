@@ -40,3 +40,9 @@ Use `PenguLOD --help` for the complete command reference.
 `scan --request job.json` reads the request's LOD stage and forces generation off. Scans
 may prepare private caches, including [automatic object models](OBJECTS.md), but never
 publish into the LOD output folder. Preset cache folders and worker limits apply to scans.
+
+For flag-based `scan`, `generate` and `author`, repeat `--resources /path/to/pack` in
+priority order. Later folders win; enabled mod resources win over external folders.
+`--dyndolod` remains a compatible name for the primary resource folder. For stage commands
+using presets or JSON, set `ResourceFolders` (one path per line in a desktop preset) or
+`ResourcePacks` (an array on each texture/LOD request). See [resource packs](RESOURCE-PACKS.md).

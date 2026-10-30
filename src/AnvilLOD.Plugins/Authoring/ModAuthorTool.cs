@@ -29,7 +29,7 @@ public sealed record AuthorRequest(
     LodPreset Preset = LodPreset.High,
     BudgetMode Budget = BudgetMode.Recommended,       // triangle budget for the generated LOD meshes (see LodBudgets)
     IReadOnlyList<int>? CustomBudget = null,           // with Custom: the most triangles at LOD 0, 1 and 2 (0 = no limit)
-    bool TreeStandIns = false);                        // trees whose model file exists nowhere: copy the closest existing tree model under that name (see TreeStandIns)
+    bool TreeStandIns = false, IReadOnlyList<string>? ResourcePacks = null);                        // trees whose model file exists nowhere: copy the closest existing tree model under that name (see TreeStandIns)
 
 /// <summary>One row of the author report.</summary>
 public sealed record AuthorItem(
@@ -68,6 +68,7 @@ public static class ModAuthorTool
 
     public static AuthorResult Run(AuthorRequest req, IProgress<string>? progress = null, CancellationToken ct = default)
     {
+        ResourceCatalog.ValidateFolders(req.DynDolodFolder, req.ResourcePacks, req.OutputFolder);
         using var log = new FileLogProgress(Path.Combine(req.OutputFolder, "AnvilLOD Author.log"), progress, $"AnvilLOD Mod Author tools: {req.Plugin}");
         try
         {
@@ -84,7 +85,7 @@ public static class ModAuthorTool
     {
         var sw = Stopwatch.StartNew();
         progress?.Report("Opening load order...");
-        using var game = GameContext.Open(req.Game with { ExtraLooseRoots = ["textures"], ExcludeFolder = req.OutputFolder }, progress);
+        using var game = GameContext.Open(req.Game with { ExtraLooseRoots = ["textures", "dyndolod"], ExcludeFolder = req.OutputFolder }, progress);
         bool allPlugins = req.Plugin.Trim() == AllPlugins;
         ISkyrimModGetter? mod = null;
         var pluginName = "All plugins";
@@ -429,31 +430,10 @@ public static class ModAuthorTool
 
     private static LodRules LoadRules(AuthorRequest req, AssetIndex assets, GameContext game)
     {
-        var dataRuleFiles = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in assets.EnumeratePaths("dyndolod\\"))
-        {
-            var rest = path["dyndolod\\".Length..];
-            if (rest.Contains('\\') || !rest.EndsWith(".ini", StringComparison.Ordinal)) continue;
-            var p = path;
-            dataRuleFiles[rest] = () =>
-            {
-                if (!assets.TryOpen(p, out var st)) return "";
-                using var reader = new StreamReader(st);
-                return reader.ReadToEnd();
-            };
-        }
-        foreach (var (name, full) in game.RootFiles())
-            if (name.StartsWith("dyndolod_", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".ini", StringComparison.OrdinalIgnoreCase) && !dataRuleFiles.ContainsKey(name))
-            {
-                var f = full;
-                dataRuleFiles[name] = () => File.ReadAllText(f);
-            }
-        string? rulesFolder = null;
-        if (!string.IsNullOrWhiteSpace(req.DynDolodFolder))
-            foreach (var c in new[] { Path.Combine(req.DynDolodFolder, "Edit Scripts", "DynDOLOD", "Rules"), Path.Combine(req.DynDolodFolder, "Rules"), req.DynDolodFolder })
-                if (Directory.Exists(c) && Directory.EnumerateFiles(c, "DynDOLOD_*.ini").Any()) { rulesFolder = c; break; }
+        var resources = ResourceCatalog.Load(game, assets, req.DynDolodFolder, req.ResourcePacks);
+        var dataRuleFiles = resources.TextFiles("rules");
         var plugins = game.LoadOrder.ListedOrder.Where(l => l.Mod is not null).Select(l => l.ModKey.ToString()).ToList();
-        return LodRules.Load(rulesFolder, dataRuleFiles, plugins, req.Preset);
+        return LodRules.Load(null, dataRuleFiles, plugins, req.Preset);
     }
 
     private static string Report(string plugin, AuthorRequest req, IReadOnlyList<AuthorItem> items, int meshes, int billboards, string? ruleFile)

@@ -28,7 +28,9 @@ Priority 4 is implemented in v0.4.0-alpha.10; [automatic object LOD](OBJECTS.md)
 rule precedence, source-level budgets, variants, cache verification and fallback reports.
 Priority 5 is implemented in v0.4.0-alpha.11; [native hybrid trunks](TREES.md#native-hybrid-trunks)
 describes material separation, aligned cards, crown budgets and generated textures.
-Priority 6 is queued. In-game visual validation remains ongoing.
+Priority 6 is implemented in v0.4.0-alpha.12; [resource packs](RESOURCE-PACKS.md) covers
+folder layouts, enabled mod precedence, source reports and cache invalidation.
+In-game visual validation remains ongoing.
 
 ## v0.3 quality milestones
 

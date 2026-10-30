@@ -85,12 +85,13 @@ public static class Program
                                  manifest or log), emptied before every generate so old files never mix with new ones
           --keep-output          Don't empty the output folder first: update it in place (only changed blocks are rewritten)
           --report <file.json>   Write a JSON report (default: AnvilLOD.scan.json next to the exe)
-          --dyndolod <path>      DynDOLOD install folder: reuse its LOD rule files (optional)
+          --resources <path>     Additional resource-only folder; repeat in priority order (later wins)
+          --dyndolod <path>      Optional primary resource folder (legacy option; enabled mod resources override it)
           --preset <name>        low | medium | high (default high): which rule preset to use
-          --candles              Also load DynDOLOD's Candles rules (candles, lanterns and sconces get Far LOD); needs --dyndolod
-          --fxglow               Also load DynDOLOD's FXGlow rules (fire and light glow cards get Far LOD); needs --dyndolod
+          --candles              Also load DynDOLOD's Candles rules (candles, lanterns and sconces get Far LOD); needs compatible resource rules
+          --fxglow               Also load DynDOLOD's FXGlow rules (fire and light glow cards get Far LOD); needs compatible resource rules
           --rules <file>         Your own LOD rule file (DynDOLOD rule format, e.g. saved by the app's rule editor). Its rules come
-                                 before all others; without it only DynDOLOD's own rule files are used
+                                 before rules discovered in resource folders and enabled mods
           --keep-buried          Don't remove LOD triangles buried under the terrain
           --auto-objects         Generate missing object LOD levels requested by the rules
           --object-near-budget N   Generated source level 0 triangle cap (2500)
@@ -112,7 +113,7 @@ public static class Program
                                  drawn by the SKSE plugin beyond the loaded cells and lit at night (AnvilLOD.dyn). Off by default
           --parent-copies        (experimental) DynDOLOD's Parent > Child copies: the objects around Whiterun, Solitude, Windhelm and
                                  Riften that the walled-city worldspaces leave out are drawn by the SKSE plugin while you are in the
-                                 city (AnvilLOD.copies). Needs --dyndolod for its childworld configs. Off by default
+                                 city (AnvilLOD.copies). Needs compatible child-world configurations. Off by default
           --no-match-textures    Keep each LOD mesh's own textures. By default they follow the full model
                                  (alternate textures, snow/ice variants), the way DynDOLOD corrects them
           --no-grass             Don't build grass LOD from the grass cache
@@ -409,7 +410,7 @@ public static class Program
             OutputFolder: outputFolder,
             CleanOutput: !a.Has("keep-output"),
             Generate: generate,
-            DynDolodFolder: a.Get("dyndolod"),
+            DynDolodFolder: a.Get("dyndolod"), ResourcePacks: a.GetAll("resources")?.ToArray(),
             Preset: ParsePreset(a.Get("preset")),
             Candles: a.Has("candles"),
             FxGlow: a.Has("fxglow"),
@@ -532,7 +533,7 @@ public static class Program
             MinObjectSize: F("min-size", 400f),
             MinTreeHeight: F("min-tree-height", 256f),
             Overwrite: a.Has("overwrite"),
-            DynDolodFolder: a.Get("dyndolod"),
+            DynDolodFolder: a.Get("dyndolod"), ResourcePacks: a.GetAll("resources")?.ToArray(),
             Preset: ParsePreset(a.Get("preset")),
             Budget: ParseBudget(a.Get("budget")).Mode,
             CustomBudget: ParseBudget(a.Get("budget")).Custom);

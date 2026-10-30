@@ -130,14 +130,24 @@ public sealed class ChildWorldCopies
     /// <param name="configsFolder">"…\Edit Scripts\DynDOLOD\Configs", or null.</param>
     public static ChildWorldCopies Load(string? configsFolder, IReadOnlyCollection<string> pluginsLoaded, LodPreset preset, string gameMode = "SSE")
     {
+        var sources = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase);
+        if (configsFolder is not null && Directory.Exists(configsFolder))
+            foreach (string file in Directory.EnumerateFiles(configsFolder).Order(StringComparer.Ordinal))
+                sources[Path.GetFileName(file)] = () => File.ReadAllText(file);
+        return FromFiles(sources, pluginsLoaded, preset, gameMode);
+    }
+
+    public static ChildWorldCopies FromFiles(IReadOnlyDictionary<string, Func<string>> sources, IReadOnlyCollection<string> pluginsLoaded,
+        LodPreset preset, string gameMode = "SSE")
+    {
         var result = new ChildWorldCopies();
-        if (configsFolder is null || !Directory.Exists(configsFolder)) return result;
         var loaded = new HashSet<string>(pluginsLoaded, StringComparer.OrdinalIgnoreCase);
         var prefix = $"DynDOLOD_{gameMode}_childworld_";
-        foreach (var file in Directory.EnumerateFiles(configsFolder, prefix + "*.ini"))
+        foreach (var (file, read) in sources.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
+            if (!file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || !file.EndsWith(".ini", StringComparison.OrdinalIgnoreCase)) continue;
             var child = Path.GetFileNameWithoutExtension(file)[prefix.Length..];
-            var text = File.ReadAllText(file);
+            var text = read();
             if (Parse(child, text, loaded, preset, Path.GetFileName(file)) is { } c)
                 result._byChild[child] = c;
             if (ParseParentCopy(child, text, loaded, Path.GetFileName(file)) is { } pc)
@@ -145,9 +155,8 @@ public sealed class ChildWorldCopies
             if (FindBlocker(text, loaded) is { } blocker)
                 result._blockedBy[child] = blocker;
         }
-        var matches = Path.Combine(configsFolder, $"DynDOLOD_{gameMode}_ChildworldMatches.txt");
-        if (File.Exists(matches))
-            result.AddMatches(File.ReadAllText(matches), loaded);
+        var matches = sources.FirstOrDefault(p => p.Key.Equals($"DynDOLOD_{gameMode}_ChildworldMatches.txt", StringComparison.OrdinalIgnoreCase));
+        if (matches.Value is not null) result.AddMatches(matches.Value(), loaded);
         return result;
     }
 

@@ -32,6 +32,8 @@ public sealed class DesktopSettings : ObservableObject
     private string _outputFolder = "";
     public string OutputFolder { get => _outputFolder; set => Set(ref _outputFolder, value ?? ""); }
     private string _dynDolodFolder = "";
+    private string _resourceFolders = "";
+    public string ResourceFolders { get => _resourceFolders; set => Set(ref _resourceFolders, value ?? ""); }
     public string DynDolodFolder { get => _dynDolodFolder; set => Set(ref _dynDolodFolder, value ?? ""); }
     private string _customRulesFile = "";
     public string CustomRulesFile { get => _customRulesFile; set => Set(ref _customRulesFile, value ?? ""); }

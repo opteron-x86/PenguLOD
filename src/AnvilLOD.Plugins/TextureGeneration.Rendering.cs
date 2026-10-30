@@ -203,17 +203,13 @@ public static partial class TextureGeneration
         Tangents = p.Tangents, Bitangents = p.Bitangents, Triangles = p.Triangles, Colors = p.Colors, Tier = p.Tier
     };
 
-    private static void RenderObjects(TextureGenerationRequest request, AssetIndex assets, string? resources,
+    private static void RenderObjects(TextureGenerationRequest request, AssetIndex assets, ResourceCatalog resources,
         Func<string, byte[]?> read, Action<string, byte[]> write, List<TextureGenerationItem> items,
         Action<string> warn, IProgress<string>? progress, CancellationToken ct)
     {
-        const string prefix = @"dyndolod\render\skyrim\objects\";
         var models = new Dictionary<string, (Func<byte[]> Load, bool Optional)>(StringComparer.OrdinalIgnoreCase);
-        if (resources is not null && GamePath.ResolveExisting(resources, @"render\skyrim\objects") is { } folder)
-            foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Where(p => p.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)))
-                models[GamePath.Normalize(Path.GetRelativePath(folder, file))] = (() => File.ReadAllBytes(file), true);
-        foreach (var path in assets.EnumeratePaths(prefix).Where(p => p.EndsWith(".nif")))
-            models[path[prefix.Length..]] = (() => read(path) ?? throw new FileNotFoundException(path), false);
+        foreach (var (relative, resource) in resources.RenderModels("objects"))
+            models[relative] = (resource.Read, !resource.FromMod);
         if (models.Count == 0) throw new InvalidOperationException("No object render models were found.");
         int index = 0;
         foreach (var (path, model) in models.OrderBy(m => m.Key, StringComparer.Ordinal))

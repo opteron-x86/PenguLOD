@@ -391,11 +391,12 @@ public sealed class DesktopTests : IDisposable
         var settings = new DesktopSettings
         {
             SourceMode = "Data folder / Vortex", GameFolder = fixture.Data, PluginsFile = fixture.Plugins,
-            DynDolodFolder = fixture.Resources, TextureGenOutput = fixture.Output, TextureGenTrees = false,
+            ResourceFolders = fixture.Resources, TextureGenOutput = fixture.Output, TextureGenTrees = false,
             TextureGenGrass = false, TextureGenBaseSize = 64, MaxThreads = 2,
             OutputFolder = Path.Combine(fixture.Root, "LOD"), CacheFolder = Path.Combine(fixture.Root, "Cache")
         };
         window.ReplaceSettings(settings); window.Show(); Click(window, "Texture generation");
+        Assert.Equal(fixture.Resources, window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "ResourceFolders").Text);
         var output = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "TextureGenOutput");
         Assert.Equal(fixture.Output, output.Text);
         var size = window.GetVisualDescendants().OfType<ComboBox>().Single(t => t.Name == "TextureGenBaseSize");
@@ -420,6 +421,8 @@ public sealed class DesktopTests : IDisposable
         Assert.Equal(AnvilLOD.Plugins.Authoring.GrassTextureMode.Basic, billboardSettings.GrassTextures);
         string preset = Path.Combine(fixture.Root, "billboard-settings.json"); SettingsStore.Write(preset, window.Settings);
         Assert.Equal(billboardSettings, RequestFactory.Textures(SettingsStore.Read(preset)).Billboards);
+        Assert.Equal(new[] { fixture.Resources }, RequestFactory.Textures(SettingsStore.Read(preset)).ResourcePacks);
+        Assert.Equal(new[] { fixture.Resources }, RequestFactory.Scan(SettingsStore.Read(preset), false).ResourcePacks);
         await window.RunTextureGeneration(false);
         Assert.True(window.Settings.UseGeneratedTextures);
         Assert.True(TextureGenerationManifest.Read(fixture.Output, true)!.Complete);
@@ -456,7 +459,7 @@ public sealed class DesktopTests : IDisposable
         window.ReplaceSettings(new DesktopSettings
         {
             SourceMode = "Data folder / Vortex", GameFolder = fixture.Data, PluginsFile = fixture.Plugins,
-            DynDolodFolder = fixture.Resources, TextureGenOutput = fixture.Output, TextureGenTrees = false,
+            ResourceFolders = fixture.Resources, TextureGenOutput = fixture.Output, TextureGenTrees = false,
             TextureGenGrass = false, TextureGenBaseSize = 64, MaxThreads = 2, CleanOutput = true,
             OutputFolder = lod, CacheFolder = Path.Combine(fixture.Root, "Cache")
         });
