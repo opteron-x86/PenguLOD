@@ -22,7 +22,9 @@ Priority 1 is implemented in v0.4.0-alpha.1. [Texture generation](TEXTURES.md) d
 supported recipes, ambiguous mappings and how to pass generation metadata to LOD.
 Priority 3 is implemented in v0.4.0-alpha.3; [model support](MODEL-SUPPORT.md) defines the
 supported geometry, static skin poses, render materials and failure behavior.
-Priorities 2 and 4–6 are queued. In-game visual validation remains ongoing.
+Priority 2 is implemented in v0.4.0-alpha.9; [billboard settings](TEXTURES.md#hd-billboards-and-complex-grass)
+describe separate views, packed grass inputs, resolution scaling and shader limits.
+Priorities 4–6 are queued. In-game visual validation remains ongoing.
 
 ## v0.3 quality milestones
 

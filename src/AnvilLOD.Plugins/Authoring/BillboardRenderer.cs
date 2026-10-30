@@ -23,12 +23,32 @@ public static class BillboardRenderer
     /// <param name="vertexColors">Multiply by the model's vertex colours (trees: baked shading). Grass uses them for wind, so off there.</param>
     /// <param name="minCoverage">Thicken the cut-out until at least this share of the image is opaque (sparse grass blades
     /// otherwise vanish at a distance; 0 = leave as rendered).</param>
-    public static BillboardImage? Render(LodMesh model, TextureLoader loadTexture, int maxPixels = 512, bool vertexColors = true, float minCoverage = 0f, float unitsPerPixel = 0, (Vector3 Min, Vector3 Max)? viewport = null, float brightness = 1, bool shaded = true, (int W, int H)? pixelSize = null, MaterialBakeSettings? materials = null)
+    public static BillboardImage? Render(LodMesh model, TextureLoader loadTexture, int maxPixels = 512, bool vertexColors = true, float minCoverage = 0f, float unitsPerPixel = 0, (Vector3 Min, Vector3 Max)? viewport = null, float brightness = 1, bool shaded = true, (int W, int H)? pixelSize = null, MaterialBakeSettings? materials = null,
+        BillboardView view = BillboardView.Front, bool originCentered = false, GrassTextureMode grassTextures = GrassTextureMode.Basic, float complexGrassThreshold = .1f)
     {
         if (model.HasIncompleteGeometry) throw new NotSupportedException("Cannot render incomplete geometry: " + string.Join("; ", model.Warnings));
+        if (view == BillboardView.Side)
+        {
+            // Side camera looks from +X, with +Y across the image and +Z up. Rotate the
+            // entire normal/tangent basis with positions so the generated side card lights correctly.
+            static Vector3 Project(Vector3 p) => new(p.Y, -p.X, p.Z);
+            model = new LodMesh { Path = model.Path, Parts = model.Parts.Select(p => new LodMeshPart
+            {
+                Name = p.Name, Material = p.Material, Positions = p.Positions.Select(Project).ToArray(),
+                Normals = p.Normals.Select(Project).ToArray(), Tangents = p.Tangents.Select(Project).ToArray(),
+                Bitangents = p.Bitangents.Select(Project).ToArray(), UVs = p.UVs, Colors = p.Colors, Triangles = p.Triangles
+            }).ToArray() };
+        }
         materials ??= new();
         materials.Validate();
         var (min, max) = viewport ?? Meshes.Authoring.LodMeshAuthor.Bounds(model);
+        if (originCentered && viewport is null)
+        {
+            // Padding around the model origin retains trunk alignment in both standard BTT
+            // billboards and crossed object cards; neither consumer needs a camera-dependent offset.
+            float half = MathF.Max(MathF.Abs(min.X), MathF.Abs(max.X));
+            min.X = -half; max.X = half;
+        }
         float worldW = max.X - min.X, worldH = max.Z - min.Z;
         if (!(worldW > 1f) || !(worldH > 1f)) return null;
 
@@ -59,6 +79,12 @@ public static class BillboardRenderer
             var tex = loadTexture(part.Material.Textures[0]) ?? throw new FileNotFoundException("Diffuse texture missing: " + part.Material.Textures[0]);
             var effect = part.Material.RenderEffect;
             var normalTexture = materials.SourceNormals && part.Material.Textures.Count > 1 ? Optional(part.Material.Textures[1]) : null;
+            if (grassTextures != GrassTextureMode.Basic)
+            {
+                var decoded = GrassTexture.Decode(tex, grassTextures, complexGrassThreshold);
+                tex = decoded.Diffuse;
+                if (materials.SourceNormals && decoded.Normal is { } packedNormal) normalTexture = packedNormal;
+            }
             bool pbr = materials.PbrAlbedo && part.Material.Textures[0].Replace('/', '\\').Contains(@"\pbr\", StringComparison.OrdinalIgnoreCase);
             var occlusion = pbr && materials.OcclusionStrength > 0 && part.Material.Textures.Count > 5 ? Optional(part.Material.Textures[5]) : null;
             byte threshold = part.Material.HasAlpha ? (part.Material.AlphaThreshold == 0 ? (byte)128 : part.Material.AlphaThreshold) : (byte)0;

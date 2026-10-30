@@ -65,21 +65,34 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
         var sb = new StringBuilder().Append(Convert.ToHexString(SHA256.HashData(bytes))).Append('|').Append(variant?.Id);
         foreach (var t in mesh.Parts.SelectMany(p => p.Material.Textures).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
             sb.Append('|').Append(assets.Fingerprint(TexturePath(t)));
-        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v4|" + sb))).ToLowerInvariant()[..24];
+        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v5|" + sb))).ToLowerInvariant()[..24];
 
         var dir = Path.Combine(_root, "textures", "terrain", "lodgen", pluginFolder);
         var main = Path.Combine(dir, name + ".dds");
         var txt = Path.Combine(dir, name + ".txt");
-        if (File.Exists(main) && File.Exists(txt) && File.ReadAllText(txt).Contains("Source=" + source, StringComparison.Ordinal)) return true;
+        if (File.Exists(main) && File.Exists(txt) && File.Exists(Path.Combine(dir, name + "_1.dds")) && File.Exists(Path.Combine(dir, name + "_1_n.dds")))
+        {
+            string metadata = File.ReadAllText(txt);
+            if (metadata.Contains("Source=" + source, StringComparison.Ordinal)
+                && (!metadata.Contains("Width_2=", StringComparison.Ordinal)
+                    || File.Exists(Path.Combine(dir, name + "_2.dds")) && File.Exists(Path.Combine(dir, name + "_2_n.dds")))) return true;
+        }
 
-        var img = BillboardRenderer.Render(mesh, LoadTexture);
+        var img = BillboardRenderer.Render(mesh, LoadTexture, originCentered: true);
         if (img is null) { reason = "no visible pixels"; return false; }
+        var side = BillboardRenderer.Render(mesh, LoadTexture, view: BillboardView.Side, originCentered: true);
         lock (_write)
         {
             Directory.CreateDirectory(dir);
             foreach (var file in new[] { main, Path.Combine(dir, name + "_1.dds") })
                 using (var fs = File.Create(file)) BillboardRenderer.WriteDds(fs, img.Rgba, img.Width, img.Height);
             using (var fs = File.Create(Path.Combine(dir, name + "_1_n.dds"))) { if (img.NormalRgba is { } nrm) BillboardRenderer.WriteNormalDds(fs, nrm, img.Width, img.Height); else BillboardRenderer.WriteFlatNormalDds(fs, img.Width, img.Height); }
+            if (side is not null)
+            {
+                using (var fs = File.Create(Path.Combine(dir, name + "_2.dds"))) BillboardRenderer.WriteDds(fs, side.Rgba, side.Width, side.Height);
+                using (var fs = File.Create(Path.Combine(dir, name + "_2_n.dds"))) BillboardRenderer.WriteNormalDds(fs, side.NormalRgba!, side.Width, side.Height);
+            }
+            else foreach (string suffix in new[] { "_2.dds", "_2_n.dds" }) File.Delete(Path.Combine(dir, name + suffix));
             var inv = CultureInfo.InvariantCulture;
             File.WriteAllText(txt, string.Join("\r\n",
                 "[LOD]",
@@ -90,6 +103,7 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
                 "Scale=1.000000",
                 string.Create(inv, $"Width_1={img.WorldWidth:F6}"),
                 string.Create(inv, $"Height_1={img.WorldHeight:F6}"),
+                side is null ? "" : string.Create(inv, $"Width_2={side.WorldWidth:F6}\r\nHeight_2={side.WorldHeight:F6}"),
                 $"Model={model}",
                 "Source=" + source,
                 "Generator=AnvilLOD tree billboards (no TexGen)", ""));

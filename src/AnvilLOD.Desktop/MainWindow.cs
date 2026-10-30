@@ -359,11 +359,11 @@ public sealed partial class MainWindow : Window
     }
     private Control Number(string label, string property, decimal min, decimal max, decimal step = 1)
     {
-        var input = new NumericUpDown { Minimum = min, Maximum = max, Increment = step, FormatString = "0.##", Width = 160, HorizontalAlignment = HorizontalAlignment.Left };
+        var input = new NumericUpDown { Name = property, Minimum = min, Maximum = max, Increment = step, FormatString = "0.##", Width = 160, HorizontalAlignment = HorizontalAlignment.Left };
         Bind(input, NumericUpDown.ValueProperty, _settings, property); return Labeled(label, input);
     }
     private Control Choice(string label, string property, string[] choices)
-    { var input = new ComboBox { ItemsSource = choices, MinWidth = 240 }; Bind(input, SelectingItemsControl.SelectedItemProperty, _settings, property); return Labeled(label, input); }
+    { var input = new ComboBox { Name = property, ItemsSource = choices, MinWidth = 240 }; Bind(input, SelectingItemsControl.SelectedItemProperty, _settings, property); return Labeled(label, input); }
     private Control Check(string label, string property)
     { var input = new CheckBox { Content = label }; Bind(input, ToggleButton.IsCheckedProperty, _settings, property); return input; }
     private Button Button(string title, Action action) => Button(title, () => { action(); return Task.CompletedTask; });

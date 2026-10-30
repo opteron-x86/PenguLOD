@@ -14,7 +14,7 @@ public sealed record TreeBillboard(string TexturePath, float Width, float Height
     /// Parses a TexGen/LODGen billboard <c>.txt</c>. <paramref name="useFirstView"/> picks the <c>_1</c> view's
     /// width/height (when only <c>name_1.dds</c> exists).
     /// </summary>
-    public static TreeBillboard? Parse(string texturePath, string text, bool useFirstView = false)
+    public static TreeBillboard? Parse(string texturePath, string text, bool useFirstView = false, int view = 0)
     {
         var values = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         foreach (var raw in text.Split('\n'))
@@ -28,9 +28,10 @@ public sealed record TreeBillboard(string TexturePath, float Width, float Height
 
         float scale = values.GetValueOrDefault("Scale", 1f);
         if (scale <= 0) scale = 1f;
-        float width = useFirstView && values.TryGetValue("Width_1", out var w1) ? w1 : values.GetValueOrDefault("Width");
-        float height = useFirstView && values.TryGetValue("Height_1", out var h1) ? h1 : values.GetValueOrDefault("Height");
-        if (width <= 0 || height <= 0) return null;
+        if (useFirstView && view == 0) view = 1;
+        float width = view > 0 && values.TryGetValue($"Width_{view}", out var w1) ? w1 : values.GetValueOrDefault("Width");
+        float height = view > 0 && values.TryGetValue($"Height_{view}", out var h1) ? h1 : values.GetValueOrDefault("Height");
+        if (width <= 0 || height <= 0 || !float.IsFinite(width * scale + height * scale + values.GetValueOrDefault("ShiftZ") * scale)) return null;
         return new TreeBillboard(texturePath, width * scale, height * scale, values.GetValueOrDefault("ShiftZ") * scale);
     }
 }

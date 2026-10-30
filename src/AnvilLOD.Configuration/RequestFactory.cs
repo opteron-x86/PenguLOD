@@ -58,7 +58,10 @@ public static class RequestFactory
             s.TextureGenStitched, s.TextureGenTrees, s.TextureGenGrass, s.TextureGenObjects,
             (int)s.TextureGenBaseSize, (int)s.TextureGenMaxSize, (float)s.TextureGenUnitsPerPixel, (float)s.TextureGenBrightness,
             (float)s.TextureGenMinTreeHeight, (float)s.TextureGenMinGrassHeight, s.TextureGenFilter.Trim(), TreeTrunks: s.TextureGenTrunks, Materials: new AnvilLOD.Plugins.Authoring.MaterialBakeSettings(s.BakeSourceNormals, s.BakePbr,
-                (float)s.BakePbrScale, (float)s.BakePbrGamma, (float)s.BakeAo, (float)s.BakeAmbient, (float)s.BakeDirectional));
+                (float)s.BakePbrScale, (float)s.BakePbrGamma, (float)s.BakeAo, (float)s.BakeAmbient, (float)s.BakeDirectional),
+            Billboards: new(s.TextureGenHdViews, s.TextureGenReferenceScale, (float)s.TextureGenUnplacedTreeScale,
+                Enum.TryParse<AnvilLOD.Plugins.Authoring.GrassTextureMode>(s.TextureGenGrassTextures, out var grassTextures) ? grassTextures
+                    : throw new ArgumentException("Grass texture layout must be Auto, Basic or Packed."), (float)s.TextureGenComplexThreshold));
         TextureGeneration.Validate(request);
         if (Optional(s.GrassOutput) is { } grassOutput)
         {

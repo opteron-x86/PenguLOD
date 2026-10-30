@@ -47,6 +47,10 @@ Grass LOD packs billboards for types that have instances in the selected cache c
 When seasons are enabled, matching seasonal cells contribute their grass types too.
 Unused grass-library records do not require textures. Missing textures needed by a used
 model still stop generation; atlas preparation reports these before the occlusion pass.
+Generated HD billboards give the two crossed grass cards separate front/side atlas regions
+without adding geometry or density tiers. Normal maps use the same layout and normalized
+mipmaps. See [billboard settings](TEXTURES.md#hd-billboards-and-complex-grass) for packed
+complex-grass inputs and shader limits.
 
 ## Progress and validation
 

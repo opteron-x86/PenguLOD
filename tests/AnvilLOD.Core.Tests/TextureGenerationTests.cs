@@ -169,7 +169,7 @@ public sealed class TextureGenerationTests
         Assert.True(result.Published, string.Join("; ", result.Items.Select(i => i.Detail)));
         var tree = Assert.Single(result.Items, i => i.Kind == "Tree" && i.Status == "Written");
         Assert.Equal((64, 64), (tree.Width, tree.Height));
-        Assert.Contains("Width=400", File.ReadAllText(GamePath.ToFileSystemPath(f.Output, tree.Output[..^4] + ".txt")));
+        Assert.Contains("Width=800", File.ReadAllText(GamePath.ToFileSystemPath(f.Output, tree.Output[..^4] + ".txt"))); // the off-center model is padded around its origin
         Assert.Contains(result.Items, i => i.Kind == "Rendered object" && i.Status == "Written");
         Assert.Contains(",True", File.ReadAllText(GamePath.ToFileSystemPath(f.Output, @"textures\terrain\lodgen\texgen_sse_tree_billboards.txt")));
     }

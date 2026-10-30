@@ -23,7 +23,7 @@ namespace AnvilLOD.Plugins;
 public sealed class GrassLodSource : ISyntheticMeshSource
 {
     public const string Prefix = "~anvillod-grass|";
-    private const int Version = 7; // 7: atlas only includes types used by selected default/seasonal caches
+    private const int Version = 8; // HD side views, complex grass decoding and normal-aware atlas fingerprint
 
     private readonly AssetIndex _assets;
     private readonly float _density;
@@ -226,7 +226,10 @@ public sealed class GrassLodSource : ISyntheticMeshSource
                     var tb = TreeBillboard.Parse(ddsPath, text, firstView);
                     if (tb is null) continue;
                     var normal = ddsPath[..^4] + "_n.dds";
-                    return new GrassBillboard(ddsPath, _assets.Exists(normal) ? normal : null, tb.Width, tb.Height, tb.ShiftZ);
+                    string sidePath = GamePath.Join(folder, name + "_2.dds"), sideNormal = GamePath.Join(folder, name + "_2_n.dds");
+                    var side = _assets.Exists(sidePath) ? TreeBillboard.Parse(sidePath, text, view: 2) : null;
+                    return new GrassBillboard(ddsPath, _assets.Exists(normal) ? normal : null, tb.Width, tb.Height, tb.ShiftZ,
+                        Side: side is null ? null : new(sidePath, _assets.Exists(sideNormal) ? sideNormal : null, side.Width, side.Height, side.ShiftZ));
                 }
         }
 
@@ -292,13 +295,16 @@ public sealed class GrassLodSource : ISyntheticMeshSource
             var stem = Path.GetFileNameWithoutExtension(model.Replace('\\', '/')).ToLowerInvariant();
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(model.ToLowerInvariant())), 0, 4).ToLowerInvariant();
             var rel = GamePath.Join("textures", "anvillod", "grass", $"{stem}_{hash}.dds");
-            var img = Authoring.BillboardRenderer.Render(mesh, LoadTexture, maxPixels: 256, vertexColors: false, minCoverage: 0.3f);
+            var img = Authoring.BillboardRenderer.Render(mesh, LoadTexture, maxPixels: 256, vertexColors: false, minCoverage: 0.3f,
+                originCentered: true, grassTextures: Authoring.GrassTextureMode.Auto);
             if (img is null) return null;
             var full = Path.Combine(_outputFolder!, rel.Replace('\\', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
             using (var fs = File.Create(full)) Authoring.BillboardRenderer.WriteDds(fs, img.Rgba, img.Width, img.Height);
+            string normal = rel[..^4] + "_n.dds";
+            File.WriteAllBytes(full[..^4] + "_n.dds", TextureImages.Encode(new(img.NormalRgba!, img.Width, img.Height), normal: true));
             Interlocked.Increment(ref _rendered);
-            return new GrassBillboard(rel, null, img.WorldWidth, img.WorldHeight, img.ShiftZ);
+            return new GrassBillboard(rel, normal, img.WorldWidth, img.WorldHeight, img.ShiftZ);
         }
     }
 
@@ -317,7 +323,7 @@ public sealed class GrassLodSource : ISyntheticMeshSource
         try
         {
             var (rgba, w, h, _) = AnvilLOD.Textures.Dds.DdsFile.DecodeTopMip(bytes);
-            while (w > 1024 && h > 4) (rgba, w, h) = AnvilLOD.Textures.TreeAtlasBuilder.Downsample(rgba, w, h);
+            // Packed grass halves must be separated before any reduction in the renderer.
             return (rgba, w, h);
         }
         catch (Exception ex) when (ex is NotSupportedException or InvalidDataException or IndexOutOfRangeException) { return null; }
@@ -359,7 +365,11 @@ public sealed class GrassLodSource : ISyntheticMeshSource
         foreach (var type in required.OrderBy(t => t.Model, StringComparer.Ordinal).ThenBy(t => t.Id))
         {
             RunLimits.Check();
-            if (FindBillboard(type.Model, type.Id, record: false) is { } bb) raw.TryAdd(GamePath.Normalize(bb.Diffuse), bb);
+            if (FindBillboard(type.Model, type.Id, record: false) is { } bb)
+            {
+                raw.TryAdd(GamePath.Normalize(bb.Diffuse), bb);
+                if (bb.Side is { } side) raw.TryAdd(GamePath.Normalize(side.Diffuse), side);
+            }
         }
         var diffuse = new List<TreeAtlasBuilder.Input>();
         var normal = new List<TreeAtlasBuilder.Input>();
@@ -389,7 +399,7 @@ public sealed class GrassLodSource : ISyntheticMeshSource
 
         var builder = new TreeAtlasBuilder { MaxSize = 4096, MaxTile = 256 };
         var a = builder.Build(diffuse);
-        var b = builder.Build(normal);
+        var b = builder.Build(normal, normalMap: true);
         if (a.Size != b.Size || b.Errors.Count > 0 || a.Rects.Count != b.Rects.Count
             || a.Rects.Any(kv => !b.Rects.TryGetValue(kv.Key, out var r) || r != kv.Value))
             return; // the pair doesn't line up (shouldn't happen): leave every grass type on its own textures
@@ -401,14 +411,16 @@ public sealed class GrassLodSource : ISyntheticMeshSource
             File.WriteAllBytes(full, bytes);
         }
         _atlasRects = new Dictionary<string, AtlasRect>(a.Rects, StringComparer.OrdinalIgnoreCase);
-        _atlasHash = Convert.ToHexString(SHA256.HashData(a.Dds), 0, 6).ToLowerInvariant();
+        using var atlasHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        atlasHash.AppendData(a.Dds); atlasHash.AppendData(b.Dds);
+        _atlasHash = Convert.ToHexString(atlasHash.GetHashAndReset(), 0, 6).ToLowerInvariant();
         Atlas = new GrassAtlasSummary(a.Rects.Count, a.Size, a.SizeCap, a.Reduced, a.Errors.Count);
     }
 
     /// <summary>The billboard moved into the atlas (same textures for every type, UVs from its tile), if it has a tile.</summary>
     private GrassBillboard? Atlased(GrassBillboard? bb)
         => bb is not null && _atlasRects is not null && _atlasRects.TryGetValue(GamePath.Normalize(bb.Diffuse), out var rect)
-            ? new GrassBillboard(AtlasDiffuse, AtlasNormal, bb.Width, bb.Height, bb.ShiftZ, rect)
+            ? new GrassBillboard(AtlasDiffuse, AtlasNormal, bb.Width, bb.Height, bb.ShiftZ, rect, bb.Side is null ? null : Atlased(bb.Side))
             : bb;
 
     /// <summary>A texture from the output folder (billboards rendered this run) or the load order.</summary>

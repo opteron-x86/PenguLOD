@@ -17,7 +17,7 @@ namespace AnvilLOD.Plugins;
 public static partial class TextureGeneration
 {
     private sealed record Candidate(string Kind, string Plugin, IMajorRecordGetter Record);
-    private sealed record BillboardRule(bool? Enabled, float Scale);
+    private sealed record BillboardRule(bool? Enabled, float? Scale);
 
     private static void GenerateBillboards(TextureGenerationRequest request, GameContext game, AssetIndex assets,
         List<string> ruleLines, Func<string, byte[]?> read, Action<string, byte[]> write,
@@ -29,13 +29,16 @@ public static partial class TextureGeneration
             var fields = line.Split(';', StringSplitOptions.TrimEntries);
             if (fields.Length < 2 || !uint.TryParse(fields[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var id))
                 throw new InvalidDataException("Invalid billboard rule: " + line);
-            bool? enabled = null; float scale = 1;
+            bool? enabled = null; float? scale = null;
             foreach (var option in fields.Skip(2).SelectMany(f => f.Split(',', StringSplitOptions.TrimEntries)))
             {
                 if (bool.TryParse(option, out var b)) enabled = b;
-                if (option.StartsWith("Scale=", StringComparison.OrdinalIgnoreCase)
-                    && (!float.TryParse(option[6..], NumberStyles.Float, CultureInfo.InvariantCulture, out scale) || !float.IsFinite(scale) || scale <= 0 || scale > 100))
-                    throw new InvalidDataException("Invalid billboard scale: " + line);
+                if (option.StartsWith("Scale=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!float.TryParse(option[6..], NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !float.IsFinite(value) || value <= 0 || value > 100)
+                        throw new InvalidDataException("Invalid billboard scale: " + line);
+                    scale = value;
+                }
             }
             rules[new FormKey(ModKey.FromNameAndExtension(fields[0]), id & 0x00ffffff)] = new(enabled, scale);
         }
@@ -65,7 +68,12 @@ public static partial class TextureGeneration
                 if (!landscape.IsDeleted) foreach (var grass in landscape.Grasses) usedGrass.Add(grass.FormKey);
             }
         var lists = new Dictionary<string, List<string>> { ["Tree"] = [], ["Grass"] = [] };
+        var quality = request.Billboards ?? new();
+        var scales = quality.ReferenceScale && request.Trees
+            ? ReferenceScales(game, candidates.Where(c => c.Kind != "Grass").Select(c => c.Record.FormKey).ToHashSet(), progress, ct)
+            : new Dictionary<FormKey, float>();
         var loader = TextureLoader(read);
+        var grassLoader = TextureLoader(read, preserveResolution: quality.GrassTextures != GrassTextureMode.Basic);
         int index = 0;
         foreach (var candidate in candidates.OrderBy(c => c.Record.FormKey.ToString(), StringComparer.Ordinal))
         {
@@ -79,6 +87,7 @@ public static partial class TextureGeneration
             string target = $@"textures\terrain\lodgen\{candidate.Plugin.ToLowerInvariant()}\{stem}_{record.FormKey.ID:x8}";
             var rule = rules.GetValueOrDefault(record.FormKey);
             bool isGrass = candidate.Kind == "Grass";
+            float scale = rule?.Scale ?? (isGrass ? 1 : scales.GetValueOrDefault(record.FormKey, quality.UnplacedTreeScale));
             var list = lists[isGrass ? "Grass" : "Tree"];
             string entry = $"{record.FormKey.ModKey};{record.FormKey.ID:X8};{record.EditorID}";
             progress?.Report($"Rendering billboard {++index}/{candidates.Length}: {path}");
@@ -117,17 +126,28 @@ public static partial class TextureGeneration
 
                 if (!TreeMaterials.TryApply(mesh, TreeMaterials.Read(game, model), out mesh, out var variantError))
                     throw new InvalidDataException(variantError);
-                float scale = rule?.Scale ?? 1;
-                var img = BillboardRenderer.Render(mesh, loader, request.BillboardMaxSize, vertexColors: !isGrass,
-                    unitsPerPixel: request.UnitsPerPixel / scale, brightness: request.Brightness, materials: request.Materials)
+                BillboardImage? Render(BillboardView view) => BillboardRenderer.Render(mesh, isGrass ? grassLoader : loader, request.BillboardMaxSize, vertexColors: !isGrass,
+                    unitsPerPixel: request.UnitsPerPixel / scale, brightness: request.Brightness, materials: request.Materials,
+                    view: view, originCentered: true, grassTextures: isGrass ? quality.GrassTextures : GrassTextureMode.Basic,
+                    complexGrassThreshold: quality.ComplexGrassThreshold);
+                var img = Render(BillboardView.Front)
                     ?? throw new InvalidDataException("The model rendered no visible pixels.");
+                var side = quality.HdViews ? Render(BillboardView.Side) : null;
+                if (quality.HdViews && side is null) warn($"{path}: the side view has no visible surface; crossed cards will reuse the front view.");
                 var diffuseBytes = TextureImages.Encode(new(img.Rgba, img.Width, img.Height), alpha: true);
                 write(target + ".dds", diffuseBytes); write(target + "_1.dds", diffuseBytes);
                 write(target + "_1_n.dds", TextureImages.Encode(new(img.NormalRgba!, img.Width, img.Height), normal: true));
+                if (side is not null)
+                {
+                    write(target + "_2.dds", TextureImages.Encode(new(side.Rgba, side.Width, side.Height), alpha: true));
+                    write(target + "_2_n.dds", TextureImages.Encode(new(side.NormalRgba!, side.Width, side.Height), normal: true));
+                }
                 string metadata = FormattableString.Invariant($"[LOD]\r\nWidth={img.WorldWidth:F6}\r\nHeight={img.WorldHeight:F6}\r\nShiftX=0\r\nShiftY=0\r\nShiftZ={img.ShiftZ:F6}\r\nScale=1.000000\r\nWidth_1={img.WorldWidth:F6}\r\nHeight_1={img.WorldHeight:F6}\r\nModel={path}\r\nGenerator=AnvilLOD native textures\r\n");
+                metadata += FormattableString.Invariant($"ResolutionScale={scale:R}\r\n");
+                if (side is not null) metadata += FormattableString.Invariant($"Width_2={side.WorldWidth:F6}\r\nHeight_2={side.WorldHeight:F6}\r\n");
                 write(target + ".txt", Encoding.UTF8.GetBytes(metadata));
                 list.Add(entry + ",True");
-                items.Add(new(candidate.Kind, path, target + ".dds", "Written", record.FormKey.ToString(), img.Width, img.Height));
+                items.Add(new(candidate.Kind, path, target + ".dds", "Written", FormattableString.Invariant($"{record.FormKey}; resolution scale {scale:R}; {(side is null ? "front view" : "front and side views")}"), img.Width, img.Height));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             { items.Add(new(candidate.Kind, path, target + ".dds", "Failed", ex.Message)); progress?.Report("ERROR: " + ex.Message); }
@@ -136,7 +156,22 @@ public static partial class TextureGeneration
             write($@"textures\terrain\lodgen\TexGen_SSE_{kind}_Billboards.txt", Encoding.UTF8.GetBytes(string.Join("\r\n", entries) + "\r\n"));
     }
 
-    private static BillboardRenderer.TextureLoader TextureLoader(Func<string, byte[]?> read)
+    private static Dictionary<FormKey, float> ReferenceScales(GameContext game, HashSet<FormKey> candidates, IProgress<string>? progress, CancellationToken ct)
+    {
+        progress?.Report("Finding maximum placed tree scales for billboard resolution...");
+        var result = new Dictionary<FormKey, float>();
+        foreach (var reference in game.LoadOrder.PriorityOrder.PlacedObject().WinningOverrides())
+        {
+            ct.ThrowIfCancellationRequested();
+            if (reference.IsDeleted || reference.Base.FormKeyNullable is not { } key || !candidates.Contains(key)) continue;
+            float scale = reference.Scale ?? 1;
+            if (float.IsFinite(scale) && scale > 0) result[key] = MathF.Max(result.GetValueOrDefault(key), scale);
+        }
+        progress?.Report($"Billboard resolution: reference scales found for {result.Count:N0} tree records.");
+        return result;
+    }
+
+    private static BillboardRenderer.TextureLoader TextureLoader(Func<string, byte[]?> read, bool preserveResolution = false)
     {
         // Reuse diffuse inputs across records. A bounded FIFO prevents large profiles from retaining every decoded image.
         var cache = new Dictionary<string, (byte[], int, int)>(StringComparer.OrdinalIgnoreCase);
@@ -150,7 +185,7 @@ public static partial class TextureGeneration
             // Normal alpha is gloss/specular, not opacity. Do not let it weight RGB filtering.
             if (path.EndsWith("_n.dds", StringComparison.OrdinalIgnoreCase))
                 for (int i = 3; i < image.Pixels.Length; i += 4) image.Pixels[i] = 255;
-            while (image.Width > 1024 || image.Height > 1024)
+            while (!preserveResolution && (image.Width > 1024 || image.Height > 1024))
             {
                 var smaller = TreeAtlasBuilder.Downsample(image.Pixels, image.Width, image.Height);
                 image = new(smaller.Rgba, smaller.W, smaller.H);

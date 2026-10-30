@@ -18,8 +18,8 @@ Existing TexGen output can supply textures for unsupported features underneath t
   conversion recipes are supported.
   Generated DDS files use BC7 and mipmaps; copy rules preserve the source format.
 - **Tree billboards** renders winning TREE and tree-flagged STAT models, including record
-  texture replacements, inclusion rules and seasonal replacement records. Height and
-  resolution controls use mesh bounds. [Material calibration](MATERIALS.md) controls
+  texture replacements, inclusion rules and seasonal replacement records. Height limits
+  use mesh bounds; texture resolution also considers placed scale. [Material calibration](MATERIALS.md) controls
   source normal maps, lighting, brightness and supported PBR/AO baking.
   Automatic discovery excludes whole trees whose animated, blended or view-dependent
   effects cannot be rendered as static billboards. The texture report explains each
@@ -39,6 +39,34 @@ Existing TexGen output can supply textures for unsupported features underneath t
 For existing hybrid trees, enable **Hybrid tree trunk textures** and **3D tree LOD**,
 then run textures followed by LOD. Near/far model selection, budgets and native reduction
 are configured separately; see [3D trees](TREES.md).
+
+## HD billboards and complex grass
+
+**HD front and side billboards** writes separate diffuse/normal pairs for two perpendicular
+views. Object-LOD tree cards and atlased grass use both views; standard BTT tree LOD uses
+the front image. Each view has its own width and height. Images include transparent space
+around the model origin so an off-center crown stays aligned with its trunk. An empty side
+view produces a warning and the front image is reused. Disable HD views to generate one view.
+
+**Size tree textures for the largest placed reference** increases resolution for large
+winning TREE/STAT placements, up to **Maximum billboard size**. **World units per pixel**
+sets the base detail. **Unplaced tree resolution scale** applies when no placement exists
+or discovery is disabled. A billboard rule's explicit `Scale=` takes precedence. These
+controls change pixel resolution, not model size; physical dimensions remain in model
+units. Discovery includes disabled and interior placements as a conservative resolution
+estimate and does not change which references appear in LOD.
+
+**Grass texture layout** defaults to **Auto**. It detects the packed complex-grass layout
+used by Community Shaders: color/opacity in the top half and tangent normals in the bottom
+half. Each material is detected independently using the bottom-left normal sample and
+**Complex grass detection threshold**. **Basic** disables detection; **Packed** forces this
+layout for all grass rendered by the job. The two halves are separated before resizing.
+Normal maps and their atlas mipmaps are normalized without weighting by specular alpha.
+
+This supports packed color and normals, not the full grass shader: specular alpha, wind,
+translucency and view-dependent lighting are not reproduced. Source-normal baking and
+material calibration still apply. Regenerate **Textures, then LOD** to use these changes;
+changing billboard settings does not require a new grass placement cache.
 
 ## Previews, reports and replacement
 
@@ -133,9 +161,9 @@ follows the [ImagingLib sampling filters](https://github.com/ElminsterAU/imaging
 
 ## Supported scope
 
-Texture generation supports source normals and a configurable static PBR/AO bake, but
-does not reproduce the game's full shader. Full HD billboard parity, complex-grass shading
-and reference-scale discovery remain unsupported. [Seasons](SEASONS.md) uses written swap INIs.
+Texture generation supports front/side billboards, packed grass color/normals, reference-scale
+resolution selection and a configurable static PBR/AO bake. It does not reproduce the game's
+full shader or promise identical output to TexGen. [Seasons](SEASONS.md) uses written swap INIs.
 Recipe parsing and rendering are native; resource directories named `DynDOLOD` do not
 require TexGen/DynDOLOD executables. Resource files and models must still be supplied by
 their authors and installed with their required mods.

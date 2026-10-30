@@ -43,7 +43,7 @@ public sealed class TreeAtlasBuilder
         public byte[]? Rgba;
     }
 
-    public Output Build(IReadOnlyList<Input> inputs, CancellationToken ct = default)
+    public Output Build(IReadOnlyList<Input> inputs, CancellationToken ct = default, bool normalMap = false)
     {
         var errors = new Dictionary<string, string>(StringComparer.Ordinal);
         var items = new List<Item>();
@@ -79,8 +79,9 @@ public sealed class TreeAtlasBuilder
         Parallel.ForEach(items, RunLimits.Parallel(ct), it =>
         {
             var (rgba, w, h, _) = DdsFile.DecodeTopMip(it.File);
-            for (int f = it.Factor; f > 1; f /= 2) (rgba, w, h) = Downsample(rgba, w, h);
-            if (MathF.Abs(Brightness - 1f) > 0.001f)
+            for (int f = it.Factor; f > 1; f /= 2) (rgba, w, h) = Downsample(rgba, w, h, alphaWeighted: !normalMap);
+            if (normalMap) Normalize(rgba);
+            if (!normalMap && MathF.Abs(Brightness - 1f) > 0.001f)
                 for (int i = 0; i < rgba.Length; i += 4)
                     for (int c = 0; c < 3; c++)
                         rgba[i + c] = (byte)Math.Clamp((int)MathF.Round(rgba[i + c] * Brightness), 0, 255);
@@ -90,6 +91,7 @@ public sealed class TreeAtlasBuilder
 
         // Compose the top level.
         var atlas = new byte[size * size * 4];
+        if (normalMap) Normalize(atlas, flat: true);
         foreach (var it in items)
             for (int y = 0; y < it.H; y++)
                 it.Rgba.AsSpan(y * it.W * 4, it.W * 4).CopyTo(atlas.AsSpan(((it.Y + y) * size + it.X) * 4));
@@ -98,13 +100,15 @@ public sealed class TreeAtlasBuilder
         int blocksPerRow = size / 4;
         var top = new byte[blocksPerRow * blocksPerRow * 16];
         var empty = new byte[16];
-        Bc7Encoder.EncodeBlock(new byte[64], empty);
+        var emptyPixels = new byte[64];
+        if (normalMap) Normalize(emptyPixels, flat: true);
+        Bc7Encoder.EncodeBlock(emptyPixels, empty);
         for (int i = 0; i < top.Length; i += 16) empty.CopyTo(top, i);
         Parallel.ForEach(items, RunLimits.Parallel(ct), it =>
         {
             int bw = (it.W + 3) / 4, bh = (it.H + 3) / 4;
             byte[] blocks;
-            if (it.Factor == 1 && it.Info.Format == BcFormat.Bc7 && MathF.Abs(Brightness - 1f) <= 0.001f)
+            if (!normalMap && it.Factor == 1 && it.Info.Format == BcFormat.Bc7 && MathF.Abs(Brightness - 1f) <= 0.001f)
                 blocks = DdsFile.TopMipBlocks(it.File, it.Info).ToArray();
             else
                 blocks = Bc7Encoder.EncodeImage(it.Rgba!, it.W, it.H);
@@ -119,10 +123,11 @@ public sealed class TreeAtlasBuilder
         while (levelSize > 4)
         {
             ct.ThrowIfCancellationRequested();
-            (level, levelSize, _) = Downsample(level, levelSize, levelSize);
+            (level, levelSize, _) = Downsample(level, levelSize, levelSize, alphaWeighted: !normalMap);
+            if (normalMap) Normalize(level);
             int shift = mips.Count;
             var output = (byte[])level.Clone();
-            foreach (var it in items)
+            foreach (var it in normalMap ? [] : items)
             {
                 int x0 = it.X >> shift, y0 = it.Y >> shift;
                 int x1 = Math.Max(x0 + 1, (it.X + it.W + (1 << shift) - 1) >> shift);
@@ -140,6 +145,16 @@ public sealed class TreeAtlasBuilder
             it => new AtlasRect((float)it.X / size, (float)it.Y / size, (float)(it.X + it.W) / size, (float)(it.Y + it.H) / size),
             StringComparer.Ordinal);
         return new Output(ms.ToArray(), rects, size, cap, reduced, errors);
+    }
+
+    private static void Normalize(byte[] pixels, bool flat = false)
+    {
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            if (flat) { pixels[i] = 128; pixels[i + 1] = 128; pixels[i + 2] = 255; }
+            else TextureImages.Normalize(pixels, i);
+            pixels[i + 3] = 255;
+        }
     }
 
     /// <summary>Shelf packing, tallest first, positions on 4-pixel (block) boundaries with a gutter.</summary>

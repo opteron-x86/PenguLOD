@@ -408,6 +408,18 @@ public sealed class DesktopTests : IDisposable
         Assert.False(RequestFactory.Textures(window.Settings.Snapshot()).TreeTrunks);
         trunks.SetCurrentValue(CheckBox.IsCheckedProperty, true);
         Assert.True(RequestFactory.Textures(window.Settings.Snapshot()).TreeTrunks);
+        var hd = window.GetVisualDescendants().OfType<CheckBox>().Single(c => c.Content as string == "HD front and side billboards");
+        Assert.True(hd.IsChecked);
+        hd.SetCurrentValue(CheckBox.IsCheckedProperty, false);
+        var layout = window.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "TextureGenGrassTextures");
+        layout.SelectedItem = "Basic";
+        var scale = window.GetVisualDescendants().OfType<NumericUpDown>().Single(c => c.Name == "TextureGenUnplacedTreeScale");
+        scale.Value = 2;
+        var billboardSettings = RequestFactory.Textures(window.Settings.Snapshot()).Billboards!;
+        Assert.False(billboardSettings.HdViews); Assert.Equal(2f, billboardSettings.UnplacedTreeScale);
+        Assert.Equal(AnvilLOD.Plugins.Authoring.GrassTextureMode.Basic, billboardSettings.GrassTextures);
+        string preset = Path.Combine(fixture.Root, "billboard-settings.json"); SettingsStore.Write(preset, window.Settings);
+        Assert.Equal(billboardSettings, RequestFactory.Textures(SettingsStore.Read(preset)).Billboards);
         await window.RunTextureGeneration(false);
         Assert.True(window.Settings.UseGeneratedTextures);
         Assert.True(TextureGenerationManifest.Read(fixture.Output, true)!.Complete);
