@@ -516,9 +516,9 @@ public static class ScanPipeline
                     if (!assets.TryOpenSource(path, out var stream)) return null;
                     using (stream) { using var buffer = new MemoryStream(); stream.CopyTo(buffer); return buffer.ToArray(); }
                 }
-                recipeMapper = new(recipeSet, assets, req.OutputFolder ?? Path.GetTempPath(), RecipeSource);
+                recipeMapper = new(recipeSet, assets, req.OutputFolder ?? Path.GetTempPath(), RecipeSource, Warn);
                 progress?.Report("Fingerprinting recipe sources and record texture variants...");
-                req = req with { SettingsFingerprint = req.SettingsFingerprint + "|recipes3:" + recipeMapper.InputFingerprint(scan.TextureVariants?.Values ?? []) };
+                req = req with { SettingsFingerprint = req.SettingsFingerprint + "|recipes4:" + recipeMapper.InputFingerprint(scan.TextureVariants?.Values ?? []) };
             }
         }
 
@@ -762,7 +762,7 @@ public static class ScanPipeline
             else ParentCopyWriter.Remove(output);
 
             recipeMapper?.ThrowIfFailed();
-            if (recipeMapper is not null) progress?.Report($"Recipe mapping: {recipeMapper.Report.Count(r => r.Status == "Variant")} variant materials, {recipeMapper.Report.Count(r => r.Status == "Mapped")} UV mappings, {recipeMapper.Report.Count(r => r.Status == "Retained")} materials retained; details in PenguLOD.recipes.json.");
+            if (recipeMapper is not null) progress?.Report($"Recipe mapping: {recipeMapper.Report.Count(r => r.Status == "Variant")} variant materials, {recipeMapper.Report.Count(r => r.Status == "Mapped")} UV mappings, {recipeMapper.Report.Count(r => r.Status == "Retained")} materials retained, {recipeMapper.Report.Count(r => r.Status == "Fallback")} missing-replacement fallbacks; details in PenguLOD.recipes.json.");
             if (pbrLod is not null)
             {
                 try

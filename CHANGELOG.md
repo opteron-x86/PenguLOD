@@ -5,6 +5,17 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.7] - 2026-10-29
+
+- Missing recipe texture replacements now retain the affected material's supplied LOD
+  textures and UVs. Valid matches on other materials and record/season variants continue.
+- Fallback warnings identify the model, shape and missing file in the run log, pipeline
+  receipt and `PenguLOD.recipes.json`. Repeated uses of the same fallback warn once.
+- A fallback requires the supplied LOD textures to exist. Corrupt texture data, broken
+  recipe inputs, cycles and conflicting mappings still fail safely. Installing missing
+  replacements invalidates affected cached output; recipe-mapped blocks rebuild after
+  this update.
+
 ## [0.4.0-alpha.6] - 2026-10-29
 
 - Fixed full-model texture matching for atlases made from one repeated source, including

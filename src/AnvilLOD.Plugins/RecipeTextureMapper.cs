@@ -23,16 +23,21 @@ public sealed class RecipeTextureMapper
     private readonly IAssetSource _assets;
     private readonly Func<string, byte[]?> _read;
     private readonly string _output;
+    private readonly Action<string> _warn;
     private readonly object _gate = new();
     private readonly Dictionary<string, (string Diffuse, string? Normal)> _variants = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _hashes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, MappingReport> _report = new(StringComparer.Ordinal);
-    public sealed record MappingReport(string Shape, string Source, string Destination, string Status, string Detail);
-    public IReadOnlyList<MappingReport> Report { get { lock (_gate) return _report.Values.OrderBy(r => r.Source).ThenBy(r => r.Shape).ToArray(); } }
+    public sealed record MappingReport(string Shape, string Source, string Destination, string Status, string Detail)
+    {
+        public string Model { get; init; } = "";
+    }
+    public IReadOnlyList<MappingReport> Report { get { lock (_gate) return _report.Values.OrderBy(r => r.Model).ThenBy(r => r.Source).ThenBy(r => r.Shape).ToArray(); } }
 
-    public RecipeTextureMapper(TextureRecipeSet recipes, IAssetSource assets, string output, Func<string, byte[]?>? readSource = null)
+    public RecipeTextureMapper(TextureRecipeSet recipes, IAssetSource assets, string output, Func<string, byte[]?>? readSource = null, Action<string>? warn = null)
     {
         _recipes = recipes; _plans = recipes.Compile(); _recipeFingerprint = recipes.Fingerprint; _assets = assets; _output = output;
+        _warn = warn ?? (_ => { });
         _explicitInputs = recipes.Entries.Select(e => e.Copy?.Source ?? e.Tile?.Source ?? e.Conversion!.Source)
             .SelectMany(p => p.Split('|')).ToHashSet(StringComparer.OrdinalIgnoreCase);
         _read = readSource ?? ReadAsset;
@@ -74,17 +79,38 @@ public sealed class RecipeTextureMapper
         return OutputSnapshot.HashText(_recipeFingerprint + "\n" + string.Join('\n', paths.Order(StringComparer.OrdinalIgnoreCase).Select(p => p + "=" + Hash(p))));
     }
 
-    public LodMeshPart? Map(LodMeshPart part, IReadOnlyList<TextureMatchInput> inputs)
+    public LodMeshPart? Map(LodMeshPart part, IReadOnlyList<TextureMatchInput> inputs) => Map("", part, inputs);
+
+    public LodMeshPart? Map(string model, LodMeshPart part, IReadOnlyList<TextureMatchInput> inputs)
     {
         lock (_gate)
         {
             string source = GamePath.NormalizeTexture(part.Material.Textures[0]);
-            try { return MapCore(part, inputs, source); }
+            try { return MapCore(model, part, inputs, source); }
             catch (Exception ex) when (ex is not OperationCanceledException)
-            { Record(part, source, "", "Failed", ex.Message); throw new InvalidDataException($"Recipe mapping for {part.Name} ({source}): {ex.Message}", ex); }
+            {
+                string detail = ex.Message;
+                if (ex is MissingReplacementTextureException)
+                {
+                    var missing = part.Material.Textures.Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Where(p => !_assets.Exists(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                    if (missing.Length == 0)
+                    {
+                        detail += "; kept this material's supplied LOD textures and UVs. Other texture matches remain enabled.";
+                        if (Record(model, part, source, source, "Fallback", detail))
+                            _warn($"Texture matching fallback for {model} [{part.Name}]: {detail}");
+                        // Returning the original part also prevents the non-recipe matcher
+                        // from applying a partial replacement after this fallback.
+                        return part;
+                    }
+                    detail += "; cannot retain the supplied LOD material because its textures are also missing: " + string.Join(", ", missing);
+                }
+                Record(model, part, source, "", "Failed", detail);
+                throw new InvalidDataException($"Recipe mapping for {model} [{part.Name}] ({source}): {detail}", ex);
+            }
         }
     }
-    private LodMeshPart? MapCore(LodMeshPart part, IReadOnlyList<TextureMatchInput> inputs, string source)
+    private LodMeshPart? MapCore(string model, LodMeshPart part, IReadOnlyList<TextureMatchInput> inputs, string source)
     {
         bool known = _plans.ContainsKey(source);
         string destination = source;
@@ -93,17 +119,17 @@ public sealed class RecipeTextureMapper
         {
             if (part.UVs.Length == 0 || part.UVs.Any(p => !float.IsFinite(p.X) || !float.IsFinite(p.Y))) return null;
             if (part.Material.Passthru is { } pt && (pt.UvScaleX != 1 || pt.UvScaleY != 1 || pt.UvOffsetX != 0 || pt.UvOffsetY != 0))
-            { Record(part, source, source, "Retained", "Shader UV transform requires a separate full texture."); return null; }
+            { Record(model, part, source, source, "Retained", "Shader UV transform requires a separate full texture."); return null; }
             if (part.Material.Textures.Skip(2).Any(p => !string.IsNullOrWhiteSpace(p)))
-            { Record(part, source, source, "Retained", "Additional texture channels require their original UVs."); return null; }
+            { Record(model, part, source, source, "Retained", "Additional texture channels require their original UVs."); return null; }
             var min = part.UVs.Aggregate(Vector2.Min); var max = part.UVs.Aggregate(Vector2.Max);
             RecipeUvMapping[] mappings;
             try { mappings = _layout.Find(source, min, max).Where(p => !p.Destination.Equals(source, StringComparison.OrdinalIgnoreCase)).ToArray(); }
             catch (FileNotFoundException ex)
-            { Record(part, source, source, "Retained", ex.Message + "; retained the full texture."); return null; }
+            { Record(model, part, source, source, "Retained", ex.Message + "; retained the full texture."); return null; }
             if (mappings.Length == 0) return null;
             if (mappings.Length > 1)
-            { Record(part, source, source, "Retained", "Several recipe layouts cover these UVs; kept the full texture to avoid an ambiguous remap."); return null; }
+            { Record(model, part, source, source, "Retained", "Several recipe layouts cover these UVs; kept the full texture to avoid an ambiguous remap."); return null; }
             destination = mappings[0].Destination; scale = mappings[0].Scale; offset = mappings[0].Offset;
         }
         var placements = _layout.Placements(destination);
@@ -141,7 +167,7 @@ public sealed class RecipeTextureMapper
                 else
                 {
                     if (changed && input.Alternate) throw new InvalidDataException("Alternate texture for " + input.Shape + " cannot be associated with a source tile in " + destination + ". Check the full-model and LOD shape names and recipe sources.");
-                    Record(part, source, source, "Retained", "Full-model texture " + original + " cannot be associated with a unique atlas tile.");
+                    Record(model, part, source, source, "Retained", "Full-model texture " + original + " cannot be associated with a unique atlas tile.");
                     continue;
                 }
             }
@@ -174,7 +200,7 @@ public sealed class RecipeTextureMapper
         var textures = part.Material.Textures.ToList(); textures[0] = destination;
         if (normalPath is not null) { while (textures.Count < 2) textures.Add(""); textures[1] = normalPath; }
         var mapped = Copy(part, part.Material with { Textures = textures }, part.UVs.Select(p => p * scale + offset).ToArray());
-        Record(part, source, destination, needsVariant ? "Variant" : "Mapped", known ? "Recipe atlas rebuilt; original UVs retained." : "Recipe UV layout applied.");
+        Record(model, part, source, destination, needsVariant ? "Variant" : "Mapped", known ? "Recipe atlas rebuilt; original UVs retained." : "Recipe UV layout applied.");
         return mapped;
     }
 
@@ -199,8 +225,8 @@ public sealed class RecipeTextureMapper
         }
         finally { Directory.Delete(scratch, true); }
     }
-    private void Record(LodMeshPart part, string source, string destination, string status, string detail)
-    { var row = new MappingReport(part.Name ?? "", source, destination, status, detail); _report[JsonSerializer.Serialize(row)] = row; }
+    private bool Record(string model, LodMeshPart part, string source, string destination, string status, string detail)
+    { var row = new MappingReport(part.Name ?? "", source, destination, status, detail) { Model = model }; return _report.TryAdd(JsonSerializer.Serialize(row), row); }
     private static bool Same(string? a, string? b) => string.Equals(a?.Replace('/', '\\'), b?.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
     public void SaveReport()
     { Directory.CreateDirectory(_output); File.WriteAllText(Path.Combine(_output, "PenguLOD.recipes.json"), JsonSerializer.Serialize(Report, PersistentPipeline.Json)); }

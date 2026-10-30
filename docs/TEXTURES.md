@@ -82,8 +82,16 @@ require distinct names before generation. A full-model texture path changed by a
 patch can be associated by an unambiguous source/UV region; unresolved associations are
 reported rather than guessed.
 
+If a matched diffuse texture or explicit normal map is missing, PenguLOD keeps that
+material's supplied LOD textures and UVs and logs a warning naming the model, shape and
+missing file. Other materials and record/season variants continue to use texture matching.
+This fallback requires the supplied LOD textures to exist. Invalid texture data, broken
+recipe inputs, cycles and conflicting replacements still fail generation. Installing the
+missing replacement and regenerating restores the intended match automatically.
+
 `PenguLOD.recipes.json` in LOD output lists material mappings, generated variants, retained
-full textures and failures. Variant textures live under `textures/pengulod/recipes` in
+full textures, missing-replacement fallbacks and failures, with the source model path.
+Fallback warnings also appear in the run log and pipeline receipt. Variant textures live under `textures/pengulod/recipes` in
 LOD output. Keep texture output enabled underneath it. The texture manifest also owns
 original input copies under `textures/pengulod/recipe-inputs` for in-place conversions;
 keep those files with the output so subsequent jobs never process an already-adjusted
