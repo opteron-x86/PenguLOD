@@ -6,6 +6,7 @@ using AnvilLOD.Meshes.Nif;
 using AnvilLOD.Meshes.Authoring;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.Lod;
+using AnvilLOD.Plugins.Authoring;
 
 namespace AnvilLOD.Plugins;
 
@@ -42,12 +43,13 @@ public sealed record Tree3DLevelReport(string Model, int Level, string SourceMod
 public sealed class Tree3DSource : ISyntheticMeshSource
 {
     public const string Prefix = "~anvillod-tree3d|";
-    private const int Version = 6;
+    private const int Version = 7;
 
     private readonly AssetIndex _assets;
     private readonly float _brightness;
     private readonly Tree3DSettings _settings;
     private readonly TreeAlphaCoverage _alpha;
+    private readonly HybridTreeAuthor? _hybrids;
     private readonly Dictionary<(string Model, int Level, bool Native, string? Variant), Selection> _selections = [];
     private readonly ConcurrentDictionary<string, string> _fingerprints = new(StringComparer.Ordinal);
     public sealed record Selection(string? MeshPath, string Source, int OriginalTriangles, int Triangles, int Vertices, string Method, string? Reason,
@@ -61,6 +63,7 @@ public sealed class Tree3DSource : ISyntheticMeshSource
         _alpha = new(assets);
         _brightness = brightness;
         _settings = settings ?? new Tree3DSettings(true); _settings.Validate();
+        _hybrids = _settings.HybridTrunks ? new(assets, _settings) : null;
     }
 
     public static string MeshPath(string modelPath) => Prefix + modelPath;
@@ -76,6 +79,7 @@ public sealed class Tree3DSource : ISyntheticMeshSource
     /// came out as strips with holes between them.
     /// </summary>
     public bool MapTextures(string path) => true;
+    public int PublishHybridTextures(string output) => _hybrids?.Publish(output) ?? 0;
 
     public string? Fingerprint(string path)
         => Owns(path) ? FormattableString.Invariant($"t{Version}|b{_brightness:F3}|{_settings.Fingerprint}|{_assets.Fingerprint(SourcePath(path))}")
@@ -164,6 +168,8 @@ public sealed class Tree3DSource : ISyntheticMeshSource
         if (raw is null) return Save(new(null, selected, 0, 0, 0, "Billboard", "Source model cannot be read."));
         if (!TreeMaterials.TryApply(raw, variant, out raw, out var variantError))
             return Save(new(null, selected, 0, 4, 8, "Billboard", variantError));
+        string? hybridReason = null;
+        var hybrid = native && _hybrids is not null ? _hybrids.Build(raw, out hybridReason) : null;
         if (native) raw = NativeMaterial(raw);
         int budget = level == 4 ? _settings.NearTriangleBudget : _settings.FarTriangleBudget;
         float error = level == 4 ? _settings.NearMaxError : _settings.FarMaxError;
@@ -175,7 +181,13 @@ public sealed class Tree3DSource : ISyntheticMeshSource
             target = budget > 0 ? Math.Min(budget, lowerCost) : lowerCost;
         }
         float? foliageLoss = _settings.ReduceFoliage ? level == 4 ? _settings.NearFoliageLoss : _settings.FarFoliageLoss : null;
-        var reduced = TreeMeshReducer.Reduce(raw, target, error, foliageLoss, _alpha.Sampler);
+        if (hybrid is not null && target is > 0 and <= 4)
+            return Save(new(null, selected, raw.Parts.Sum(p => p.TriangleCount), 4, 8, "Billboard", "Hybrid trunk cards leave no budget for the crown."));
+        var reduced = TreeMeshReducer.Reduce(hybrid is null ? raw : NativeMaterial(hybrid.Crown),
+            hybrid is not null && target > 0 ? target - 4 : target, error, foliageLoss, _alpha.Sampler);
+        if (hybrid is not null)
+            reduced = reduced with { Mesh = new LodMesh { Path = raw.Path, Parts = [.. reduced.Mesh.Parts, .. hybrid.Cards] },
+                OriginalTriangles = raw.Parts.Sum(p => p.TriangleCount), Triangles = reduced.Triangles + 4 };
         if (budget > 0 && reduced.Triangles > budget) return Save(new(null, selected, reduced.OriginalTriangles, 4, 8, "Billboard",
             $"{reduced.Triangles:N0} triangles exceed LOD{level} budget {budget:N0} within the coverage limit. {reduced.FoliageNote}"));
         // A farther level must earn its cost: if the same mesh cannot be reduced, use crossed cards.
@@ -188,11 +200,13 @@ public sealed class Tree3DSource : ISyntheticMeshSource
         }
         string path = LevelPath(selected, level, native, variant);
         var processed = Process(path, reduced.Mesh)!; _built[path] = processed;
+        if (hybrid is not null) _hybrids!.Use(hybrid);
         _fingerprints[path] = "|variant:" + variant?.Id + "|textures:" + string.Join('|', raw.Parts
             .SelectMany(p => p.Material.Textures).Where(t => !string.IsNullOrWhiteSpace(t))
-            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).Select(_assets.Fingerprint));
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).Select(_assets.Fingerprint))
+            + (hybrid is null ? "" : "|hybrid:" + hybrid.Resources.Stem);
         return Save(new(path, selected, reduced.OriginalTriangles, reduced.Triangles, processed.Parts.Sum(p => p.VertexCount),
-            distinct ? "Authored far model" : native ? "Native source reduction" : reduced.Triangles < reduced.OriginalTriangles ? "Native reduction" : "Installed model", null,
+            hybrid is not null ? "Native hybrid" : distinct ? "Authored far model" : native ? "Native source reduction" : reduced.Triangles < reduced.OriginalTriangles ? "Native reduction" : "Installed model", hybridReason,
             reduced.FoliageTrianglesRemoved, reduced.FoliageCoverageLoss));
         Selection Save(Selection value) { _selections[key] = value; return value; }
     }

@@ -171,7 +171,7 @@ public static partial class TextureGeneration
         return result;
     }
 
-    private static BillboardRenderer.TextureLoader TextureLoader(Func<string, byte[]?> read, bool preserveResolution = false)
+    internal static BillboardRenderer.TextureLoader TextureLoader(Func<string, byte[]?> read, bool preserveResolution = false)
     {
         // Reuse diffuse inputs across records. A bounded FIFO prevents large profiles from retaining every decoded image.
         var cache = new Dictionary<string, (byte[], int, int)>(StringComparer.OrdinalIgnoreCase);
