@@ -62,7 +62,8 @@ public sealed record ScanRequest(
     string? GeneratedTextureFolder = null,
     string? GeneratedGrassFolder = null,
     string? GeneratedTerrainFolder = null, bool ObjectAtlas = false, int AtlasCellSize = 256,
-    AutomaticObjectSettings? AutomaticObjects = null, IReadOnlyList<string>? ResourcePacks = null);
+    AutomaticObjectSettings? AutomaticObjects = null, IReadOnlyList<string>? ResourcePacks = null,
+    bool OptimizeObjectTextures = false, int ObjectTextureSize = 1024);
 
 public sealed record ScanSummary(
     ScanStats Stats,
@@ -521,7 +522,7 @@ public static class ScanPipeline
         var hashes = new System.Collections.Concurrent.ConcurrentDictionary<QuadKey, string>();
         Parallel.ForEach(quads, RunLimits.Parallel(ct), kv =>
             hashes[kv.Key] = QuadHasher.Hash(kv.Key, kv.Value, Fingerprint,
-                req.SettingsFingerprint + (req.ObjectAtlas ? $"|atlas1:{req.AtlasCellSize}" : "") + (mapObjectLevel >= 0 ? $"|map32:{mapObjectLevel}" : "") + (MathF.Abs(req.ObjectBrightness - 1f) > 0.001f ? $"|bright:{req.ObjectBrightness:F2}" : "") + (req.PbrLod ? FormattableString.Invariant($"|pbr:{req.PbrLodBrightness:F2}:{req.PbrLodSize}") : "") + (ruleOptions.Candles ? "|candles" : "") + (ruleOptions.FxGlow ? "|fxglow" : "") + (ruleOptions.CustomFile is { } cf ? $"|rules:{new FileInfo(cf).Length}:{new FileInfo(cf).LastWriteTimeUtc.Ticks}" : "") + (req.SnowShaderMode != 0 ? $"|snowmode:{req.SnowShaderMode}" : "") + (req.SnowCover != 0 ? $"|snowcover:{req.SnowCover}" : "") + (req.MountainFit && req.MountainInset > 0f ? "|mtnfit1" : "") + (req.OpaqueAlpha ? "|opaque1" : "") + (req.DetailedShips ? FormattableString.Invariant($"|ships2:{LodInset.DefaultShip:F1}") : "") + (req.IceInset > 0f ? FormattableString.Invariant($"|iceinset:{req.IceInset:F1}") : "") + (req.MountainInset > 0f ? FormattableString.Invariant($"|mtninset:{req.MountainInset:F1}") : "") + (req.ObjectInset > 0f ? FormattableString.Invariant($"|objinset:{req.ObjectInset:F1}") : "") + (cullTerrain is null ? "|keep-buried"
+                req.SettingsFingerprint + (req.ObjectAtlas ? $"|atlas{ObjectAtlasStage.Version}:{req.AtlasCellSize}" : "") + (req.OptimizeObjectTextures ? $"|objecttextures{ObjectTextureOptimizationStage.Version}:{req.ObjectTextureSize}" : "") + (mapObjectLevel >= 0 ? $"|map32:{mapObjectLevel}" : "") + (MathF.Abs(req.ObjectBrightness - 1f) > 0.001f ? $"|bright:{req.ObjectBrightness:F2}" : "") + (req.PbrLod ? FormattableString.Invariant($"|pbr:{req.PbrLodBrightness:F2}:{req.PbrLodSize}") : "") + (ruleOptions.Candles ? "|candles" : "") + (ruleOptions.FxGlow ? "|fxglow" : "") + (ruleOptions.CustomFile is { } cf ? $"|rules:{new FileInfo(cf).Length}:{new FileInfo(cf).LastWriteTimeUtc.Ticks}" : "") + (req.SnowShaderMode != 0 ? $"|snowmode:{req.SnowShaderMode}" : "") + (req.SnowCover != 0 ? $"|snowcover:{req.SnowCover}" : "") + (req.MountainFit && req.MountainInset > 0f ? "|mtnfit1" : "") + (req.OpaqueAlpha ? "|opaque1" : "") + (req.DetailedShips ? FormattableString.Invariant($"|ships2:{LodInset.DefaultShip:F1}") : "") + (req.IceInset > 0f ? FormattableString.Invariant($"|iceinset:{req.IceInset:F1}") : "") + (req.MountainInset > 0f ? FormattableString.Invariant($"|mtninset:{req.MountainInset:F1}") : "") + (req.ObjectInset > 0f ? FormattableString.Invariant($"|objinset:{req.ObjectInset:F1}") : "") + (cullTerrain is null ? "|keep-buried"
                     : "|terrain:" + (cullTerrain.Fingerprints.TryGetValue(kv.Key.Worldspace, out var tf) ? tf : "none") + (req.RemoveUnderwater ? "|water:" + cullTerrain.Heights.WaterFingerprint(kv.Key.Worldspace) : "")),
                 id => scan.TextureVariants is { } tv && tv.TryGetValue(id, out var v) ? Fingerprint(v.FullModel) : null));
         sw.Stop();
@@ -534,9 +535,12 @@ public static class ScanPipeline
             && scopeWorldspaces.Contains(ws)
             && (req.Levels is not { Count: > 0 } || req.Levels.Contains((LodLevel)lv));
         var plan = manifest.Plan(hashes, staged?.Output ?? req.OutputFolder, InScope);
-        if (req.ObjectAtlas) plan = new BuildPlan(hashes.Keys.ToArray(),[],plan.StaleFiles); // atlas layout can affect every block
+        if (req.ObjectAtlas || req.OptimizeObjectTextures) plan = new BuildPlan(hashes.Keys.ToArray(),[],plan.StaleFiles); // material layout and texture inputs can affect every block
         if (staged is not null) plan = staged.SeedLodBlocks(plan, progress);
         if(req.AtlasCellSize is <64 or >512 || (req.AtlasCellSize&(req.AtlasCellSize-1))!=0)throw new ArgumentException("Atlas cell size must be a power of two from 64 to 512.");
+
+        if (req.ObjectTextureSize is < 128 or > 4096 || (req.ObjectTextureSize & (req.ObjectTextureSize - 1)) != 0)
+            throw new ArgumentException("Object texture size must be a power of two from 128 to 4096.");
 
         GenerateStats? gen = null;
         TreeGenerateStats? trees = null;
@@ -567,22 +571,35 @@ public static class ScanPipeline
         if (req.Generate)
         {
             var output = req.OutputFolder!;
+            if (!req.ObjectAtlas) File.Delete(Path.Combine(output, "PenguLOD.atlas.json"));
+            if (!req.OptimizeObjectTextures) File.Delete(Path.Combine(output, "PenguLOD.object-textures.json"));
             progress?.Report($"Generating {plan.Rebuild.Count:N0} blocks ({plan.Unchanged.Count:N0} unchanged, skipped) into {output}...");
             var pbrLod = req.PbrLod ? new PbrLodTextures(assets) : null;
             var opaqueLod = req.OpaqueAlpha ? new OpaqueLodTextures(assets, OpaqueLodStage.IsTranslucent) : null;
             var seasonalVariants=scan.TextureVariants?.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.Ordinal);
             var generator = new LodGenerator(assets, cullTerrain?.Heights, new CompositeSyntheticSource(grass, cards, tree3d, ships)) { RemoveUnderwater = req.RemoveUnderwater, Brightness = req.ObjectBrightness, SnowShaderMode = req.SnowShaderMode, SnowCover = req.SnowCover, FitMountains = req.MountainFit && req.MountainInset > 0f, Pbr = pbrLod, Opaque = opaqueLod, Categorize = SizeBreakdown.Categorize, Inset = req.IceInset > 0f || req.MountainInset > 0f || req.ObjectInset > 0f || req.DetailedShips ? path => LodInset.For(path, req.IceInset, req.MountainInset, req.DetailedShips ? LodInset.DefaultShip : 0f, req.ObjectInset) : null, TextureVariants = seasonalVariants, RecipeMapper = recipeMapper is null ? null : recipeMapper.Map };
-            if (req.ObjectAtlas)
+            if (req.ObjectAtlas || req.OptimizeObjectTextures)
             {
-                var models=quads.Values.SelectMany(v=>v).SelectMany(r=>new[]{r.Meshes.Lod4,r.Meshes.Lod8,r.Meshes.Lod16,r.Meshes.Lod32}
-                        .OfType<string>().Where(p=>!p.StartsWith('~')).Select(p=>LodMeshKey.Make(p,r.TextureVariant))).Distinct(StringComparer.OrdinalIgnoreCase)
+                var models=quads.SelectMany(kv=>kv.Value.Select(r=>(Path:r.Meshes.For(kv.Key.Level),r.TextureVariant)))
+                    .Where(r=>r.Path is {Length:>0} && !r.Path.StartsWith('~')).Select(r=>LodMeshKey.Make(r.Path!,r.TextureVariant)).Distinct(StringComparer.OrdinalIgnoreCase)
                     .Select(p=>{ct.ThrowIfCancellationRequested();return generator.GetMesh(p);}).OfType<LodMesh>().ToArray();
                 // Mapping above discovers converted PBR/opaque inputs. Materialize them before packing paired pages.
                 if(pbrLod is not null && PbrLodStage.Run(assets,pbrLod,output,req.PbrLodSize,req.PbrLodBrightness,progress,ct) is {Failed:>0} pbrFailure)
-                    throw new InvalidDataException("Cannot atlas failed PBR inputs: "+string.Join("; ",pbrFailure.Errors));
+                    throw new InvalidDataException("Cannot prepare failed PBR material inputs: "+string.Join("; ",pbrFailure.Errors));
                 if(opaqueLod is not null && OpaqueLodStage.Run(assets,opaqueLod,output,progress,ct) is {Failed:>0} opaqueFailure)
-                    throw new InvalidDataException("Cannot atlas failed opaque inputs: "+string.Join("; ",opaqueFailure.Errors));
-                generator.ObjectAtlasTransform=ObjectAtlasStage.Build(models,assets,output,req.AtlasCellSize,progress,ct).Transform;
+                    throw new InvalidDataException("Cannot prepare failed opaque material inputs: "+string.Join("; ",opaqueFailure.Errors));
+                var atlas = req.ObjectAtlas ? ObjectAtlasStage.Build(models, assets, output, req.AtlasCellSize, progress, ct) : null;
+                var optimized = req.OptimizeObjectTextures ? ObjectTextureOptimizationStage.Build(
+                    atlas is null ? models : models.Select(atlas.Transform), assets, output, req.ObjectTextureSize, progress, ct) : null;
+                if (atlas?.Report.Warnings is { Count: > 0 } atlasWarnings)
+                    Warn($"Object atlas retained source materials for {atlasWarnings.Count:N0} texture inputs; see PenguLOD.atlas.json. First: {atlasWarnings[0]}");
+                if (optimized?.Report.Warnings is { Count: > 0 } textureWarnings)
+                    Warn($"Object texture optimization retained {textureWarnings.Count:N0} source inputs; see PenguLOD.object-textures.json. First: {textureWarnings[0]}");
+                generator.ObjectAtlasTransform = mesh =>
+                {
+                    var mapped = atlas?.Transform(mesh) ?? mesh;
+                    return optimized?.Transform(mapped) ?? mapped;
+                };
             }
             gen = generator.Generate(quads, plan.Rebuild, output, progress, ct);
             recipeMapper?.ThrowIfFailed();

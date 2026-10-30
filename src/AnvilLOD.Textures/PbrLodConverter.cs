@@ -71,22 +71,27 @@ public static class PbrLodConverter
     }
 
     /// <summary>Share of texels whose alpha, times <paramref name="scale"/>, passes the alpha test.</summary>
-    internal static float Coverage(byte[] rgba, float scale)
+    internal static float Coverage(byte[] rgba, float scale, int threshold = AlphaThreshold, bool quantized = false)
     {
         int count = 0, total = rgba.Length / 4;
         for (int i = 3; i < rgba.Length; i += 4)
-            if (rgba[i] * scale >= AlphaThreshold) count++;
+            if ((quantized ? MathF.Round(rgba[i] * scale) : rgba[i] * scale) >= threshold) count++;
         return total == 0 ? 0f : (float)count / total;
     }
 
-    internal static void KeepCoverage(byte[] rgba, float target)
+    internal static void KeepCoverage(byte[] rgba, float target, int threshold = AlphaThreshold, bool preserveMatching = false)
     {
+        if (preserveMatching && MathF.Abs(Coverage(rgba, 1, threshold) - target) <= .5f / Math.Max(1, rgba.Length / 4)) return;
         float lo = 0.25f, hi = 8f;
         for (int i = 0; i < 12; i++)
         {
             float mid = (lo + hi) / 2;
-            if (Coverage(rgba, mid) < target) lo = mid; else hi = mid;
+            if (Coverage(rgba, mid, threshold, quantized: preserveMatching) < target) lo = mid; else hi = mid;
         }
+        // A tiny mip may have equal-alpha texels that must cross the test together. Do not weaken
+        // vertex-alpha interaction by rescaling if the representable coverage is no closer to the target.
+        if (preserveMatching && MathF.Abs(Coverage(rgba, hi, threshold, quantized: true) - target)
+            >= MathF.Abs(Coverage(rgba, 1, threshold) - target)) return;
         if (MathF.Abs(hi - 1f) < 0.01f) return;
         for (int i = 3; i < rgba.Length; i += 4)
             rgba[i] = (byte)Math.Min(255, MathF.Round(rgba[i] * hi));

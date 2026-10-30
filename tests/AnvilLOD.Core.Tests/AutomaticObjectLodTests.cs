@@ -90,9 +90,11 @@ public class AutomaticObjectLodTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void GenerationAppliesRecordAndSeasonVariantsAndOptionalAtlases(bool atlas)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void GenerationAppliesRecordAndSeasonVariantsAndOptionalAtlases(bool atlas, bool optimize)
     {
         using var f = new TerrainFixture(editMod: mod =>
         {
@@ -104,6 +106,8 @@ public class AutomaticObjectLodTests
             placed.Base.SetTo(normal); mod.Worldspaces.Single().SubCells[0].Items[0].Items[0].Temporary.Add(placed);
         });
         Put(f.Textures, @"textures\red.dds");
+        if (optimize) TextureFixture.Put(f.Textures.Data, @"textures\red.dds",
+            ObjectTextureOptimizationTests.Raw(256, 256, (_, _) => (240, 12, 6, 255)));
         TextureFixture.Put(f.Textures.Data, @"textures\default_n.dds", TextureFixture.Solid(128, 128, 255));
         TextureFixture.Put(f.Textures.Data, @"seasons\Fixture_WIN.ini", Encoding.UTF8.GetBytes("[Statics]\nFixtureObject|WinterObject\n"));
         string output = Path.Combine(f.Root, "lod");
@@ -111,6 +115,7 @@ public class AutomaticObjectLodTests
         var result = ScanPipeline.Run(new(f.Game, new(TreeLod: false, DynamicLod: false, GridObjects: false), output,
             Generate: true, GrassLod: false, ChildWorlds: false, SkseDll: SkseDllChoice.None, Seasons: true,
             RemoveBuried: false, RemoveUnderwater: false, DetailedShips: false, ObjectAtlas: atlas, AtlasCellSize: 64,
+            OptimizeObjectTextures: optimize, ObjectTextureSize: 128,
             AutomaticObjects: new(true)));
         Assert.Equal(0, result.Generation!.BlocksFailed); Assert.Contains(result.AutomaticObjects!, r => r.Mesh is not null);
         var paths = Directory.GetFiles(output, "*.bto", SearchOption.AllDirectories);
@@ -119,7 +124,8 @@ public class AutomaticObjectLodTests
         Assert.Equal(@"textures\green.dds", GamePath.NormalizeTexture(Assert.Single(NifGeometryReader.Read(winter, File.ReadAllBytes(winter), passthru: true).Parts).Material.Textures[0]), ignoreCase: true);
         var normal = Assert.Single(paths, p => !p.EndsWith("WIN.bto", StringComparison.Ordinal));
         Assert.Contains(NifGeometryReader.Read(normal, File.ReadAllBytes(normal), passthru: true).Parts,
-            p => atlas ? p.Material.Textures[0].Contains(@"pengulod\objects\") : GamePath.NormalizeTexture(p.Material.Textures[0]).Equals(@"textures\red.dds", StringComparison.OrdinalIgnoreCase));
+            p => atlas ? p.Material.Textures[0].Contains(@"pengulod\objects\") : optimize ? p.Material.Textures[0].Contains(@"pengulod\object-textures\")
+                : GamePath.NormalizeTexture(p.Material.Textures[0]).Equals(@"textures\red.dds", StringComparison.OrdinalIgnoreCase));
         Assert.True(File.Exists(Path.Combine(output, "PenguLOD.objects.json")));
         Assert.False(Directory.Exists(Path.Combine(f.Textures.Data, "meshes", "pengulod")));
     }
