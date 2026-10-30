@@ -23,6 +23,7 @@ public static class ScanReport
             s.Warnings,
             treeCoverage = s.Tree3D,
             baseObjectSwaps = s.BaseObjectSwaps,
+            automaticObjects = s.AutomaticObjects,
             s.Stats.PlacedObjectsVisited,
             s.Stats.LodReferencesFound,
             s.Stats.SkippedDisabled,

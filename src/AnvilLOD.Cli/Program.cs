@@ -92,6 +92,12 @@ public static class Program
           --rules <file>         Your own LOD rule file (DynDOLOD rule format, e.g. saved by the app's rule editor). Its rules come
                                  before all others; without it only DynDOLOD's own rule files are used
           --keep-buried          Don't remove LOD triangles buried under the terrain
+          --auto-objects         Generate missing object LOD levels requested by the rules
+          --object-near-budget N   Generated source level 0 triangle cap (2500)
+          --object-middle-budget N Generated source level 1 triangle cap (1000)
+          --object-far-budget N    Generated source level 2/3 triangle cap (400)
+          --object-min-size N      Minimum source model size in game units (128)
+          --object-detail N        Reduction multiplier, 0.1–10 (1)
           --keep-underwater      Don't remove LOD triangles that lie completely under water
           --include-disabled     Include initially-disabled references
           --no-child-worlds      Don't copy walled cities (Whiterun, Solitude, ...) into Tamriel's LOD
@@ -377,6 +383,8 @@ public static class Program
         var gameOptions = a.Get("mo2") is { } mo2Folder
             ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2Folder, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"))
             : new GameContextOptions(a.Get("data"), a.Get("plugins"), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"));
+        int ObjectInt(string key, int fallback) => a.Get(key) is not { } text ? fallback : int.TryParse(text, out var value) ? value : throw new CliArgException("Invalid --" + key);
+        float ObjectFloat(string key, float fallback) => a.Get(key) is not { } text ? fallback : float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : throw new CliArgException("Invalid --" + key);
         var outputFolder = a.Get("output") ?? (generate ? OutputFolder.DefaultFolder(gameOptions) : null);
         if (generate && a.Get("output") is null) Console.WriteLine($"No --output given: using {outputFolder}");
 
@@ -434,6 +442,7 @@ public static class Program
             MountainInset: a.Get("mountain-inset") is { } mi && float.TryParse(mi, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mip) ? Math.Clamp(mip, 0f, 64f) : 12f,
             Occlusion: a.Has("occlusion") ? new AnvilLOD.Core.Occlusion.OcclusionSettings(Clearance: a.Get("occlusion-clearance") is { } oc && float.TryParse(oc, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv) ? Math.Max(0f, ocv) : 3072f, ParentClearance: a.Get("occlusion-clearance") is { } oc2 && float.TryParse(oc2, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv2) ? Math.Max(0f, ocv2) : 3072f) : null,
             OcclusionFolder: a.Get("occlusion-folder"), ObjectAtlas: a.Has("object-atlas"),
+            AutomaticObjects: new AnvilLOD.Plugins.Authoring.AutomaticObjectSettings(a.Has("auto-objects"), ObjectInt("object-near-budget", 2500), ObjectInt("object-middle-budget", 1000), ObjectInt("object-far-budget", 400), ObjectFloat("object-min-size", 128), ObjectFloat("object-detail", 1)),
             AtlasCellSize: a.Get("atlas-cell") is { } cell && int.TryParse(cell,out var size) ? size : a.Has("atlas-cell") ? throw new CliArgException("Invalid --atlas-cell.") : 256,
             MapObjectLevel: a.Get("map-objects")?.ToLowerInvariant() switch { null or "auto" => -2, "rules" => -1, "0" => 0, "1" => 1, "2" => 2, var bad => throw new CliArgException($"--map-objects must be auto, rules, 0, 1 or 2 (got '{bad}').") },
             SnowCover: a.Get("snow-cover") switch { "off" => 0, "bright" => 2, _ => 1 },
@@ -448,7 +457,10 @@ public static class Program
 
         // Progress<T> posts asynchronously; a synchronous reporter keeps console output ordered.
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
-        if(a.Get("settings") is { } scanPreset) req=RequestFactory.Scan(SettingsStore.Read(scanPreset),generate);
+        if (a.Has("request")) req = LoadPipelineRequest(a, "lod").Lod! with { Generate = generate };
+        else if (a.Get("settings") is { } scanPreset) req = RequestFactory.Scan(SettingsStore.Read(scanPreset), generate);
+        int workers = a.Has("threads") ? int.Parse(a.Get("threads")!) : a.Get("settings") is { } workerPreset ? (int)SettingsStore.Read(workerPreset).MaxThreads : 0;
+        using var scanLimits = RunLimits.Enter(workers, Cancellation, CacheFolder(a));
         ScanSummary s;
         if(generate)
         {

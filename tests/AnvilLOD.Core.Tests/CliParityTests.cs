@@ -13,6 +13,26 @@ namespace AnvilLOD.Core.Tests;
 public class CliParityTests
 {
     [Fact]
+    public void ScanHonorsTheRequestAndNeverPublishesEvenWhenGenerateIsSet()
+    {
+        using var f = new TerrainFixture();
+        string request = Path.Combine(f.Root, "request.json"), report = Path.Combine(f.Root, "scan.json"), output = Path.Combine(f.Root, "untouched");
+        Directory.CreateDirectory(output); File.WriteAllText(Path.Combine(output, "sentinel.txt"), "original");
+        var lod = new ScanRequest(f.Game, new(Worldspaces: ["FixtureWorld"], TreeLod: false, DynamicLod: false, GridObjects: false),
+            output, Generate: true, GrassLod: false, RemoveBuried: false, RemoveUnderwater: false,
+            AutomaticObjects: new(true, NearBudget: 100, MiddleBudget: 80, FarBudget: 40));
+        File.WriteAllText(request, JsonSerializer.Serialize(new GenerationPipelineRequest(Lod: lod)));
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["scan", "--request", request, "--cache-folder", Path.Combine(f.Root, "cache"), "--report", report]));
+        using var result = JsonDocument.Parse(File.ReadAllText(report));
+        Assert.Single(result.RootElement.GetProperty("grids").EnumerateObject());
+        Assert.True(result.RootElement.GetProperty("grids").TryGetProperty("FixtureWorld", out _));
+        Assert.Equal(JsonValueKind.Array, result.RootElement.GetProperty("automaticObjects").ValueKind);
+        Assert.Equal("original", File.ReadAllText(Path.Combine(output, "sentinel.txt")));
+        Assert.Single(Directory.GetFiles(output));
+        Assert.Equal(2, AnvilLOD.Cli.Program.Main(["scan", "--request", request, "--settings", request]));
+    }
+
+    [Fact]
     public void TerrainMaterialControlsRoundTripThroughPresetAndInvalidatePipelineReuse()
     {
         using var f=new TerrainFixture();

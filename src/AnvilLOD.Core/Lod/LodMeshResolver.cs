@@ -68,6 +68,10 @@ public sealed class LodMeshResolver
     /// </summary>
     public Func<string, bool, LodMeshSet?>? ModelFallback { get; init; }
 
+    /// <summary>Build only an explicitly requested source level that has no installed mesh.
+    /// None, Billboard, FullModel and dynamic-only rules never invoke this callback.</summary>
+    public Func<string, int, string?>? MissingLevel { get; init; }
+
     public LodRules Rules => _rules;
     public LodMeshIndex Index => _index;
 
@@ -96,16 +100,21 @@ public sealed class LodMeshResolver
         // Same fallback as for named meshes: a missing lower level uses the next higher one.
         for (int l = 2; l >= 0; l--) levels[l] ??= levels[l + 1];
 
+        string? Level(int index)
+        {
+            index = Math.Clamp(index, 0, 3);
+            return levels[index] ??= MissingLevel?.Invoke(fullModelPath, index);
+        }
         string? Pick(LodChoice c) => c.Kind switch
         {
-            LodChoiceKind.Level => levels[Math.Clamp(c.Level, 0, 3)],
+            LodChoiceKind.Level => Level(c.Level),
             LodChoiceKind.FullModel => _exists(fullModelPath) ? fullModelPath : null,
             _ => null, // None; Billboard is handled by tree LOD (milestone 3)
         };
 
         var lod32 = Pick(rule.Lod32);
         if (lod32 is null && MapObjectLevel >= 0 && !rule.Lod32Explicit && !rule.IsGridObject && WantsLod(rule))
-            lod32 = levels[Math.Clamp(MapObjectLevel, 0, 2)];
+            lod32 = Level(Math.Clamp(MapObjectLevel, 0, 2));
         var set = new LodMeshSet(Pick(rule.Lod4), Pick(rule.Lod8), Pick(rule.Lod16), lod32);
         if (ModelUpgrade is not null && set.HasAny) set = ModelUpgrade(fullModelPath, set);
         else if (ModelFallback is not null && !set.HasAny && !rule.IsGridObject && ModelFallback(fullModelPath, WantsLod(rule)) is { HasAny: true } made) set = made;
