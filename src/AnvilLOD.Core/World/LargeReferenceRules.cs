@@ -46,5 +46,6 @@ public static class LargeReferenceRules
         StartsDisabled,
         DefinedOutsideEsm,
         OverriddenOutsideEsm,
+        BaseObjectSwap,
     }
 }

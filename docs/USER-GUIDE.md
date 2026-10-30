@@ -80,6 +80,14 @@ After installation, check nearby-to-distant transitions, shorelines, tree silhou
 and brightness using the [in-game checklist](DIAGNOSTICS.md#repeatable-checks).
 [Seasons](SEASONS.md) require matching installed swap configuration and runtime support.
 
+Base Object Swapper removers are detected from enabled root `*_SWAP.ini` files when
+`SKSE/Plugins/po3_BaseObjectSwapper.dll` is installed. Deterministic swaps to Skyrim's
+invisible XMarker are excluded from LOD. This covers reference-specific tree and clutter
+removers without excluding every instance of the same model. Regenerate **LOD** and
+replace the previous LOD output after enabling or disabling such a remover; textures,
+terrain and grass caches do not need rebuilding for a tree-only removal.
+See [swap diagnostics and limits](DIAGNOSTICS.md#base-object-swapper) for other BOS rules.
+
 ## Settings and tools
 
 - **Generation settings** controls LOD levels, trees, grass, rules, texture matching,

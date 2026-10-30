@@ -56,7 +56,9 @@ public sealed class TerrainFixture : IDisposable
             cell.Landscape=land;sub.Items.Add(cell);
         }
         editMod?.Invoke(mod);
-        mod.WriteToBinary(Path.Combine(Textures.Data,"Skyrim.esm"));
+        // Vanilla fixtures may define reserved records such as Skyrim.esm's XMarker (00003B).
+        mod.WriteToBinary(Path.Combine(Textures.Data,"Skyrim.esm"), new Mutagen.Bethesda.Plugins.Binary.Parameters.BinaryWriteParameters
+        { LowerRangeDisallowedHandler = new Mutagen.Bethesda.Plugins.Binary.Parameters.NoCheckIfLowerRangeDisallowed() });
         TextureFixture.Put(Textures.Data,@"lodsettings\FixtureWorld.lod",new LodSettings(-4,-4,4,4,4).ToBytes());
     }
     public void Dispose()=>Textures.Dispose();

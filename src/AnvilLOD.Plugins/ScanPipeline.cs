@@ -84,7 +84,8 @@ public sealed record ScanSummary(
     IReadOnlyDictionary<string, long>? MissingGrassBillboards = null,
     IReadOnlySet<string>? SkippedByTexGen = null,
     int DynamicRefs = 0,
-    Tree3DStats? Tree3D = null);   // keys of MissingBillboards / MissingGrassBillboards that TexGen left out on purpose (too small)
+    Tree3DStats? Tree3D = null,
+    BaseObjectSwapReport? BaseObjectSwaps = null);   // keys of MissingBillboards / MissingGrassBillboards that TexGen left out on purpose (too small)
 
 /// <summary>
 /// Load order → asset index → reference scan → quad buckets → hashes → build plan,
@@ -318,6 +319,13 @@ public static class ScanPipeline
         var scanner = new MutagenReferenceScanner(game, assets, resolver, childCopies);
         // The PBR option also picks the PBR-patched waterfall models (Community Shaders only), when the load order has them.
         var scan = scanner.Scan(req.Scan with { PbrWaterfalls = req.PbrLod }, progress, ct);
+        if (scanner.BaseObjectSwaps is { ConfigFiles: > 0 } bos)
+        {
+            if (!bos.RuntimeInstalled)
+                Warn($"Base Object Swapper: {bos.ConfigFiles:N0} swap files found, but po3_BaseObjectSwapper.dll is absent from the selected Data view; no runtime removals applied.");
+            if (bos.Diagnostics.Count > 0)
+                Warn($"Base Object Swapper: {bos.Diagnostics.Count:N0} entries are outside supported deterministic marker removals or have unresolved forms. See baseObjectSwaps.Diagnostics in the scan report; visible replacements, chance-based swaps and property overrides are not applied.");
+        }
         if (scan.Grids.Count == 0)
             Warn(req.Scan.Worldspaces is { Count: > 0 } ws
                 ? $"None of the requested worldspaces ({string.Join(", ", ws)}) has a LODSettings\\<name>.lod file in loose files or BSAs."
@@ -824,7 +832,7 @@ public static class ScanPipeline
                 try
                 {
                     var lr = LargeReferenceStage.Run(game, scan.Grids.Keys.Where(w => !UndersideStage.IgnoredWorlds.Contains(w)).ToList(), output, progress, Warn, ct,
-                        flagEsl: req.LargeRefsEsl, dyndolodDllInstalled: assets.Exists("skse\\plugins\\dyndolod.dll"));
+                        flagEsl: req.LargeRefsEsl, dyndolodDllInstalled: assets.Exists("skse\\plugins\\dyndolod.dll"), excludedReferences: scanner.RemovedByBaseObjectSwapper);
                     progress?.Report($"Large references: {lr.Listed:N0} listed in {lr.Elapsed.TotalSeconds:F1}s. Report: {lr.ReportFile}");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -948,7 +956,8 @@ public static class ScanPipeline
             grass?.MissingBillboards.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase),
             skippedByTexGen,
             scan.Dynamic?.Count ?? 0,
-            tree3dStats);
+            tree3dStats,
+            scanner.BaseObjectSwaps);
 
         // "plugin.esm\\model_000a7329" -> "plugin.esm;000a7329"
         static string TexGenKey(string missingKey) => TexGenLists.Key(missingKey);
