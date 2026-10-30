@@ -9,7 +9,7 @@ A native Linux and Windows LOD toolkit for Skyrim, built on [CageTV’s AnvilLOD
 PenguLOD combines an Avalonia desktop and CLI with native terrain, object, tree and grass LOD,
 texture generation, and offline grass caching. It reads Fluorine/MO2 profiles directly and runs without Wine.
 
-**Current version: 0.4.0-alpha.7**, incorporating AnvilLOD **0.2.70**.
+**Current version: 0.4.0-alpha.12**, incorporating AnvilLOD **0.2.70**.
 The all-in-one pipeline supports grass → textures → terrain → object/tree/grass LOD, with
 verified resume and safe output publication. New terrain and seasonal rendering need broader
 in-game validation; this alpha does not claim full TexGen or DynDOLOD parity.
@@ -53,8 +53,11 @@ settings, testing and current limitations.
 - Native terrain/water BTR meshes, source normal detail, PBR colour/AO calibration and terrain-shadow heightmaps.
 - Incremental object LOD, billboard trees, 3D/hybrid models and native tree reduction with
   record texture variants, foliage coverage limits and per-level geometry budgets; grass LOD, occlusion and seasonal terrain/object/tree/grass output.
-- Native texture stitching, tree/grass billboards, hybrid trunk textures, material/normal baking,
+- Optional automatic missing-object LOD and native hybrid tree authoring, preserving installed models and active rule exclusions.
+- Native texture stitching, front/side tree and packed-grass billboards, hybrid trunk textures, material/normal baking,
   experimental object rendering and conservative paired object atlases.
+- Deterministic Base Object Swapper marker removals, with per-reference exclusion diagnostics.
+- Compatible [resource packs](docs/RESOURCE-PACKS.md) from enabled mods or ordered standalone folders, without a DynDOLOD executable.
 - Bundled FasterNGIO CPU grass caching without launching Skyrim.
 - Shared desktop/CLI presets, persistent jobs, verified terrain tile resume and measured phase timings.
 - Pipeline preflight, asset precedence and coverage diagnostics, mesh simplification,
