@@ -6,6 +6,10 @@ namespace AnvilLOD.Textures;
 public sealed record RecipeTextureReplacement(string Diffuse, string? Normal);
 public sealed record RecipeRenderedTexture(string Destination, byte[] Bytes, string Kind, string Sources, int Width = 0, int Height = 0);
 
+/// <summary>A missing texture override, distinct from broken recipe inputs or invalid texture data.</summary>
+public sealed class MissingReplacementTextureException(string path, string slot)
+    : FileNotFoundException($"Replacement {slot} texture missing: {path}", path);
+
 /// <summary>Evaluates copies, conversions and atlas dependencies without writing to source assets.</summary>
 public sealed class TextureRecipeRenderer
 {
@@ -72,7 +76,7 @@ public sealed class TextureRecipeRenderer
                         : source.Path.Equals(destination, StringComparison.OrdinalIgnoreCase) ? _read(normalPath) : BuildNormal(source.Path);
                     if (normalBytes is null)
                     {
-                        if (source.NormalOverride is not null) throw new FileNotFoundException("Replacement normal texture missing: " + normalPath);
+                        if (source.NormalOverride is not null) throw new MissingReplacementTextureException(normalPath, "normal");
                         _warn("Used a flat normal map for " + source.Path);
                     }
                     TextureImages.Blit(normal, normalBytes is null ? TextureImages.Blank(4, 4, true) : TextureImages.Decode(normalBytes), tile, _recipes.BaseSize, true);
@@ -86,7 +90,7 @@ public sealed class TextureRecipeRenderer
             }
             return Saved(destination);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not MissingReplacementTextureException)
         { throw new InvalidDataException($"Texture recipe {destination}: {ex.Message}", ex); }
         finally { _active.Remove(destination); }
     }
@@ -98,7 +102,13 @@ public sealed class TextureRecipeRenderer
             var replacement = _replacements.GetValueOrDefault(path);
             if (replacement is not null)
             {
-                var bytes = _read(replacement.Diffuse) ?? throw new FileNotFoundException("Replacement diffuse texture missing: " + replacement.Diffuse);
+                var bytes = _read(replacement.Diffuse);
+                if (bytes is null)
+                {
+                    if (path.Equals(replacement.Diffuse, StringComparison.OrdinalIgnoreCase))
+                        throw new FileNotFoundException("Source texture missing: " + path);
+                    throw new MissingReplacementTextureException(replacement.Diffuse, "diffuse");
+                }
                 return (replacement.Diffuse, bytes, replacement.Normal);
             }
             if (ReadInput(path, current) is { } input) return (path, input, null);
@@ -124,14 +134,16 @@ public sealed class TextureRecipeRenderer
         try
         {
             if (_replacements.TryGetValue(path, out var replacement))
-                return _read(replacement.Normal ?? Normal(replacement.Diffuse));
+                return replacement.Normal is { } replacementNormal
+                    ? _read(replacementNormal) ?? throw new MissingReplacementTextureException(replacementNormal, "normal")
+                    : _read(Normal(replacement.Diffuse));
             string normal = Normal(path);
             if (_plans.ContainsKey(normal) || _normalOwners.ContainsKey(normal)) return Build(normal);
             if (_plans.TryGetValue(path, out var plan) && (plan.Copy?.Source ?? plan.Conversion?.Source) is { } alternatives)
             {
                 var resolved = Resolve(alternatives, path);
                 if (resolved.NormalOverride is { } explicitNormal)
-                    return _read(explicitNormal) ?? throw new FileNotFoundException("Replacement normal texture missing: " + explicitNormal);
+                    return _read(explicitNormal) ?? throw new MissingReplacementTextureException(explicitNormal, "normal");
                 string chosen = resolved.Path;
                 if (!chosen.Equals(path, StringComparison.OrdinalIgnoreCase)) return NormalFor(chosen, active);
             }

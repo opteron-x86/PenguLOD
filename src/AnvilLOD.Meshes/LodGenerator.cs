@@ -46,7 +46,7 @@ public sealed class LodGenerator
     /// <summary>When set, textures that the full models replace with PBR ones are swapped for matching LOD textures.</summary>
     public PbrLodTextures? Pbr { get; init; }
     public Func<LodMesh,LodMesh>? ObjectAtlasTransform { get; set; }
-    public Func<LodMeshPart, IReadOnlyList<TextureMatchInput>, LodMeshPart?>? RecipeMapper { get; init; }
+    public Func<string, LodMeshPart, IReadOnlyList<TextureMatchInput>, LodMeshPart?>? RecipeMapper { get; init; }
     private readonly ConcurrentDictionary<string, Lazy<LodMesh?>> _rawMeshes = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>When set, shapes without an alpha property whose diffuse texture has a translucent alpha channel point at an opaque copy.</summary>
@@ -273,7 +273,7 @@ public sealed class LodGenerator
                 }
                 bool stitched = IsStitchedLodTexture(p.Material.Textures[0]);
                 if (stitched) Interlocked.Increment(ref Matching.ShapesStitched);
-                if (RecipeMapper?.Invoke(p, inputs) is { } mapped) part = mapped;
+                if (RecipeMapper?.Invoke(path, p, inputs) is { } mapped) part = mapped;
                 else if (!stitched && inputs.Count > 0)
                 {
                     var choices = inputs.Select(i => (i.DesiredDiffuse, i.DesiredNormal)).Distinct().ToArray();

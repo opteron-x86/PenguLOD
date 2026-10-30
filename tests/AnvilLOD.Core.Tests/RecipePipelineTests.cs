@@ -18,7 +18,7 @@ public class RecipePipelineTests
 {
     [Theory]
     [InlineData(false)] [InlineData(true)]
-    public void TextureLodSeasonalPipelinePreservesVariantsAndRecoversAfterFailure(bool objectAtlas)
+    public void TextureLodSeasonalPipelineFallsBackLocallyAndStillRejectsCorruptTextures(bool objectAtlas)
     {
         using var f = new TerrainFixture(editMod: mod =>
         {
@@ -62,27 +62,45 @@ public class RecipePipelineTests
         Assert.All(changed.Journal.Stages, s => Assert.False(s.Reused));
         Assert.NotEqual(ordinary.Parts[0].Material.Textures[0], Read(output, "").Parts[0].Material.Textures[0]);
 
+        File.Delete(source);
+        var fallback = GenerationPipeline.Run(request, cache);
+        Assert.True(fallback.Success, fallback.Error);
+        AssertColor(output, Read(output, "").Parts[0], 0, f.Textures.Output);
+        AssertColor(output, Read(output, ".WIN").Parts[0], 1);
+        Assert.Contains(fallback.LodReceipt!.Warnings, w => w.Contains("Texture matching fallback") && w.Contains("wall_lod_0.nif") && w.Contains("blue.dds"));
+        var report = System.Text.Json.JsonSerializer.Deserialize<RecipeTextureMapper.MappingReport[]>(File.ReadAllText(Path.Combine(output, "PenguLOD.recipes.json")), PersistentPipeline.Json)!;
+        Assert.Contains(report, r => r.Status == "Fallback" && r.Model.Contains("wall_lod_0.nif"));
+        Assert.Contains(report, r => r.Status == "Variant");
+        var fallbackReused = GenerationPipeline.Run(request, cache);
+        Assert.True(fallbackReused.Success, fallbackReused.Error);
+        Assert.All(fallbackReused.Journal.Stages, s => Assert.True(s.Reused));
+        Assert.Contains(fallbackReused.LodReceipt!.Warnings, w => w.Contains("Texture matching fallback"));
+
         string path = GamePath.ToFileSystemPath(output, @"meshes\terrain\FixtureWorld\objects\FixtureWorld.4.-4.-4.bto");
         string before = OutputSnapshot.HashFile(path);
-        File.Delete(source);
+        TextureFixture.Put(data, @"textures\blue.dds", [1, 2, 3, 4]);
         var failed = GenerationPipeline.Run(request with { Preflight = false }, cache);
-        Assert.False(failed.Success); Assert.Equal("lod", failed.FailedStage); Assert.Contains("Replacement diffuse texture missing", failed.Error);
+        Assert.False(failed.Success); Assert.Equal("lod", failed.FailedStage); Assert.Contains("Recipe ", failed.Error);
+        Assert.DoesNotContain("texture missing", failed.Error);
         Assert.Equal(before, OutputSnapshot.HashFile(path));
         TextureFixture.Put(data, @"textures\blue.dds", TextureFixture.Solid(20, 25, 190));
         var recovered = GenerationPipeline.Run(request, cache); Assert.True(recovered.Success, recovered.Error);
         AssertColor(output, Read(output, "").Parts[0], 2);
+        Assert.DoesNotContain(recovered.LodReceipt!.Warnings, w => w.Contains("Texture matching fallback"));
     }
     private static LodMesh Read(string output, string season)
     {
         string path = GamePath.ToFileSystemPath(output, $@"meshes\terrain\FixtureWorld\objects\FixtureWorld.4.-4.-4{season}.bto");
         return NifGeometryReader.Read(path, File.ReadAllBytes(path), passthru: true);
     }
-    private static void AssertColor(string output, LodMeshPart part, int channel)
+    private static void AssertColor(string output, LodMeshPart part, int channel, string? textureOutput = null)
     {
-        var image = TextureImages.Decode(File.ReadAllBytes(GamePath.ToFileSystemPath(output, part.Material.Textures[0])));
+        string texture = GamePath.ToFileSystemPath(output, part.Material.Textures[0]);
+        if (!File.Exists(texture) && textureOutput is not null) texture = GamePath.ToFileSystemPath(textureOutput, part.Material.Textures[0]);
+        var image = TextureImages.Decode(File.ReadAllBytes(texture));
         var uv = part.UVs.Aggregate(System.Numerics.Vector2.Zero, (a, b) => a + b) / part.UVs.Length;
         int index = (Math.Clamp((int)(uv.Y * image.Height), 0, image.Height - 1) * image.Width + Math.Clamp((int)(uv.X * image.Width), 0, image.Width - 1)) * 4;
         Assert.True(image.Pixels[index + channel] > 170);
-        Assert.True(image.Pixels[index + channel] > image.Pixels[index] + 100);
+        Assert.True(image.Pixels[index + channel] > image.Pixels[index + (channel == 0 ? 1 : 0)] + 100);
     }
 }
