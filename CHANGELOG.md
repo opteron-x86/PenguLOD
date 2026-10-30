@@ -5,6 +5,17 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.10] - 2026-10-30
+
+- Optional automatic object LOD fills missing levels requested by active rules, preserving
+  installed models and explicit exclusions. Native generation applies per-level budgets,
+  minimum size and reduction controls; unsupported sources skip with model-specific reasons.
+- Generated meshes participate in record/season texture matching and optional object
+  atlases. Content-keyed private caches verify generated files before reuse and repair damage.
+  Overview, scan reports and `PenguLOD.objects.json` show coverage and costs.
+- Desktop, presets, JSON requests and CLI flags expose the same controls. CLI scans now
+  honor JSON LOD requests and preset worker/cache settings while always disabling publication.
+
 ## [0.4.0-alpha.9] - 2026-10-30
 
 - Native tree and grass billboards can render separate front/side diffuse and normal

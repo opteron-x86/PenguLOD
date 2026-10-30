@@ -49,7 +49,7 @@ The application rejects conflicting source/output locations and unrelated nonemp
 | Grass cache | Offline grass placement for the game and grass LOD | [Grass caching](GRASS.md) |
 | Textures | Stitched textures, billboards and hybrid tree trunk textures | [Texture generation](TEXTURES.md) |
 | Terrain | Landscape/water meshes, terrain textures and optional shadow heightmaps | [Terrain](TERRAIN.md) |
-| LOD | Object, tree and grass LOD plus enabled runtime features | [Trees](TREES.md), [materials](MATERIALS.md), [atlases](ATLASES.md) |
+| LOD | Object, tree and grass LOD plus enabled runtime features | [Objects](OBJECTS.md), [trees](TREES.md), [materials](MATERIALS.md), [atlases](ATLASES.md) |
 
 Select the required stages on **Pipeline** to run them in order: grass → textures →
 terrain → LOD. Successful outputs feed later stages directly. The individual pages

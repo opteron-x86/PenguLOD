@@ -5,6 +5,8 @@ using AnvilLOD.Core.Paths;
 using AnvilLOD.Core.Pipeline;
 using AnvilLOD.Core.World;
 using AnvilLOD.Meshes;
+using AnvilLOD.Plugins.Authoring;
+using System.Text.Json;
 
 namespace AnvilLOD.Plugins;
 
@@ -59,7 +61,8 @@ public sealed record ScanRequest(
     string? OcclusionFolder = null,
     string? GeneratedTextureFolder = null,
     string? GeneratedGrassFolder = null,
-    string? GeneratedTerrainFolder = null, bool ObjectAtlas = false, int AtlasCellSize = 256);
+    string? GeneratedTerrainFolder = null, bool ObjectAtlas = false, int AtlasCellSize = 256,
+    AutomaticObjectSettings? AutomaticObjects = null);
 
 public sealed record ScanSummary(
     ScanStats Stats,
@@ -85,7 +88,8 @@ public sealed record ScanSummary(
     IReadOnlySet<string>? SkippedByTexGen = null,
     int DynamicRefs = 0,
     Tree3DStats? Tree3D = null,
-    BaseObjectSwapReport? BaseObjectSwaps = null);   // keys of MissingBillboards / MissingGrassBillboards that TexGen left out on purpose (too small)
+    BaseObjectSwapReport? BaseObjectSwaps = null,
+    IReadOnlyList<AutomaticObjectLevel>? AutomaticObjects = null);
 
 /// <summary>
 /// Load order → asset index → reference scan → quad buckets → hashes → build plan,
@@ -118,6 +122,9 @@ public static class ScanPipeline
     {
         ct.ThrowIfCancellationRequested();
         req.Scan.Tree3D?.Validate();
+        req.AutomaticObjects?.Validate();
+        if (req.AutomaticObjects is { Enabled: true })
+            req = req with { SettingsFingerprint = req.SettingsFingerprint + "|automatic-objects1:" + JsonSerializer.Serialize(req.AutomaticObjects) };
         if (req.Generate && string.IsNullOrWhiteSpace(req.OutputFolder))
             throw new ArgumentException("Choose an output folder before generating LOD.");
         if (req.Generate) GenerationDestination.Validate(req.Game, req.OutputFolder!);
@@ -302,7 +309,10 @@ public static class ScanPipeline
             if (mapMod is not null) progress?.Report($"{mapMod} is in the load order: its map uses object LOD level 32, so objects get their most detailed LOD mesh at LOD32 (set Map objects to \"From rules\" to leave LOD32 to the rules).");
         }
         if (mapObjectLevel >= 0) progress?.Report($"LOD32 (world map): objects without a LOD32 rule use their level {mapObjectLevel} LOD mesh.");
-        var resolver = new LodMeshResolver(lodIndex, rules, assets.Exists, meshLookup) { MapObjectLevel = mapObjectLevel, ModelUpgrade = ships is null ? null : ships.Upgrade, ModelFallback = ships is null ? null : ships.Fallback };
+        var automaticObjects = req.AutomaticObjects is { Enabled: true } objectSettings ? new AutomaticObjectLod(assets, objectSettings, progress: progress, ct: ct) : null;
+        var resolver = new LodMeshResolver(lodIndex, rules, assets.Exists, meshLookup) { MapObjectLevel = mapObjectLevel,
+            ModelUpgrade = ships is null ? null : ships.Upgrade, ModelFallback = ships is null ? null : ships.Fallback,
+            MissingLevel = automaticObjects is null ? null : automaticObjects.Resolve };
 
         // Walled cities: DynDOLOD's child world configs say which child worldspaces are copied into the parent's LOD.
         var childCopies = ChildWorldCopies.None;
@@ -933,6 +943,13 @@ public static class ScanPipeline
             }
         }
 
+        var objectReport = automaticObjects?.Report;
+        if (objectReport is not null)
+        {
+            progress?.Report($"Automatic object LOD: {objectReport.Count(r => r.Mesh is not null):N0} source levels available, {objectReport.Count(r => r.Mesh is null):N0} skipped. See automaticObjects in the scan report.");
+            if (objectReport.Any(r => r.Mesh is null)) Warn("Some automatic object LOD levels were skipped; installed levels are preserved. See the object coverage report for model-specific reasons.");
+            if (req.Generate) File.WriteAllText(Path.Combine(req.OutputFolder!, "PenguLOD.objects.json"), JsonSerializer.Serialize(objectReport, PersistentPipeline.Json));
+        }
         return new ScanSummary(
             scan.Stats,
             assets.ArchiveCount,
@@ -957,7 +974,8 @@ public static class ScanPipeline
             skippedByTexGen,
             scan.Dynamic?.Count ?? 0,
             tree3dStats,
-            scanner.BaseObjectSwaps);
+            scanner.BaseObjectSwaps,
+            objectReport);
 
         // "plugin.esm\\model_000a7329" -> "plugin.esm;000a7329"
         static string TexGenKey(string missingKey) => TexGenLists.Key(missingKey);

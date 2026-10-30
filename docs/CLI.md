@@ -11,6 +11,7 @@ PenguLOD texgen --settings my-preset.json
 PenguLOD terrain --settings my-preset.json
 PenguLOD grass --settings my-preset.json
 PenguLOD generate --settings my-preset.json
+PenguLOD scan --settings my-preset.json --report scan.json
 PenguLOD export-job --settings my-preset.json --stages textures,terrain,lod --output job.json
 PenguLOD pipeline --request job.json --report run.json
 PenguLOD diagnose --settings my-preset.json --report diagnostics.json --deep-scan
@@ -35,3 +36,7 @@ available in `--help`. Exit status is 0 for success, 2 for argument/generation f
 and 130 for cancellation. `diagnose` returns 1 for blocking findings.
 
 Use `PenguLOD --help` for the complete command reference.
+
+`scan --request job.json` reads the request's LOD stage and forces generation off. Scans
+may prepare private caches, including [automatic object models](OBJECTS.md), but never
+publish into the LOD output folder. Preset cache folders and worker limits apply to scans.

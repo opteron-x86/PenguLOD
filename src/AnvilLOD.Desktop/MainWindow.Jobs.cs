@@ -94,6 +94,7 @@ public sealed partial class MainWindow
             .Concat(s.Generation?.MeshErrors.Select(m => "Mesh error: " + m) ?? [])
             .Concat(s.Generation?.BlockErrors.Select(m => "Block error: " + m) ?? []);
         _treeCoverage.ItemsSource = s.Tree3D?.Levels;
+        _objectCoverage.ItemsSource = s.AutomaticObjects;
         _issues.Text = string.Join('\n', issues);
     }
     public sealed record WorldRow(string World, int Lod4, int Lod8, int Lod16, int Lod32);

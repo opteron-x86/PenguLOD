@@ -45,6 +45,7 @@ public sealed partial class MainWindow : Window
     private readonly ComboBox _profiles = new() { MinWidth = 180, PlaceholderText = "Available profiles" };
     private readonly TextBlock _counts = new() { Text = "Scan your load order to inspect worldspaces and missing assets.", TextWrapping = TextWrapping.Wrap };
     private readonly DataGrid _worlds = Table(("Worldspace", "World"), ("LOD 4", "Lod4"), ("LOD 8", "Lod8"), ("LOD 16", "Lod16"), ("LOD 32", "Lod32"));
+    private readonly DataGrid _objectCoverage = Table(("Model", "Model"), ("Source level", "Level"), ("Status", "Status"), ("Source triangles", "SourceTriangles"), ("LOD triangles", "Triangles"), ("Budget", "Budget"), ("Details", "Reason"));
     private readonly DataGrid _treeCoverage = Table(("Model", "Model"), ("Level", "Level"), ("Instances", "Instances"), ("Triangles/model", "OutputTriangles"), ("Placed triangles", "PlacedTriangles"), ("Leaf triangles removed", "FoliageTrianglesRemoved"), ("Coverage loss (%)", "FoliageCoveragePercent"), ("Method", "Method"), ("Fallback", "Fallback"));
     private readonly TextBox _issues = new() { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 220, PlaceholderText = "Scan warnings and missing assets appear here." };
     private readonly DataGrid _textures = Table(("Mod", "Mod"), ("Texture", "Relative"), ("Format", "Format"), ("Width", "Width"), ("Height", "Height"), ("Mips", "Mips"));
@@ -125,7 +126,7 @@ public sealed partial class MainWindow : Window
     private void BuildShell()
     {
         _page.Content = null;
-        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary, _pipelineSummary, _pipelineStages, _terrainSummary, _terrainResults, _treeCoverage, _diagnosticSummary, _diagnosticIssues, _diagnosticEstimates, _seasonCoverage })
+        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary, _pipelineSummary, _pipelineStages, _terrainSummary, _terrainResults, _treeCoverage, _objectCoverage, _diagnosticSummary, _diagnosticIssues, _diagnosticEstimates, _seasonCoverage })
         {
             if (control.Parent is Panel panel) panel.Children.Remove(control);
             else if (control.Parent is ContentControl content) content.Content = null;
@@ -210,6 +211,7 @@ public sealed partial class MainWindow : Window
                 Text("Incremental generation is the default. Dynamic LOD requires the matching AnvilLOD SKSE DLL installed in the Windows game.", true),
                 Button("Open output", () => Open(_settings.OutputFolder)))),
             Card("SCAN RESULTS", Stack(12, _counts, _worlds, _issues)),
+            Card("AUTOMATIC OBJECT LOD", Stack(12, Text("Missing source levels generated from full models. Levels 0/1/2 correspond to LOD 4/8/16; active rules may select other mappings.", true), _objectCoverage)),
             Card("TREE COVERAGE & COST", Stack(12, Text("Measured mesh counts and estimated geometry size, before block merging. Full coverage is saved in scan-report.json.", true), _treeCoverage)));
         return Scroll(s);
     }
