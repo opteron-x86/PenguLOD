@@ -2,8 +2,11 @@
 
 PenguLOD reads Skyrim SE and Skyrim LE NIF files directly on Linux and Windows.
 Support applies to texture rendering, native model authoring and object/tree LOD.
-The selected model must be complete: an unreadable visible shape cannot silently
-disappear from an otherwise successful result.
+Unreadable structural geometry rejects the selected model. Static object LOD can omit
+separate animated/blended effect layers and explicitly shaderless shapes; these omissions
+are listed in the log and `generation.meshWarnings` in the scan report. Window glow, smoke
+and similar effects are not baked into permanent building surfaces. Unsupported opaque
+effect materials still reject a model. Texture rendering and 3D tree inputs remain strict.
 
 ## Geometry
 
@@ -20,6 +23,10 @@ disappear from an otherwise successful result.
 Node transforms are baked into positions and directions. Missing normals and tangents
 are reconstructed for supported geometry. Buffer sizes, indices, transforms and finite
 coordinates are checked within each NIF block's boundary.
+
+A legacy shape with a null geometry link and no skin has no drawable surface and is
+ignored. A link outside the file, a wrong block type or missing declared vertex data
+remains an error.
 
 Static skinning requires all bones in the same NIF. Legacy skins require per-bone weights
 in `NiSkinData`; SSE skins use their vertex-buffer weights. Missing bones, invalid weights

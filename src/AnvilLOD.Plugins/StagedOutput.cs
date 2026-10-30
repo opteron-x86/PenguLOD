@@ -1,5 +1,6 @@
 using AnvilLOD.Core.Paths;
 using AnvilLOD.Core.Pipeline;
+using AnvilLOD.Core.Incremental;
 
 namespace AnvilLOD.Plugins;
 
@@ -14,13 +15,20 @@ public sealed class StagedOutput : IDisposable
     private readonly bool _existed;
     private readonly CancellationToken _ct;
     private bool _preserve;
+    private readonly WrittenOutputHashes _written;
+    private readonly List<string> _deferredBlocks = [];
+    private bool _blocksSeeded;
+    private readonly Dictionary<string, string> _expected;
 
-    public StagedOutput(string output, bool seedPrevious, IProgress<string>? progress = null, CancellationToken ct = default)
+    public StagedOutput(string output, bool seedPrevious, IProgress<string>? progress = null, CancellationToken ct = default, bool deferLodBlocks = false, OutputSnapshot? previousHashes = null)
     {
         Output = HostPath.Canonical(output); _ct = ct;
+        var paths = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        _expected = previousHashes?.Files.ToDictionary(k => k.Key.Replace('\\', '/'), v => v.Value, paths) ?? new(paths);
         _existed = Directory.Exists(Output); _original = Inventory(Output, ct);
         _workspace = Path.Combine(Path.GetDirectoryName(Output)!, ".pengulod-build-" + Guid.NewGuid().ToString("N"));
         Payload = Path.Combine(_workspace, "output"); Directory.CreateDirectory(Payload);
+        _written = new(Payload);
         try
         {
             using var timing = WorkTiming.Measure("preparation");
@@ -30,18 +38,64 @@ public sealed class StagedOutput : IDisposable
                 foreach (var relative in _original.Keys)
                 {
                     ct.ThrowIfCancellationRequested();
-                    var target = Path.Combine(Payload, relative); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    File.Copy(Path.Combine(Output, relative), target);
+                    var parts = relative.Replace('\\', '/').Split('/');
+                    if (deferLodBlocks && parts.Length == 5 && parts[0].Equals("meshes", StringComparison.OrdinalIgnoreCase)
+                        && parts[1].Equals("terrain", StringComparison.OrdinalIgnoreCase) && parts[3].Equals("objects", StringComparison.OrdinalIgnoreCase)
+                        && parts[4].EndsWith(".bto", StringComparison.OrdinalIgnoreCase))
+                        _deferredBlocks.Add(relative);
+                    else Seed(relative);
                 }
             }
-            else if (File.Exists(Path.Combine(Output, "meta.ini"))) File.Copy(Path.Combine(Output, "meta.ini"), Path.Combine(Payload, "meta.ini"));
+            else if (File.Exists(Path.Combine(Output, "meta.ini"))) Seed("meta.ini");
+            _blocksSeeded = _deferredBlocks.Count == 0;
         }
         catch { Dispose(); throw; }
+    }
+
+    /// <summary>Keep unchanged and out-of-scope blocks; avoid copying blocks that will be replaced or removed.</summary>
+    public BuildPlan SeedLodBlocks(BuildPlan plan, IProgress<string>? progress = null)
+    {
+        if (_blocksSeeded) return plan;
+        using var timing = WorkTiming.Measure("staging-copy");
+        var discard = plan.Rebuild.Select(q => q.RelativePath).Concat(plan.StaleFiles)
+            .Select(p => p.Replace('\\', '/')).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        long avoided = 0; int kept = 0;
+        var unchanged = plan.Unchanged.ToDictionary(q => q.RelativePath.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
+        var damaged = new List<AnvilLOD.Core.World.QuadKey>();
+        foreach (var relative in _deferredBlocks)
+        {
+            _ct.ThrowIfCancellationRequested();
+            if (discard.Contains(relative.Replace('\\', '/'))) avoided += _original[relative].Length;
+            else
+            {
+                Seed(relative);
+                string target = Path.Combine(Payload, relative), key = relative.Replace('\\', '/');
+                if (_expected.TryGetValue(key, out var expected) && WrittenOutputHashes.TryGet(target, out var actual)
+                    && !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!unchanged.TryGetValue(key, out var quad))
+                        throw new IOException("A previous LOD block outside the selected rebuild scope was changed: " + relative + ". Include its worldspace/level in the next generation.");
+                    File.Delete(target); damaged.Add(quad);
+                    progress?.Report("Rebuilding changed previous LOD block: " + relative);
+                }
+                else kept++;
+            }
+        }
+        _blocksSeeded = true;
+        progress?.Report($"Incremental staging: kept {kept:N0} blocks; avoided copying {avoided / 1048576.0:N0} MiB scheduled for rebuild/removal.");
+        return damaged.Count == 0 ? plan : new([.. plan.Rebuild, .. damaged], plan.Unchanged.Except(damaged).ToArray(), plan.StaleFiles);
+    }
+
+    private void Seed(string relative)
+    {
+        var target = Path.Combine(Payload, relative); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        WrittenOutputHashes.Copy(Path.Combine(Output, relative), target, _ct);
     }
 
     public void Commit(IProgress<string>? progress = null)
     {
         _ct.ThrowIfCancellationRequested();
+        if (!_blocksSeeded) throw new InvalidOperationException("Deferred LOD blocks must be resolved before publication.");
         if (!Inventory(Output, _ct).OrderBy(k => k.Key).SequenceEqual(_original.OrderBy(k => k.Key)) || Directory.Exists(Output) != _existed)
             throw new IOException("The destination changed while generation was running. Previous output was preserved: " + Output);
         using var timing = WorkTiming.Measure("publication");
@@ -86,6 +140,7 @@ public sealed class StagedOutput : IDisposable
 
     public void Dispose()
     {
+        _written.Dispose();
         if (!_preserve && Directory.Exists(_workspace))
             try { Directory.Delete(_workspace, true); } catch (IOException) { /* original/published output is independent */ }
     }

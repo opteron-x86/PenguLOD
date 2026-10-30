@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AnvilLOD.Core.Pipeline;
+using AnvilLOD.Core.Lod;
 using AnvilLOD.Core.World;
 using AnvilLOD.Meshes;
 using AnvilLOD.Meshes.Authoring;
@@ -27,7 +28,7 @@ public sealed record AutomaticObjectLevel(string Model, int Level, string? Mesh,
 /// names and full-model UVs, so the normal record-variant, recipe and atlas pipeline can consume them.</summary>
 public sealed class AutomaticObjectLod
 {
-    private const int Version = 1;
+    private const int Version = 2;
     private readonly AssetIndex _assets;
     private readonly AutomaticObjectSettings _settings;
     private readonly string _root;
@@ -70,6 +71,7 @@ public sealed class AutomaticObjectLod
         }
         try
         {
+            if (GeneratedLodInputs.IsModel(model)) return Skip("Generated LOD or terrain support mesh is not a source object.");
             if (!_assets.TryOpen(model, out var stream)) return Skip("Source model is missing.");
             byte[] bytes;
             using (stream) { using var copy = new MemoryStream(); stream.CopyTo(copy); bytes = copy.ToArray(); }
@@ -77,10 +79,12 @@ public sealed class AutomaticObjectLod
                 $"object{Version}|{model}|{Convert.ToHexString(SHA256.HashData(bytes))}|{JsonSerializer.Serialize(_settings)}"))).ToLowerInvariant();
             string stem = $@"meshes\pengulod\generated\objects\{key[..2]}\{key}";
             string manifest = GamePath.ToFileSystemPath(_root, stem + ".json");
-            var mesh = NifGeometryReader.Read(model, bytes);
+            var mesh = NifGeometryReader.Read(model, bytes, staticObjectLod: true);
             sourceCount = mesh.Parts.Sum(p => p.TriangleCount);
             if (mesh.HasIncompleteGeometry) return Skip("Unsupported geometry/material: " + string.Join("; ", mesh.Warnings.Take(3)));
             if (mesh.Parts.Count == 0) return Skip("No usable geometry.");
+            string? omissions = mesh.Warnings.Count == 0 ? null : string.Join("; ", mesh.Warnings);
+            if (omissions is not null) _progress?.Report($"WARNING: Automatic object LOD {model}: {omissions}");
             foreach (var part in mesh.Parts)
             {
                 if (part.Positions.Any(p => !float.IsFinite(p.X) || !float.IsFinite(p.Y) || !float.IsFinite(p.Z))
@@ -127,7 +131,7 @@ public sealed class AutomaticObjectLod
                 string path = stem + $"_lod_{i}.nif";
                 byte[] nif = LodNifWriter.Write("PenguLOD object", built.Parts, "PenguLOD", preserveShapeNames: true);
                 WriteAtomic(GamePath.ToFileSystemPath(_root, path), nif);
-                reports.Add(new(model, i, path, "Generated", sourceCount, built.Triangles, built.DroppedParts, budgets[i], null, Convert.ToHexString(SHA256.HashData(nif))));
+                reports.Add(new(model, i, path, "Generated", sourceCount, built.Triangles, built.DroppedParts, budgets[i], omissions, Convert.ToHexString(SHA256.HashData(nif))));
             }
             WriteAtomic(manifest, JsonSerializer.SerializeToUtf8Bytes(reports));
             Attach(reports); return reports;

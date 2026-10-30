@@ -16,7 +16,7 @@ namespace AnvilLOD.Core.Incremental;
 public static class QuadHasher
 {
     /// <summary>Bump when the output format/algorithm changes so every block rebuilds once.</summary>
-    public const int AlgorithmVersion = 11; // 11: static skin/strip geometry and complete-model validation
+    public const int AlgorithmVersion = 12; // static structure layers and tree optimization
 
     public static string Hash(
         QuadKey quad,

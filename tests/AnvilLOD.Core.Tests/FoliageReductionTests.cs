@@ -13,6 +13,33 @@ namespace AnvilLOD.Core.Tests;
 
 public sealed class FoliageReductionTests
 {
+    [Fact]
+    public void InstalledTreesBelowTheHardBudgetStillLoseRedundantCards()
+    {
+        using var f = new TextureFixture(); const string path = @"meshes\trees\installed_lod.nif";
+        TextureFixture.Put(f.Data, @"textures\leaves.dds", TextureFixture.Solid(20, 180, 20));
+        TextureFixture.Put(f.Data, path, LodNifWriter.Write("tree", [Cards(10)]));
+        var settings = new Tree3DSettings(true, NearTriangleBudget: 100, NearFoliageLoss: 0, FoliageTargetRatio: .5f);
+        var assets = AssetIndex.Build(GameRelease.SkyrimSE, f.Data);
+        var selected = new Tree3DSource(assets, settings: settings).Select(path, 4);
+        Assert.NotNull(selected.MeshPath); Assert.Equal(10, selected.Triangles);
+        Assert.Equal(10, selected.FoliageTrianglesRemoved); Assert.Equal(0, selected.FoliageCoverageLoss);
+        Assert.Equal(20, new Tree3DSource(assets, settings: settings with { FoliageTargetRatio = 1 }).Select(path, 4).Triangles);
+        Assert.Equal(20, new Tree3DSource(assets, settings: settings with { ReduceFoliage = false }).Select(path, 4).Triangles);
+        Assert.NotEqual(settings.Fingerprint, (settings with { FoliageTargetRatio = 1 }).Fingerprint);
+    }
+
+    [Fact]
+    public void UnreachableSoftTargetKeepsThreeDimensionalGeometryWithinTheHardBudget()
+    {
+        using var f = new TextureFixture(); const string path = @"meshes\trees\spread_lod.nif";
+        TextureFixture.Put(f.Data, @"textures\leaves.dds", TextureFixture.Solid(20, 180, 20));
+        TextureFixture.Put(f.Data, path, LodNifWriter.Write("tree", [Cards(5, (i, p) => p + new Vector3(i * 800, 0, 0))]));
+        var selected = new Tree3DSource(AssetIndex.Build(GameRelease.SkyrimSE, f.Data),
+            settings: new(true, NearTriangleBudget: 100, FoliageTargetRatio: .1f)).Select(path, 4);
+        Assert.NotNull(selected.MeshPath); Assert.Equal(10, selected.Triangles); Assert.Equal(0, selected.FoliageTrianglesRemoved);
+    }
+
     private static LodMaterial Material(string name = "leaves", bool doubleSided = true) =>
         new([@"textures\" + name + ".dds"], 0, doubleSided ? 16u : 0, 0, true, 4844, 128, Vector3.Zero, 1);
 
@@ -124,7 +151,7 @@ public sealed class FoliageReductionTests
         using var f = new TextureFixture(); const string model = @"meshes\trees\foliage.nif";
         TextureFixture.Put(f.Data, @"textures\leaves.dds", TextureFixture.Solid(30, 200, 50));
         TextureFixture.Put(f.Data, model, LodNifWriter.Write("leaves", [Cards(10)]));
-        var settings = new Tree3DSettings(true, Lod8: true, NearTriangleBudget: 100, FarTriangleBudget: 4);
+        var settings = new Tree3DSettings(true, Lod8: true, NearTriangleBudget: 100, FarTriangleBudget: 4, FoliageTargetRatio: 1);
         var source = new Tree3DSource(AssetIndex.Build(GameRelease.SkyrimSE, f.Data), settings: settings);
         var near = source.Select(model, 4, true); var far = source.Select(model, 8, true);
         Assert.NotNull(near.MeshPath); Assert.NotNull(far.MeshPath);

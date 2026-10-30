@@ -144,12 +144,14 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
 
         BaseInfo? ReadBase(FormKey fk)
         {
+            if (GeneratedLodInputs.IsPlugin(fk.ModKey.FileName.String)) return null;
             if (!linkCache.TryResolve(fk, out var rec)) return null;
             // Object types that can have static object LOD. Trees (TREE) come with tree LOD (milestone 3).
             if (rec is not (IStaticGetter or IMoveableStaticGetter or IActivatorGetter or IFurnitureGetter or IDoorGetter or IContainerGetter))
                 return null;
             var model = (rec as IModeledGetter)?.Model?.File;
             if (model is null || model.IsNull) return null;
+            if (GeneratedLodInputs.IsModel(model.DataRelativePath.Path)) return null;
 
             string?[]? mnam = null;
             bool distant = false;
@@ -512,6 +514,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             }
         }
 
+        int skippedGenerated = 0;
         foreach (var ctx in priority.PlacedObject().WinningContextOverrides(linkCache))
         {
             ct.ThrowIfCancellationRequested();
@@ -519,6 +522,9 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             if ((visited & 0x3FFFF) == 0) progress?.Report($"Visited {visited:N0} references, {refs.Count:N0} LOD refs so far");
 
             var r = ctx.Record;
+            if (GeneratedLodInputs.IsPlugin(r.FormKey.ModKey.FileName.String)
+                || GeneratedLodInputs.IsPlugin(r.Base.FormKey.ModKey.FileName.String))
+            { skippedGenerated++; continue; }
             if (r.IsDeleted) continue; // deleted references never load, so they'd leave LOD that never hides
             states.Record(r.FormKey, r.MajorRecordFlagsRaw, r.EnableParent);
 
@@ -814,6 +820,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             progress?.Report($"Trees: {trees.Count:N0} with billboards, {missingBillboards.Values.Sum():N0} without ({missingBillboards.Count:N0} tree types have no billboard)");
 
         sw.Stop();
+        if (skippedGenerated > 0) progress?.Report($"Excluded {skippedGenerated:N0} references owned by previous PenguLOD/AnvilLOD output from generation.");
         var stats = new ScanStats(
             PluginsInLoadOrder: _game.PluginsListed,
             PlacedObjectsVisited: visited,
@@ -821,7 +828,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             SkippedDisabled: skippedDisabled,
             SkippedMissingMesh: skippedMissing,
             MissingMeshes: missing.ToDictionary(kv => kv.Key, kv => kv.Value),
-            Elapsed: sw.Elapsed);
+            Elapsed: sw.Elapsed, SkippedGenerated: skippedGenerated);
 
         // Tamriel's low-detail stand-ins for a city's real objects (ChildworldMatches): the SKSE plugin leaves them out while the player is in the city.
         int dynStandIns = 0;

@@ -29,6 +29,7 @@ public static class ScanReport
             s.Stats.LodReferencesFound,
             s.Stats.SkippedDisabled,
             s.Stats.SkippedMissingMesh,
+            s.Stats.SkippedGenerated,
             s.SkippedOutsideGrid,
             archives = new { count = s.ArchivesIndexed, files = s.ArchivedFiles },
             grids = s.Grids.ToDictionary(kv => kv.Key, kv => kv.Value),
@@ -44,6 +45,7 @@ public static class ScanReport
                 seconds = Math.Round(s.Generation.Elapsed.TotalSeconds, 2),
                 staleDeleted = s.StaleFilesDeleted,
                 meshErrors = s.Generation.MeshErrors,
+                meshWarnings = s.Generation.MeshWarnings,
                 blockErrors = s.Generation.BlockErrors.ToDictionary(kv => kv.Key.FileName, kv => kv.Value),
             },
             missingMeshes = s.Stats.MissingMeshes.OrderByDescending(kv => kv.Value).Take(500)

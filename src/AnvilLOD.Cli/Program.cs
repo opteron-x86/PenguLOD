@@ -152,6 +152,7 @@ public static class Program
           --hybrid-trees         Author aligned native trunk cards and reduced crowns; requires --tree-3d
           --tree-trunk-size N    Maximum native trunk texture size (512)
           --tree-trunk-units N   Native trunk world units per pixel (2)
+          --tree-foliage-target N  Soft retained geometry percentage, 10–100 (65); coverage bounds still apply
           --tree-near-budget N  Triangles per near tree model, default 4000; 0 removes the cap
           --tree-far-budget N   Triangles per far tree model, default 1600
           --tree-near-error N   Maximum trunk simplification deviation, default 4 game units
@@ -234,7 +235,7 @@ public static class Program
     {
         if (!a.Has("tree-3d"))
         {
-            if (a.Has("hybrid-trees") || a.Has("tree-trunk-size") || a.Has("tree-trunk-units") || a.Has("tree-3d-lod8") || a.Has("tree-3d-by-name") || a.Has("tree-3d-crc-only") || a.Has("tree-3d-own-lod") || a.Has("tree-3d-dyndolod-first") || a.Has("no-native-trees") || a.Has("no-map-trees") || a.Has("tree-near-budget") || a.Has("tree-far-budget") || a.Has("tree-near-error") || a.Has("tree-far-error"))
+            if (a.Has("tree-foliage-target") || a.Has("hybrid-trees") || a.Has("tree-trunk-size") || a.Has("tree-trunk-units") || a.Has("tree-3d-lod8") || a.Has("tree-3d-by-name") || a.Has("tree-3d-crc-only") || a.Has("tree-3d-own-lod") || a.Has("tree-3d-dyndolod-first") || a.Has("no-native-trees") || a.Has("no-map-trees") || a.Has("tree-near-budget") || a.Has("tree-far-budget") || a.Has("tree-near-error") || a.Has("tree-far-error"))
                 throw new CliArgException("--tree-3d-lod8, --tree-3d-by-name, --tree-3d-crc-only and --tree-3d-dyndolod-first only apply together with --tree-3d.");
             return null;
         }
@@ -245,7 +246,7 @@ public static class Program
         var settings = new Tree3DSettings(Enabled: true, Lod8: a.Has("tree-3d-lod8"), PlainNameFallback: !a.Has("tree-3d-crc-only"),
             MapTrees: !a.Has("no-map-trees"), PreferNamedLod: !a.Has("tree-3d-dyndolod-first"), NearTriangleBudget: Budget("tree-near-budget", 4000),
             FarTriangleBudget: Budget("tree-far-budget", 1600), NearMaxError: Error("tree-near-error", 4), FarMaxError: Error("tree-far-error", 24), GenerateMissing: !a.Has("no-native-trees"),
-            HybridTrunks: a.Has("hybrid-trees"), TrunkTextureSize: Budget("tree-trunk-size", 512), TrunkUnitsPerPixel: Error("tree-trunk-units", 2));
+            HybridTrunks: a.Has("hybrid-trees"), TrunkTextureSize: Budget("tree-trunk-size", 512), TrunkUnitsPerPixel: Error("tree-trunk-units", 2), FoliageTargetRatio: Error("tree-foliage-target", 65) / 100);
         settings.Validate(); return settings;
     }
 

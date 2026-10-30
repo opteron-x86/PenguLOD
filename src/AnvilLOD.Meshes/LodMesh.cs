@@ -85,8 +85,9 @@ public sealed class LodMesh
     public required IReadOnlyList<LodMeshPart> Parts { get; init; }
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
-    /// <summary>A visible shape/node was lost or could not be interpreted. Fake-water conversion is informational.</summary>
-    public bool HasIncompleteGeometry => Warnings.Any(w => !w.StartsWith(Nif.NifGeometryReader.WaterPlaneWarning, StringComparison.Ordinal));
+    /// <summary>Structural geometry was lost or could not be interpreted. Explicit static-LOD omissions and fake water are informational.</summary>
+    public bool HasIncompleteGeometry => Warnings.Any(w => !w.StartsWith(Nif.NifGeometryReader.WaterPlaneWarning, StringComparison.Ordinal)
+        && !w.StartsWith(Nif.NifGeometryReader.LodOmissionWarning, StringComparison.Ordinal));
 
     /// <summary>
     /// The file holds no shape at all (just a node). DynDOLOD Resources ships such files on purpose, e.g. the window

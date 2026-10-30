@@ -57,7 +57,7 @@ public sealed record ScanStats(
     long SkippedDisabled,
     long SkippedMissingMesh,
     IReadOnlyDictionary<string, long> MissingMeshes,
-    TimeSpan Elapsed);
+    TimeSpan Elapsed, long SkippedGenerated = 0);
 
 /// <summary>Writes one object-LOD block (.bto). Implemented in AnvilLOD.Meshes.</summary>
 public interface IObjectLodWriter

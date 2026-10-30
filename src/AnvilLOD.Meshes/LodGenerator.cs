@@ -28,7 +28,8 @@ public sealed record GenerateStats(
     IReadOnlyDictionary<QuadKey, string> BlockErrors,
     TimeSpan Elapsed,
     IReadOnlyDictionary<int, long>? BytesByLevel = null,                                  // actual .bto bytes written, per LOD level
-    IReadOnlyDictionary<(int Level, string Category), (long Triangles, long Vertices)>? SizeBreakdown = null); // source geometry placed, before buried-triangle removal
+    IReadOnlyDictionary<(int Level, string Category), (long Triangles, long Vertices)>? SizeBreakdown = null,
+    IReadOnlyDictionary<string, string>? MeshWarnings = null); // deliberate nonstructural omissions; models remain usable
 
 /// <summary>
 /// Writes .bto files for a set of LOD blocks in parallel. Each LOD mesh is read once and
@@ -39,6 +40,7 @@ public sealed class LodGenerator
     private readonly IAssetSource _assets;
     private readonly ConcurrentDictionary<string, Lazy<LodMesh?>> _meshes = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _meshErrors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _meshWarnings = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly TerrainHeights? _terrain;
     private readonly ISyntheticMeshSource? _synthetic;
@@ -200,7 +202,7 @@ public sealed class LodGenerator
                     bytes = copy.ToArray();
                 }
             }
-            var mesh = Tidy(NifGeometryReader.Read(path, bytes));
+            var mesh = Tidy(NifGeometryReader.Read(path, bytes, staticObjectLod: true));
             if (mesh.HasIncompleteGeometry)
             {
                 _meshErrors[path] = "Incomplete model: " + string.Join("; ", mesh.Warnings.Distinct());
@@ -208,6 +210,8 @@ public sealed class LodGenerator
             }
             if (FitMountains) mesh = FitToFullModel(path, mesh);
             if (mapTextures) mesh = MapMaterials(mesh);
+            var omissions = mesh.Warnings.Where(w => w.StartsWith(NifGeometryReader.LodOmissionWarning, StringComparison.Ordinal)).ToArray();
+            if (omissions.Length > 0 && mesh.Parts.Count > 0) _meshWarnings[GamePath.Normalize(path)] = string.Join("; ", omissions);
             if (mesh.Parts.Count == 0 && !mesh.NoShapesInFile)
                 _meshErrors[path] = mesh.Warnings.Count > 0 ? string.Join("; ", mesh.Warnings.Distinct()) : "no usable shapes";
             return mesh;
@@ -586,6 +590,7 @@ public sealed class LodGenerator
                     {
                         File.WriteAllBytes(tmp, result.Bytes);
                         File.Move(tmp, path, overwrite: true);
+                        WrittenOutputHashes.Record(path, result.Bytes);
                     }
 
                     bytesByLevel.AddOrUpdate((int)quad.Level, result.Bytes.Length, (_, v) => v + result.Bytes.Length);
@@ -622,6 +627,7 @@ public sealed class LodGenerator
             blockErrors.ToDictionary(kv => kv.Key, kv => kv.Value),
             sw.Elapsed,
             bytesByLevel.ToDictionary(kv => kv.Key, kv => kv.Value),
-            breakdown.ToDictionary(kv => (kv.Key.Item1, kv.Key.Item2), kv => (kv.Value.Item1, kv.Value.Item2)));
+            breakdown.ToDictionary(kv => (kv.Key.Item1, kv.Key.Item2), kv => (kv.Value.Item1, kv.Value.Item2)),
+            _meshWarnings.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase));
     }
 }

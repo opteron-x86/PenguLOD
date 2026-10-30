@@ -118,7 +118,7 @@ public static class ScanPipeline
         return large;
     }
 
-    public static ScanSummary Run(ScanRequest req, IProgress<string>? progress = null, CancellationToken ct = default)
+    public static ScanSummary Run(ScanRequest req, IProgress<string>? progress = null, CancellationToken ct = default, StagedOutput? staged = null)
     {
         ct.ThrowIfCancellationRequested();
         ResourceCatalog.ValidateFolders(req.DynDolodFolder, req.ResourcePacks, req.OutputFolder);
@@ -182,7 +182,7 @@ public static class ScanPipeline
         }
         try
         {
-            return RunLogged(req, log, ct);
+            return RunLogged(req, log, ct, staged);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -191,7 +191,7 @@ public static class ScanPipeline
         }
     }
 
-    private static ScanSummary RunLogged(ScanRequest req, IProgress<string>? progress, CancellationToken ct)
+    private static ScanSummary RunLogged(ScanRequest req, IProgress<string>? progress, CancellationToken ct, StagedOutput? staged)
     {
         using var preparationTiming = WorkTiming.Measure("preparation");
 
@@ -533,8 +533,9 @@ public static class ScanPipeline
             BuildManifest.TryParseBlockPath(relPath, out var ws, out var lv)
             && scopeWorldspaces.Contains(ws)
             && (req.Levels is not { Count: > 0 } || req.Levels.Contains((LodLevel)lv));
-        var plan = manifest.Plan(hashes, req.OutputFolder, InScope);
+        var plan = manifest.Plan(hashes, staged?.Output ?? req.OutputFolder, InScope);
         if (req.ObjectAtlas) plan = new BuildPlan(hashes.Keys.ToArray(),[],plan.StaleFiles); // atlas layout can affect every block
+        if (staged is not null) plan = staged.SeedLodBlocks(plan, progress);
         if(req.AtlasCellSize is <64 or >512 || (req.AtlasCellSize&(req.AtlasCellSize-1))!=0)throw new ArgumentException("Atlas cell size must be a power of two from 64 to 512.");
 
         GenerateStats? gen = null;
@@ -909,6 +910,12 @@ public static class ScanPipeline
                     Warn($"The grass cache names {grass.ModelsNotFound.Count} grass models that no enabled mod provides ({string.Join(", ", grass.ModelsNotFound.OrderByDescending(kv => kv.Value).Take(4).Select(kv => Path.GetFileName(kv.Key)))}). "
                          + "The cache was probably made with a different set of grass mods (or with one disabled since): rebuild the grass cache (NGIO / FasterNGIO) with the grass mods you use now, otherwise those areas get no grass LOD and no real grass either.");
             } 
+            if (gen.MeshWarnings is { Count: > 0 })
+            {
+                foreach (var (mesh, detail) in gen.MeshWarnings.OrderBy(kv => kv.Key).Take(20))
+                    progress?.Report($"LOD material warning: {mesh}: {detail}");
+                Warn($"{gen.MeshWarnings.Count} models retained their static surfaces while omitting effect layers or shaderless shapes; see meshWarnings in the scan report.");
+            }
             if (gen.MeshErrors.Count > 0)
             {
                 foreach (var (mesh, err) in gen.MeshErrors.Take(20)) progress?.Report($"Mesh problem: {mesh}: {err}");
