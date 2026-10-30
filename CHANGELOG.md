@@ -5,6 +5,18 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.8] - 2026-10-30
+
+- LOD scans honor deterministic Base Object Swapper removals that replace references or
+  base objects with Skyrim's invisible XMarker. Removed objects stay out of tree/object
+  LOD, child-world copies, generated runtime references and new large-reference entries.
+- Winning enabled `*_SWAP.ini` files are processed in BOS filename order. Reference
+  swaps override base swaps; ambiguous conditional/chance replacements do not become
+  blanket removals. Scan reports identify removed references and unsupported entries.
+- The BOS runtime must be present in the selected Data view. Visible substitutions,
+  property-only edits, seeded chance evaluation and MergeMapper remapping are not yet
+  supported. Regenerate LOD after changing swap configurations.
+
 ## [0.4.0-alpha.7] - 2026-10-29
 
 - Missing recipe texture replacements now retain the affected material's supplied LOD

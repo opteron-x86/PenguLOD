@@ -27,6 +27,33 @@ DLL presence and a valid x64 PE header do not establish SKSE/runtime compatibili
 report identifies this distinction. The game-side plugin still runs inside Skyrim under
 Wine/Proton; only the generator runs natively on Linux.
 
+## Base Object Swapper
+
+The scan report's `baseObjectSwaps` section lists the active configuration count,
+supported removal-rule count, excluded exterior references and unsupported entries.
+Each exclusion includes its reference/base FormKeys, worldspace, source filename and
+line. The count covers exterior references, including ones that did not have usable LOD.
+
+PenguLOD reads winning root `*_SWAP.ini` files from the selected Data view. Disabled mods
+and hidden files do not participate. Files are ordered by case-sensitive filename, with
+later entries taking precedence. Deterministic reference and base swaps to Skyrim's
+`00003B` XMarker remove those references from LOD; a reference-specific swap takes
+precedence over a base swap. Missing BOS runtime files produce a warning and no exclusions.
+
+This is a removal subset, not full BOS emulation. Visible replacement models, transforms,
+property-only flag edits, conditional rules, seeded/random chance selection and
+MergeMapper remapping are not applied. A later ambiguous swap blocks an earlier removal
+for that source; a conditional base swap blocks an unconditional base removal. These
+cases remain in the report rather than silently removing potentially visible objects.
+Legacy `flag(...)` in a swap's fourth field is not interpreted as an initially-disabled
+flag; supported removers work because their replacement is the invisible marker.
+
+After changing a remover, run the LOD stage again and replace the installed LOD output.
+The pipeline invalidates saved stages when swap INI contents change, and regeneration
+removes obsolete tree/object blocks. No source plugin or mod configuration is rewritten.
+For format and runtime semantics, see [BOS source](https://github.com/powerof3/BaseObjectSwapper)
+and [LOD integration notes](https://dyndolod.info/Mods/Base-Object-Swapper).
+
 ## Repeatable checks
 
 `TerrainFixture` creates a small world from synthetic records and textures. Automated

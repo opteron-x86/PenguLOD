@@ -30,7 +30,7 @@ public static class LargeReferenceStage
     /// <param name="flagEsl">Flag AnvilLOD.esm as ESL (takes no plugin slot). Off: a normal ESM that uses a slot.</param>
     /// <param name="dyndolodDllInstalled">DynDOLOD DLL NG is installed: the report and log then point at its large reference workarounds.</param>
     public static Result Run(GameContext game, IReadOnlyCollection<string> worldspaces, string output, IProgress<string>? progress, Action<string> warn, CancellationToken ct,
-        bool flagEsl = true, bool dyndolodDllInstalled = false)
+        bool flagEsl = true, bool dyndolodDllInstalled = false, IReadOnlySet<FormKey>? excludedReferences = null)
     {
         var sw = Stopwatch.StartNew();
         var linkCache = game.LinkCache;
@@ -97,6 +97,8 @@ public static class LargeReferenceStage
             if (r.IsDeleted || !ctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var wsCtx) || !wsName.ContainsKey(wsCtx.Record.FormKey)) continue;
             var wsKey = wsCtx.Record.FormKey;
             void Skip(Reason why) => skipped[wsKey][why] = skipped[wsKey].GetValueOrDefault(why) + 1;
+
+            if (excludedReferences?.Contains(r.FormKey) == true) { Skip(Reason.BaseObjectSwap); continue; }
 
             if (r.Base.FormKeyNullable is not { } baseKey) continue;
             if (LargeReferenceRules.StartsDisabled(r.MajorRecordFlagsRaw)) { Skip(Reason.StartsDisabled); continue; }

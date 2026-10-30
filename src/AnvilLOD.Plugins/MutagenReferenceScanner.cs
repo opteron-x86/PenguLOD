@@ -61,6 +61,10 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
     /// <summary>References copied from child worldspaces into their parent's LOD by the last scan.</summary>
     public int ChildCopies { get; private set; }
 
+    /// <summary>Runtime swap exclusions and unsupported entries from the last scan.</summary>
+    public BaseObjectSwapReport? BaseObjectSwaps { get; private set; }
+    internal IReadOnlySet<FormKey> RemovedByBaseObjectSwapper { get; private set; } = new HashSet<FormKey>();
+
     /// <summary>
     /// 3D tree LOD, last scan: tree types whose only 3D model is stored under the plain tree name (it doesn't match the
     /// mesh's CRC32) while the accept-by-name option is off. Zero when the option is on.
@@ -79,6 +83,9 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
         Tree3DNameOnlyAvailable = 0;
         Tree3DPatchedMeshes = 0;
         Tree3DMatchedByOriginalCrc = 0;
+        BaseObjectSwaps = null;
+        var baseObjectRemovals = BaseObjectRemovals.Load(_game, _assets, ct, progress);
+        RemovedByBaseObjectSwapper = baseObjectRemovals.Excluded;
         var sw = Stopwatch.StartNew();
         var priority = _game.LoadOrder.PriorityOrder;
 
@@ -518,6 +525,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             if (!ctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var wsCtx)) continue; // interior
             var wsId = wsCtx.Record.EditorID;
             if (wsId is null) continue;
+            if (baseObjectRemovals.Exclude(r, wsId)) continue;
             if (resolver.Rules.IgnoresWorld(r.FormKey.ModKey.FileName.String, wsId)) { ignoredByWorldRule++; continue; }
             if (grids.ContainsKey(wsId)) Handle(wsId, null);
             if (parentCopyTargets.Count > 0 && parentCopyTargets.TryGetValue(wsId, out var pcTargets)) CollectParentCopy(ctx, pcTargets);
@@ -829,6 +837,9 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
         if (options.ParentCopies)
             progress?.Report($"Parent > Child copies: {parentCopies.Count:N0} references ({string.Join(", ", parentCopiesByChild.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value:N0}"))}); "
                 + $"left out: {pcNoLod:N0} without LOD, {pcSwitchable:N0} switchable, {pcIgnored:N0} by the ignore list, {pcNavmesh:N0} in navmesh cells, {pcStandIn:N0} city stand-ins listed in ChildworldMatches, {pcFlat:N0} flat ground pieces (roads)");
+        BaseObjectSwaps = baseObjectRemovals.Report;
+        if (BaseObjectSwaps.ConfigFiles > 0)
+            progress?.Report($"Base Object Swapper: {BaseObjectSwaps.RemovedReferences.Count:N0} exterior references excluded by invisible-marker swaps from {BaseObjectSwaps.ConfigFiles:N0} configuration files.");
         return new ScanResult(grids, refs, stats, trees, missingBillboards.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase), dynamic,
             options.MatchTextures ? variants.ToDictionary(kv => kv.Key, kv => kv.Value) : null,
             options.ParentCopies ? parentCopies : null,
