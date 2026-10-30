@@ -5,6 +5,16 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.11] - 2026-10-30
+
+- Optional native hybrid tree authoring creates aligned front/side trunk cards and normal
+  textures from full models, combined with reduced 3D crowns. Installed LOD models retain
+  precedence; ambiguous material separation or unavailable renders keep native geometry.
+- Both cards count toward tree budgets. Record/season variants have separate verified
+  resources; damaged private caches are repaired. Used trunk textures ship with LOD output.
+- Desktop, presets, JSON and CLI expose hybrid authoring and trunk resolution controls.
+  Tree coverage reports distinguish native hybrids, geometry reduction and billboard fallback.
+
 ## [0.4.0-alpha.10] - 2026-10-30
 
 - Optional automatic object LOD fills missing levels requested by active rules, preserving

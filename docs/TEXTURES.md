@@ -28,7 +28,9 @@ Existing TexGen output can supply textures for unsupported features underneath t
   `_trunk.nif` resources under `DynDOLOD/Render/Billboards/` or
   `DynDOLOD/Render/Skyrim/Billboards/`. Matching installed hybrid meshes supply camera
   directions and crops. Enabled mod resources override the standalone bundle.
-  Matching hybrid meshes are required; this pass does not author new hybrid models.
+  Matching hybrid meshes are required for this texture pass. The optional
+  [native hybrid author](TREES.md#native-hybrid-trunks) can instead build trunk cards and
+  textures from supported full trees during LOD generation.
 - **Grass billboards** is optional and uses grass lists on winning landscape texture
   records, including seasonal replacements. Unreferenced library records are skipped.
   Explicit rules and filtered previews can select additional models.

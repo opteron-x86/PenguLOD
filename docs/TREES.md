@@ -43,6 +43,33 @@ Memory figures are geometry estimates before block merging, not elapsed-time pre
 or a guarantee of in-game performance. Native models retain full-model textures, so geometry
 savings alone do not imply a smaller texture footprint.
 
+## Native hybrid trunks
+
+**Author native hybrid trunks** is an optional addition to **Build missing 3D tree models**.
+For supported full trees, it replaces opaque trunk geometry with two aligned front/side
+cards and combines them with a reduced 3D crown. Existing installed LOD models retain
+precedence. This does not require TreeLODGen, TexGen or prebuilt trunk render resources.
+
+The source must have separate opaque trunk shapes and alpha-tested foliage shapes. Blended
+parts, incomplete geometry, missing render textures or an empty camera view retain the
+existing native geometry reduction path. The tree coverage report explains the fallback.
+Models that still exceed the triangle budget use billboards, as before. The four trunk-card
+triangles count toward both near and far budgets; foliage coverage limits still apply to
+the crown. No source models are changed.
+
+The renderer and cards share model-space dimensions, origin and base height. Texture
+coordinates and normals use the matching camera basis. **Maximum native trunk texture
+size** and **Native trunk world units per pixel** control resolution. Record/season bark
+variants and source texture changes produce separate verified resources. The static bake
+uses the renderer's default material calibration; it does not reproduce bark parallax,
+animation or the complete runtime shader.
+
+Generated trunk diffuse/normal textures are published under `textures/pengulod/hybrid` in
+the **LOD output**. Keep them with that output. Private cache corruption is repaired on the
+next generation. Changing these controls requires a LOD run; existing whole-tree billboards
+remain necessary for farther levels. Inspect trunk/crown joins, side views and near/far
+transitions in game before enabling this across a full tree set.
+
 Tests exercise opaque reduction, rendered alpha coverage, material/UV preservation, authored
 far-model selection, texture variants, budget fallback and seasonal output. Test transitions
 and foliage shading in-game when changing model sets, coverage limits or error bounds.

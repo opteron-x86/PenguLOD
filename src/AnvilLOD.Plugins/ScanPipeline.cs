@@ -879,6 +879,8 @@ public static class ScanPipeline
                 }
             }
             else UndersideStage.RemoveAll(output);
+            if (tree3d?.PublishHybridTextures(output) is > 0 and var hybridTextures)
+                progress?.Report($"Native hybrid trees: published {hybridTextures:N0} trunk diffuse/normal textures with the LOD output.");
             // DynDOLOD's "File Not Found Textures": a LOD mesh naming a texture that exists nowhere draws purple.
             if (gen.MeshesLoaded > 0)
             {
