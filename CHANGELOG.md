@@ -5,6 +5,20 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.9] - 2026-10-30
+
+- Native tree and grass billboards can render separate front/side diffuse and normal
+  maps. Object-LOD cards consume each view with its own dimensions; standard BTT tree
+  LOD retains the front view. Origin-centered framing keeps off-center crowns aligned.
+- Tree texture resolution follows the largest winning reference scale, with an unplaced
+  default and explicit rule overrides. It does not change physical tree dimensions.
+- Packed complex-grass color and normals are detected per material and split before
+  resizing. Grass normal atlases use normalized mipmaps, independent of specular alpha;
+  the full runtime grass shader is not reproduced.
+- Desktop, saved presets and CLI requests expose HD views, scale discovery, grass layout
+  and detection threshold. Regenerate textures followed by LOD; grass placement caches
+  do not need regeneration for these settings.
+
 ## [0.4.0-alpha.8] - 2026-10-30
 
 - LOD scans honor deterministic Base Object Swapper removals that replace references or

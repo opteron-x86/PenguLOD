@@ -8,7 +8,7 @@ namespace AnvilLOD.Meshes;
 /// A grass billboard: textures plus the size and base offset from its TexGen <c>.txt</c>. With <paramref name="Rect"/> the
 /// textures are the grass atlas and the quad's UVs are mapped into that rectangle (so every grass type shares one material).
 /// </summary>
-public sealed record GrassBillboard(string Diffuse, string? Normal, float Width, float Height, float ShiftZ, AtlasRect? Rect = null);
+public sealed record GrassBillboard(string Diffuse, string? Normal, float Width, float Height, float ShiftZ, AtlasRect? Rect = null, GrassBillboard? Side = null);
 
 /// <summary>
 /// Turns the grass of one cell (from the grass cache) into LOD geometry: per kept instance two crossed, upright,
@@ -90,16 +90,17 @@ public static class GrassPatchBuilder
                 for (int q = 0; q < n; q++)
                 {
                     var (bb, g) = items[start + q];
-                    float s = g.Scale * sizeScale;
-                    float w0 = bb.Width * s;
-                    // As wide as the grass in the bin would cover, but never wider than the bin itself.
-                    float w = w0 <= 0 ? 0 : Math.Clamp(w0 * MathF.Sqrt(g.Count), w0, MathF.Max(w0, g.Spacing * BinOverlap));
-                    float taller = w0 <= 0 ? 1f : MathF.Min(w / w0, MaxTaller);
-                    float hw = w * 0.5f, h = bb.Height * s * taller;
-                    var basePos = g.Position - origin + new Vector3(0, 0, bb.ShiftZ * g.Scale);
-                    var (u0, v0, u1, v1) = bb.Rect is { } r ? (r.U0, r.V0, r.U1, r.V1) : (0f, 0f, 1f, 1f);
                     for (int c = 0; c < 2; c++)
                     {
+                        var view = c == 1 && bb.Side is { } sideView && sideView.Diffuse == bb.Diffuse && sideView.Normal == bb.Normal ? sideView : bb;
+                        float s = g.Scale * sizeScale;
+                        float w0 = view.Width * s;
+                        // As wide as the grass in the bin would cover, but never wider than the bin itself.
+                        float w = w0 <= 0 ? 0 : Math.Clamp(w0 * MathF.Sqrt(g.Count), w0, MathF.Max(w0, g.Spacing * BinOverlap));
+                        float taller = w0 <= 0 ? 1f : MathF.Min(w / w0, MaxTaller);
+                        float hw = w * 0.5f, h = view.Height * s * taller;
+                        var basePos = g.Position - origin + new Vector3(0, 0, view.ShiftZ * g.Scale);
+                        var (u0, v0, u1, v1) = view.Rect is { } r ? (r.U0, r.V0, r.U1, r.V1) : (0f, 0f, 1f, 1f);
                         float yaw = g.Yaw + c * MathF.PI * 0.5f;
                         var dir = new Vector3(MathF.Cos(yaw), MathF.Sin(yaw), 0);
                         int v = q * 8 + c * 4;

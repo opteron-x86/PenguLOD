@@ -12,7 +12,8 @@ namespace AnvilLOD.Plugins;
 public sealed record TextureGenerationRequest(GameContextOptions Game, string OutputFolder, string? DynDolodFolder = null,
     bool Stitched = true, bool Trees = true, bool Grass = false, bool RenderedObjects = false,
     int BaseSize = 256, int BillboardMaxSize = 512, float UnitsPerPixel = 12, float Brightness = 1,
-    float MinTreeHeight = 256, float MinGrassHeight = 16, string ModelFilter = "", bool TreeTrunks = false, Authoring.MaterialBakeSettings? Materials = null);
+    float MinTreeHeight = 256, float MinGrassHeight = 16, string ModelFilter = "", bool TreeTrunks = false, Authoring.MaterialBakeSettings? Materials = null,
+    Authoring.BillboardSettings? Billboards = null);
 public sealed record TextureGenerationItem(string Kind, string Source, string Output, string Status, string Detail = "", int Width = 0, int Height = 0);
 public sealed record TextureGenerationResult(string OutputFolder, bool Published, int Files, string Fingerprint,
     IReadOnlyList<TextureGenerationItem> Items, IReadOnlyList<string> Warnings, TimeSpan Elapsed)
@@ -36,6 +37,7 @@ public static partial class TextureGeneration
             || !float.IsFinite(request.MinGrassHeight) || request.MinGrassHeight < 0)
             throw new ArgumentException("Invalid texture resolution, brightness or minimum model height.");
         request.Materials?.Validate();
+        request.Billboards?.Validate();
         GenerationDestination.Validate(request.Game, request.OutputFolder);
         if (File.Exists(Path.Combine(request.OutputFolder, TerrainGeneration.ManifestName)))
             throw new ArgumentException("Choose a separate output folder; this contains generated terrain.");

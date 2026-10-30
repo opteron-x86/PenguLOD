@@ -14,7 +14,7 @@ namespace AnvilLOD.Plugins;
 public sealed class TreeCardSource : ISyntheticMeshSource
 {
     public const string Prefix = "~anvillod-treecard|";
-    private const int Version = 1;
+    private const int Version = 2;
 
     private readonly AssetIndex _assets;
     private readonly float _brightness;
@@ -55,7 +55,8 @@ public sealed class TreeCardSource : ISyntheticMeshSource
     {
         if (!Owns(path)) return null;
         var (dds, normal, txt) = Files(path[Prefix.Length..]);
-        return $"c{Version}|b{_brightness:F3}|{_assets.Fingerprint(dds)}|{_assets.Fingerprint(normal)}|{_assets.Fingerprint(txt)}";
+        var side = txt[..^4] + "_2";
+        return $"c{Version}|b{_brightness:F3}|{_assets.Fingerprint(dds)}|{_assets.Fingerprint(normal)}|{_assets.Fingerprint(txt)}|{_assets.Fingerprint(side + ".dds")}|{_assets.Fingerprint(side + "_n.dds")}";
     }
 
     public LodMesh? Build(string path) => _cache.GetOrAdd(path, p => Create(p[Prefix.Length..]));
@@ -76,6 +77,10 @@ public sealed class TreeCardSource : ISyntheticMeshSource
         using (var reader = new StreamReader(st)) text = reader.ReadToEnd();
         var bb = TreeBillboard.Parse(dds, text, useFirstView: dds.EndsWith("_1.dds", StringComparison.OrdinalIgnoreCase));
         if (bb is null) return null;
+
+        string sideDds = txt[..^4] + "_2.dds", sideNormal = txt[..^4] + "_2_n.dds";
+        if (_assets.Exists(sideDds) && TreeBillboard.Parse(sideDds, text, view: 2) is { } side)
+            return new LodMesh { Path = Prefix + plainDds, Parts = [ViewCard(bb, normal, false), ViewCard(side, sideNormal, true)] };
 
         var material = new LodMaterial(
             [dds, _assets.Exists(normal) ? normal : "", "", "", "", "", "", "", ""],
@@ -119,6 +124,25 @@ public sealed class TreeCardSource : ISyntheticMeshSource
         {
             Path = Prefix + plainDds,
             Parts = [new LodMeshPart { Material = material, Positions = pos, UVs = uv, Normals = nrm, Tangents = tan, Bitangents = bit, Colors = colors, Triangles = tris }],
+        };
+    }
+
+    private LodMeshPart ViewCard(TreeBillboard bb, string normal, bool side)
+    {
+        var dir = side ? Vector3.UnitY : Vector3.UnitX;
+        var normalDir = side ? Vector3.UnitX : -Vector3.UnitY;
+        float half = bb.Width * .5f;
+        var bottom = new Vector3(0, 0, bb.ShiftZ); var top = bottom + Vector3.UnitZ * bb.Height;
+        return new LodMeshPart
+        {
+            Name = side ? "Side billboard" : "Front billboard",
+            Material = new LodMaterial([bb.TexturePath, _assets.Exists(normal) ? normal : "", "", "", "", "", "", "", ""],
+                0x8000_0300u, 0x0000_0015u, 3, true, GrassPatchBuilder.AlphaTestFlags, GrassPatchBuilder.AlphaThreshold, Vector3.Zero, 1),
+            Positions = [bottom - dir * half, bottom + dir * half, top + dir * half, top - dir * half],
+            UVs = [new(0, 1), new(1, 1), new(1, 0), new(0, 0)],
+            Normals = [normalDir, normalDir, normalDir, normalDir], Tangents = [dir, dir, dir, dir],
+            Bitangents = [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ], Triangles = [0, 1, 2, 0, 2, 3],
+            Colors = MathF.Abs(_brightness - 1) <= .001f ? null : Enumerable.Repeat(BtoBuilder.Scale(0xFFFFFFFF, _brightness), 4).ToArray()
         };
     }
 }
