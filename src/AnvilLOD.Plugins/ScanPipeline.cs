@@ -255,8 +255,12 @@ public static class ScanPipeline
         var ruleOptions = new LodRuleOptions(req.Candles, req.FxGlow, string.IsNullOrWhiteSpace(req.CustomRulesFile) ? null : req.CustomRulesFile, animatedShips);
         if (ruleOptions.CustomFile is not null && !File.Exists(ruleOptions.CustomFile))
             throw new FileNotFoundException($"The custom LOD rules file was not found: {ruleOptions.CustomFile}. Untick \"Use custom rules\" or pick the file again.", ruleOptions.CustomFile);
-        foreach (string feature in new[] { req.Candles ? "Candles" : "", req.FxGlow ? "FXGlow" : "" }.Where(f => f.Length > 0))
-            if (!dataRuleFiles.ContainsKey($"DynDOLOD_SSE_{feature}.ini")) Warn($"{feature} rules were requested but not found. Add a resource pack supplying DynDOLOD_SSE_{feature}.ini.");
+        string presetKey = req.Preset.ToString().ToLowerInvariant();
+        var optionalRuleFiles = new List<string>();
+        if (req.Candles) optionalRuleFiles.AddRange(["DynDOLOD_SSE_candles_all.ini", $"DynDOLOD_SSE_candles_{presetKey}.ini"]);
+        if (req.FxGlow) optionalRuleFiles.Add($"DynDOLOD_SSE_fxglow_{presetKey}.ini");
+        foreach (string file in optionalRuleFiles)
+            if (!dataRuleFiles.ContainsKey(file)) Warn($"Optional rules were requested but {file} was not found. Add a resource pack supplying it.");
         var rules = LodRules.Load(null, dataRuleFiles, plugins, req.Preset, "SSE", ruleOptions);
         // A mod's rule file is only read when it is named for a plugin; one named after the mod (spaces, no .esp key) never is.
         var unreadable = dataRuleFiles.Keys.Where(n => n.StartsWith("DynDOLOD_", StringComparison.OrdinalIgnoreCase) && !LodRules.IsReadableRuleFileName(n))

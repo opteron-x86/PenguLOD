@@ -37,6 +37,19 @@ public class ResourceDiscoveryTests
     private sealed class Messages(List<string> lines) : IProgress<string> { public void Report(string value) => lines.Add(value); }
 
     [Fact]
+    public void OptionalRuleWarningsUseTheSelectedPresetAndCandlesAllFile()
+    {
+        using var f = new TerrainFixture();
+        var request = new ScanRequest(f.Game, new(TreeLod: false, DynamicLod: false, GridObjects: false, MatchTextures: false),
+            GrassLod: false, RemoveBuried: false, RemoveUnderwater: false, Candles: true, FxGlow: true, DynDolodFolder: f.Textures.Resources);
+        foreach (string name in new[] { "candles_all", "candles_high", "fxglow_high" })
+            Put(f.Textures.Resources, @"Rules\DynDOLOD_SSE_" + name + ".ini", "[Skyrim LODGen]\n");
+        Assert.DoesNotContain(ScanPipeline.Run(request).Warnings, w => w.Contains("Optional rules"));
+        File.Delete(GamePath.ToFileSystemPath(f.Textures.Resources, @"Rules\DynDOLOD_SSE_candles_high.ini"));
+        Assert.Single(ScanPipeline.Run(request).Warnings, w => w.Contains("Optional rules") && w.Contains("candles_high.ini"));
+    }
+
+    [Fact]
     public void ScanOnlyNeverStartsOcclusionPublicationOrUndersideTerrainPreparation()
     {
         using var f = new TerrainFixture(); var messages = new List<string>();
