@@ -111,13 +111,14 @@ public static class GenerationPipeline
             {
                 active = "lod";
                 OutputSnapshot? output = null;
+                var previousLodHashes = job.Journal.Stages.Single(s => s.Plan.Id == "lod").Output;
                 receipt = job.Run("lod", Fingerprint(lod, ResourceCatalog.ExternalFiles(lod.DynDolodFolder, lod.ResourcePacks).Concat(new[] { lod.CustomRulesFile,
                     grass is null ? lod.GeneratedGrassFolder : null, textures is null ? lod.GeneratedTextureFolder : null, terrain is null ? lod.GeneratedTerrainFolder : null }).ToArray()), () =>
                 {
                     // The engine verifies generated inputs before writing to the isolated destination.
-                    using var staged = new StagedOutput(lod.OutputFolder!, !lod.CleanOutput, progress, ct);
+                    using var staged = new StagedOutput(lod.OutputFolder!, !lod.CleanOutput, progress, ct, deferLodBlocks: true, previousHashes: previousLodHashes);
                     var clock = Stopwatch.StartNew();
-                    try { summary = ScanPipeline.Run(lod with { OutputFolder = staged.Payload }, progress, ct); }
+                    try { summary = ScanPipeline.Run(lod with { OutputFolder = staged.Payload }, progress, ct, staged); }
                     finally
                     {
                         var log = Path.Combine(staged.Payload, "AnvilLOD.log");

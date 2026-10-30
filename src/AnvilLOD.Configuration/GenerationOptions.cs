@@ -56,6 +56,7 @@ public static class GenerationOptions
         new("treeTrunkSize", "Trees & grass", "Maximum native trunk texture size", "Diffuse and normal maps are published with LOD output.", "512", Choices: ["128", "256", "512", "1024", "2048"]),
         new("treeTrunkUnits", "Trees & grass", "Native trunk world units per pixel", "Lower values increase resolution up to the size limit.", 2m, .25m, 128),
         new("treeFoliage", "Trees & grass", "Reduce redundant leaf cards", "Prune whole alpha-tested cards using 14 sampled views; keep UVs, sampled silhouette edges and model bounds.", true),
+        new("treeFoliageTarget", "Trees & grass", "Tree geometry target (%)", "Aim to retain this percentage of source triangles, even below the hard budget. Coverage limits may retain more. 100 restores budget-only reduction.", 65m, 10, 100),
         new("treeNearCoverage", "Trees & grass", "LOD 4 foliage coverage loss (%)", "Maximum sampled interior coverage loss per material and view. 0 only removes redundant coverage.", 1m, 0, 20),
         new("treeFarCoverage", "Trees & grass", "LOD 8 foliage coverage loss (%)", "Far foliage coverage limit. Unsupported geometry and materials retain their cards.", 3m, 0, 20),
         new("treeNearBudget", "Trees & grass", "LOD 4 tree triangle budget", "Per model; 0 disables the cap. Trees that cannot fit within coverage limits use billboards.", 4000m, 0, 1000000),

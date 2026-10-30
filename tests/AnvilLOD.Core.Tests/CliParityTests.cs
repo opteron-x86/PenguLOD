@@ -13,6 +13,24 @@ namespace AnvilLOD.Core.Tests;
 public class CliParityTests
 {
     [Fact]
+    public void TreeGeometryTargetRoundTripsThroughSettingsAndRejectsInvalidCliValues()
+    {
+        using var f = new TextureFixture();
+        var settings = new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = f.Data, PluginsFile = f.Plugins,
+            OutputFolder = f.Output, PipelineGrass = false, PipelineTextures = false, PipelineTerrain = false, PipelineLod = true };
+        settings.Options["tree3d"] = JsonSerializer.SerializeToElement(true);
+        settings.Options["treeFoliageTarget"] = JsonSerializer.SerializeToElement(80m);
+        string preset = Path.Combine(f.Root, "preset.json"), request = Path.Combine(f.Root, "request.json");
+        SettingsStore.Write(preset, settings);
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["export-job", "--settings", preset, "--output", request]));
+        var exported = JsonSerializer.Deserialize<GenerationPipelineRequest>(File.ReadAllText(request))!;
+        Assert.Equal(.8f, exported.Lod!.Scan.Tree3D!.FoliageTargetRatio);
+        foreach (string value in new[] { "NaN", "0", "101" })
+            Assert.Equal(2, AnvilLOD.Cli.Program.Main(["scan", "--data", f.Data, "--plugins", f.Plugins,
+                "--tree-3d", "--tree-foliage-target", value]));
+    }
+
+    [Fact]
     public void RepeatedResourceFlagsSelectLaterPacksInScanReports()
     {
         using var f = new TerrainFixture();

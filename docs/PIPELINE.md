@@ -27,6 +27,22 @@ manifest are regenerated when the terrain stage resumes; the old published direc
 intact until the complete replacement is ready. Grass and textures retain their own
 publication and manifest checks.
 
+Object blocks scheduled for rebuild or deletion are not copied into staging. Unchanged
+and unselected blocks are copied independently; the previous directory remains intact.
+Hashes recorded during completed block writes and retained-file copies are used for the
+new stage's snapshot while those staged files retain their recorded metadata. Other files
+are read and hashed normally. Resume always rechecks published file contents, including
+changes that preserve size and timestamps. Retained blocks that disagree with a saved
+output hash are rebuilt; a damaged block outside the selected scope stops publication.
+
+Before generation, disable the previously installed **object LOD** mod. The scan excludes
+PenguLOD/AnvilLOD-owned references and terrain support meshes even when previous output is
+enabled, and preflight reports installed output plugins independently of the destination.
+After generation, install and enable the matching texture, terrain and object outputs.
+Generating into a separate folder does not update an installed mod automatically. Purple
+tree cards after an HD-texture run can indicate that the installed texture output is older
+than the object LOD that references it.
+
 The CLI runs the same engine:
 
 ```sh

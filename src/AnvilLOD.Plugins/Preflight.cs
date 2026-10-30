@@ -1,4 +1,5 @@
 using AnvilLOD.Plugins.Mo2;
+using AnvilLOD.Core.Lod;
 
 namespace AnvilLOD.Plugins;
 
@@ -46,6 +47,12 @@ public static class Preflight
                 "and files of the last run into the load order this run reads, and the new files are written over what the game still loads from it. " +
                 "That shows up in game as stale or doubled LOD, such as huge dark slabs in the sky. Tick it again when the run is done."));
         }
+
+        var previous = enabledPlugins.Where(GeneratedLodInputs.IsPlugin).ToArray();
+        if (previous.Length > 0 && !issues.Any(i => i.Code == OutputModEnabled))
+            issues.Add(new(OutputModEnabled,
+                $"Previous object LOD output is enabled ({string.Join(", ", previous)}), even if installed outside the generation folder. "
+                + "Disable that object LOD mod before generating and enable the replacement afterward. Generated references are excluded from the scan; keep matching texture and terrain outputs available."));
 
         var dyn = enabledPlugins.Where(p => p.StartsWith("DynDOLOD", StringComparison.OrdinalIgnoreCase)
                                             && (p.EndsWith(".esm", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".esp", StringComparison.OrdinalIgnoreCase))).ToList();

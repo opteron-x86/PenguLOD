@@ -7,6 +7,36 @@ public static partial class NifGeometryReader
 {
     private sealed class UnsupportedEffectException(string message) : NotSupportedException(message);
 
+    private static bool OmitObjectLodLayer(NifFile nif, int shaderRef, int alphaRef, string? name, List<string> warnings)
+    {
+        if (shaderRef == -1)
+        {
+            warnings.Add($"{LodOmissionWarning}shape '{name}' has no shader and cannot draw.");
+            return true;
+        }
+        if (shaderRef < 0 || shaderRef >= nif.Blocks.Count || nif.Blocks[shaderRef].Type != "BSEffectShaderProperty") return false;
+        var r = nif.ReaderFor(nif.Blocks[shaderRef]);
+        r.I32(); r.Skip(checked((int)r.U32() * 4));
+        int controller = r.I32();
+        if (controller < -1 || controller >= nif.Blocks.Count) throw new InvalidDataException("Invalid effect controller reference.");
+        if (controller >= 0 && !nif.Blocks[controller].Type.EndsWith("Controller", StringComparison.Ordinal))
+            throw new InvalidDataException("Effect controller reference has the wrong block type.");
+        bool blended = false;
+        if (alphaRef != -1)
+        {
+            if (alphaRef < 0 || alphaRef >= nif.Blocks.Count || nif.Blocks[alphaRef].Type != "NiAlphaProperty")
+                throw new InvalidDataException("Invalid effect alpha property.");
+            var a = nif.ReaderFor(nif.Blocks[alphaRef]);
+            a.I32(); a.Skip(checked((int)a.U32() * 4)); a.I32();
+            blended = (a.U16() & 1) != 0;
+        }
+        // Window-glow overlays, smoke, embers and animated lights do not belong in a static structure.
+        // An opaque static effect could be structural, so it must still be supported or explicitly rejected.
+        if (!blended && controller == -1) return false;
+        warnings.Add($"{LodOmissionWarning}shape '{name}' uses an {(controller >= 0 ? "animated" : "blended")} effect layer; retained the model's static surfaces.");
+        return true;
+    }
+
     private static LodMaterial ReadStaticEffect(NifFile nif, NifBlock block, int alphaRef)
     {
         var r = nif.ReaderFor(block);

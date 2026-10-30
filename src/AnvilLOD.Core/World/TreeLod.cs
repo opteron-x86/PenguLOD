@@ -67,18 +67,19 @@ public sealed record TreeReference(
 public sealed record Tree3DSettings(bool Enabled = false, bool Lod8 = false, bool PlainNameFallback = false, bool MapTrees = true, bool PreferNamedLod = false,
     int NearTriangleBudget = 4000, int FarTriangleBudget = 1600, float NearMaxError = 4, float FarMaxError = 24, bool GenerateMissing = true,
     bool ReduceFoliage = true, float NearFoliageLoss = .01f, float FarFoliageLoss = .03f,
-    bool HybridTrunks = false, int TrunkTextureSize = 512, float TrunkUnitsPerPixel = 2)
+    bool HybridTrunks = false, int TrunkTextureSize = 512, float TrunkUnitsPerPixel = 2, float FoliageTargetRatio = .65f)
 {
     public static readonly Tree3DSettings Off = new();
 
     /// <summary>Part of the settings fingerprint, so a changed option rebuilds the blocks it affects.</summary>
-    public string Fingerprint => Enabled ? $"tree3d:{(Lod8 ? "l48" : "l4")}{(PlainNameFallback ? "+name" : "")}{(PreferNamedLod ? "+ownlod" : "")}{(MapTrees ? "" : "+nomaptrees")}" + FormattableString.Invariant($"|budgets:{NearTriangleBudget}/{FarTriangleBudget}|error:{NearMaxError}/{FarMaxError}|native:{GenerateMissing}|foliage:{ReduceFoliage}/{NearFoliageLoss}/{FarFoliageLoss}|hybrid:{HybridTrunks}/{TrunkTextureSize}/{TrunkUnitsPerPixel}") : "";
+    public string Fingerprint => Enabled ? $"tree3d:{(Lod8 ? "l48" : "l4")}{(PlainNameFallback ? "+name" : "")}{(PreferNamedLod ? "+ownlod" : "")}{(MapTrees ? "" : "+nomaptrees")}" + FormattableString.Invariant($"|budgets:{NearTriangleBudget}/{FarTriangleBudget}|error:{NearMaxError}/{FarMaxError}|native:{GenerateMissing}|foliage:{ReduceFoliage}/{NearFoliageLoss}/{FarFoliageLoss}/{FoliageTargetRatio}|hybrid:{HybridTrunks}/{TrunkTextureSize}/{TrunkUnitsPerPixel}") : "";
 
     public void Validate()
     {
         if (NearTriangleBudget is < 0 or > 1000000 || FarTriangleBudget is < 0 or > 1000000
             || !float.IsFinite(NearMaxError) || !float.IsFinite(FarMaxError) || NearMaxError is < 0 or > 1024 || FarMaxError is < 0 or > 4096
             || !float.IsFinite(NearFoliageLoss) || !float.IsFinite(FarFoliageLoss) || NearFoliageLoss is < 0 or > .2f || FarFoliageLoss is < 0 or > .2f
+            || !float.IsFinite(FoliageTargetRatio) || FoliageTargetRatio is < .1f or > 1
             || TrunkTextureSize is < 32 or > 2048 || (TrunkTextureSize & (TrunkTextureSize - 1)) != 0
             || !float.IsFinite(TrunkUnitsPerPixel) || TrunkUnitsPerPixel is < .25f or > 128)
             throw new ArgumentException("Invalid 3D-tree budgets or simplification bounds.");

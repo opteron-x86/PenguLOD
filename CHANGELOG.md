@@ -5,6 +5,28 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.13] - 2026-10-30
+
+- Prevent previous output from feeding back into object LOD. Generated plugin references,
+  terrain undersides and generated object models are excluded as sources. Preflight detects
+  installed output plugins even when generation writes to a different folder. Regenerate
+  object LOD if an earlier automatic-object run included previous output.
+- Keep static architecture when separate glow, smoke, animated effects or shaderless layers
+  cannot be drawn as static LOD. Report each omission; opaque unsupported materials and
+  damaged geometry still reject the model. Empty legacy geometry links no longer reject
+  otherwise valid structures. Texture and tree rendering retain their stricter checks.
+- Reduce redundant foliage on installed trees below their hard triangle budgets. The new
+  geometry target defaults to 65%; sampled silhouette, coverage and material constraints
+  may retain more. Desktop, saved settings and CLI expose the target.
+- Stage only retained object blocks instead of copying blocks scheduled for rebuild or
+  deletion. Record output hashes during block writes and retained-file copies, avoiding
+  another full read of those files before publication. Resume still verifies published
+  contents; changed retained blocks with saved hashes are rebuilt.
+
+Install the matching texture output alongside object LOD. Generating textures does not
+automatically update an installed copy in a mod manager. Terrain and grass caches do not
+need regeneration for these fixes.
+
 ## [0.4.0-alpha.12] - 2026-10-30
 
 - Discover compatible rules, recipes, mesh lookups, world exclusions, child-world settings

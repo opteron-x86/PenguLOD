@@ -25,6 +25,11 @@ for each material. Sampled silhouette edges and model bounds are retained. Near/
 allow at most 1%/3% interior coverage loss by default; set either to 0 to remove only
 redundant coverage. Disable the option to keep all leaf cards.
 
+**Tree geometry target (%)** also optimizes models already below the hard budget. The
+default is 65% of source triangles; 100 restores budget-only reduction. This is a target,
+not a required reduction: coverage constraints can retain more geometry without forcing
+billboards. The CLI equivalent is `--tree-foliage-target 65` with `--tree-3d`.
+
 Blended materials, unsupported connected geometry, unknown alpha textures and subpixel
 cards remain intact. Sampling has bounded work and memory; reaching a limit retains the
 foliage. These are sampled coverage bounds, not a guarantee of identical shading from every

@@ -17,9 +17,9 @@ public sealed class OutputSnapshot
     {
         var before = new FileInfo(file);
         long length = before.Length, modified = before.LastWriteTimeUtc.Ticks;
-        using var input = File.OpenRead(file);
+        using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1, FileOptions.SequentialScan);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(128 * 1024);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(1024 * 1024);
         try
         {
             int count;
@@ -36,6 +36,7 @@ public sealed class OutputSnapshot
     public static OutputSnapshot Capture(string root, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         var result = new OutputSnapshot();
+        int recorded = 0, read = 0;
         var watch = Stopwatch.StartNew();
         var pending = new Stack<string>(); pending.Push(root);
         while (pending.TryPop(out var dir))
@@ -46,12 +47,16 @@ public sealed class OutputSnapshot
                 ct.ThrowIfCancellationRequested(); RejectLink(root, path);
                 if (Directory.Exists(path)) { pending.Push(path); continue; }
                 if (Path.GetFileName(path).Equals("meta.ini", StringComparison.OrdinalIgnoreCase)) continue;
-                result.Files.Add(Path.GetRelativePath(root, path).Replace('\\', '/'), HashFile(path, ct));
+                string hash;
+                if (WrittenOutputHashes.TryGet(path, out hash)) recorded++;
+                else { hash = HashFile(path, ct); read++; }
+                result.Files.Add(Path.GetRelativePath(root, path).Replace('\\', '/'), hash);
                 if (watch.Elapsed.TotalSeconds >= 1)
                 { progress?.Report($"Recording output hashes: {result.Files.Count:N0} files..."); watch.Restart(); }
             }
         }
         if (result.Files.Count == 0) throw new InvalidDataException("The stage produced no output files: " + root);
+        progress?.Report($"Output hashes recorded: {recorded:N0} from completed writes/copies, {read:N0} files read for hashing.");
         return result;
     }
 

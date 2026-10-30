@@ -125,7 +125,7 @@ public static class RequestFactory
         if (generate) GenerationDestination.Validate(game, output!);
         return new ScanRequest(game, new ScanOptions(Worldspaces: worlds.Length == 0 ? null : worlds,
             IncludeInitiallyDisabled: B("disabled"), IncludeEnableParented: B("parented"), TreeLod: B("trees"),
-            DynamicLod: B("dynamic"), GridObjects: B("grid"), Tree3D: new Tree3DSettings(B("tree3d"), B("tree3d8"), B("treePlain"), B("mapTrees"), B("treeNamed"), I("treeNearBudget"), I("treeFarBudget"), F("treeNearError"), F("treeFarError"), B("treeNative"), B("treeFoliage"), F("treeNearCoverage") / 100, F("treeFarCoverage") / 100, B("treeHybrid"), int.Parse(C("treeTrunkSize")), F("treeTrunkUnits")),
+            DynamicLod: B("dynamic"), GridObjects: B("grid"), Tree3D: new Tree3DSettings(B("tree3d"), B("tree3d8"), B("treePlain"), B("mapTrees"), B("treeNamed"), I("treeNearBudget"), I("treeFarBudget"), F("treeNearError"), F("treeFarError"), B("treeNative"), B("treeFoliage"), F("treeNearCoverage") / 100, F("treeFarCoverage") / 100, B("treeHybrid"), int.Parse(C("treeTrunkSize")), F("treeTrunkUnits"), F("treeFoliageTarget") / 100),
             MatchTextures: B("matchTextures"), ParentCopies: B("parentCopies"), GlowWindows: B("glowWindows"), PbrWaterfalls: B("pbrWaterfalls"), RenderTreeBillboards: B("renderBillboards")),
             OutputFolder: output, Levels: levels, Generate: generate,
             DynDolodFolder: Optional(s.DynDolodFolder) is { } d ? PathValue(d, s) : null, ResourcePacks: ResourcePaths(s),

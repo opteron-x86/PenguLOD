@@ -33,6 +33,9 @@ public static partial class NifGeometryReader
     /// <summary>A complete effect cannot be represented by a static billboard; never render its remaining shapes alone.</summary>
     public const string UnsupportedEffectWarning = "Unsupported render effect: ";
 
+    /// <summary>A nonstructural effect or shaderless shape intentionally excluded from static object LOD.</summary>
+    public const string LodOmissionWarning = "Static LOD omission: ";
+
     /// <summary>Colour (RGBA, little-endian) of fake water: CS Water Mod's dark teal at ~69% opacity (0xAF33342A), made 10% more transparent and 10% darker so it sits closer to the water around it.</summary>
     public const uint FakeWaterColor = 0x9E2E2F26u;
 
@@ -58,7 +61,9 @@ public static partial class NifGeometryReader
     /// <param name="passthru">Keep every shape's own shader settings (LODGen's "passthru" LOD models) instead of
     /// reducing them to the standard LOD shader.</param>
     /// <param name="waterAsLit">Read BSWaterShaderProperty shapes as lit fake water (<see cref="FakeWaterMaterial"/>) instead of skipping them.</param>
-    public static LodMesh Read(string path, byte[] data, bool passthru = false, bool waterAsLit = false, bool includeTexGenPlane = false, bool includeUnshaded = false, bool renderEffects = false)
+    /// <param name="staticObjectLod">Omit animated/blended effect layers and explicitly shaderless shapes, with diagnostics.
+    /// Geometry corruption and unsupported opaque materials still reject the model. Texture/tree rendering stays strict.</param>
+    public static LodMesh Read(string path, byte[] data, bool passthru = false, bool waterAsLit = false, bool includeTexGenPlane = false, bool includeUnshaded = false, bool renderEffects = false, bool staticObjectLod = false)
     {
         var nif = NifFile.Read(data);
         var parts = new List<LodMeshPart>();
@@ -67,7 +72,7 @@ public static partial class NifGeometryReader
         var scene = new Lazy<Dictionary<int, Matrix4x4>>(() => SceneTransforms(nif));
 
         foreach (var root in nif.Roots)
-            Walk(nif, root, Matrix4x4.Identity, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects);
+            Walk(nif, root, Matrix4x4.Identity, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects, staticObjectLod);
 
         bool anyShape = nif.Blocks.Any(b => ShapeTypes.Contains(b.Type) || b.Type is "NiTriShape" or "BSLODTriShape" or "NiTriStrips");
         return new LodMesh { Path = path, Parts = parts, Warnings = warnings, NoShapesInFile = !anyShape && warnings.Count == 0 };
@@ -130,7 +135,7 @@ public static partial class NifGeometryReader
 
     private static void Walk(NifFile nif, int index, Matrix4x4 parent, List<LodMeshPart> parts, List<string> warnings,
         HashSet<int> visited, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded,
-        Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects, int depth = 0)
+        Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects, bool staticObjectLod, int depth = 0)
     {
         if (index == -1) return;
         if (index < 0 || index >= nif.Blocks.Count) { warnings.Add($"Scene child {index} could not be read: invalid block reference."); return; }
@@ -157,16 +162,16 @@ public static partial class NifGeometryReader
                     children = [children[active]];
                 }
                 foreach (int child in children)
-                    Walk(nif, child, world, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects, depth + 1);
+                    Walk(nif, child, world, parts, warnings, visited, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects, staticObjectLod, depth + 1);
             }
             else if (ShapeTypes.Contains(block.Type))
             {
-                var part = ReadShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects);
+                var part = ReadShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects, staticObjectLod);
                 if (part is not null) parts.Add(part);
             }
             else if (block.Type is "NiTriShape" or "BSLODTriShape" or "NiTriStrips")
             {
-                var part = ReadLeShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects);
+                var part = ReadLeShape(nif, block, parent, warnings, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, scene, renderEffects, staticObjectLod);
                 if (part is not null) parts.Add(part);
             }
             else
@@ -192,7 +197,7 @@ public static partial class NifGeometryReader
 
     // ---------- shapes ----------
 
-    private static LodMeshPart? ReadShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded, Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects)
+    private static LodMeshPart? ReadShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded, Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects, bool staticObjectLod)
     {
         var r = nif.ReaderFor(block);
         var av = ReadAvObject(nif, ref r);
@@ -218,6 +223,8 @@ public static partial class NifGeometryReader
         }
         if (numVerts == 0 || numTris == 0) return null;
         if (dataSize == 0 && partition is null) throw new InvalidDataException("Shape has counts but no vertex/triangle buffer.");
+
+        if (staticObjectLod && OmitObjectLodLayer(nif, shaderRef, alphaRef, av.Name, warnings)) return null;
 
         bool viewportPlane = includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true;
         var material = viewportPlane && (shaderRef < 0 || shaderRef >= nif.Blocks.Count || nif.Blocks[shaderRef].Type != "BSLightingShaderProperty")
@@ -333,7 +340,7 @@ public static partial class NifGeometryReader
     /// A Skyrim LE (Oldrim) shape: NiTriShape (or BSLODTriShape) with a NiTriShapeData block. Tangents come from the data block when it has
     /// them, otherwise they are worked out from the UVs (LE keeps them in an extra data block we don't read).
     /// </summary>
-    private static LodMeshPart? ReadLeShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded, Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects)
+    private static LodMeshPart? ReadLeShape(NifFile nif, NifBlock block, Matrix4x4 parent, List<string> warnings, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded, Lazy<Dictionary<int, Matrix4x4>> scene, bool renderEffects, bool staticObjectLod)
     {
         var r = nif.ReaderFor(block);
         var av = ReadAvObject(nif, ref r);
@@ -349,9 +356,14 @@ public static partial class NifGeometryReader
         int alphaRef = r.I32();
 
         bool strips = block.Type == "NiTriStrips";
+        // A null geometry link is an empty shape, commonly left behind by exporters. It has no drawable data.
+        // Out-of-range links and links to the wrong block type remain errors.
+        if (dataRef == -1 && skin == -1) return null;
         if (dataRef < 0 || dataRef >= nif.Blocks.Count || nif.Blocks[dataRef].Type != (strips ? "NiTriStripsData" : "NiTriShapeData"))
             throw new InvalidDataException("Geometry data block is missing or has the wrong type.");
         SkinInfo? skinInfo = skin >= 0 ? ReadSkin(nif, skin, av.Name) : null;
+
+        if (staticObjectLod && OmitObjectLodLayer(nif, shaderRef, alphaRef, av.Name, warnings)) return null;
 
         bool viewportPlane = includeTexGenPlane && av.Name?.Contains("TexGen Plane", StringComparison.OrdinalIgnoreCase) == true;
         var material = viewportPlane && (shaderRef < 0 || shaderRef >= nif.Blocks.Count || nif.Blocks[shaderRef].Type != "BSLightingShaderProperty")

@@ -43,7 +43,7 @@ public sealed record Tree3DLevelReport(string Model, int Level, string SourceMod
 public sealed class Tree3DSource : ISyntheticMeshSource
 {
     public const string Prefix = "~anvillod-tree3d|";
-    private const int Version = 7;
+    private const int Version = 8;
 
     private readonly AssetIndex _assets;
     private readonly float _brightness;
@@ -175,10 +175,18 @@ public sealed class Tree3DSource : ISyntheticMeshSource
         float error = level == 4 ? _settings.NearMaxError : _settings.FarMaxError;
         var near = level == 8 ? Select(model, 4, key.Native, variant) : null;
         int target = budget;
+        if (_settings.ReduceFoliage)
+        {
+            // A hard cap alone never optimizes the many installed trees already below it.
+            // This is a soft target: coverage constraints may keep more, without forcing a billboard.
+            int available = hybrid is null ? raw.Parts.Sum(p => p.TriangleCount) : hybrid.Crown.Parts.Sum(p => p.TriangleCount) + 4;
+            int softTarget = Math.Max(hybrid is null ? 1 : 5, (int)MathF.Ceiling(available * _settings.FoliageTargetRatio));
+            target = budget > 0 ? Math.Min(budget, softTarget) : softTarget;
+        }
         if (near is { MeshPath: not null } && !distinct && _settings.ReduceFoliage)
         {
             int lowerCost = Math.Max(1, (int)(near.Triangles * .65f));
-            target = budget > 0 ? Math.Min(budget, lowerCost) : lowerCost;
+            target = target > 0 ? Math.Min(target, lowerCost) : lowerCost;
         }
         float? foliageLoss = _settings.ReduceFoliage ? level == 4 ? _settings.NearFoliageLoss : _settings.FarFoliageLoss : null;
         if (hybrid is not null && target is > 0 and <= 4)
