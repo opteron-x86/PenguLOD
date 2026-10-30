@@ -38,6 +38,9 @@ Steam discovery is available in **Preferences**. It reads standard native/Flatpa
 locations on Linux, `Program Files (x86)\Steam` on Windows, and their library manifests.
 Choose explicit paths for Steam installed elsewhere or for other game installations.
 
+Compatible rules, texture recipes and render models can come from enabled mods or optional
+standalone [resource packs](RESOURCE-PACKS.md). No DynDOLOD executable is required.
+
 ## Choose stages and outputs
 
 Each stage needs a separate output mod folder. Use empty folders outside the game and

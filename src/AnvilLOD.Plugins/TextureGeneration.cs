@@ -13,10 +13,10 @@ public sealed record TextureGenerationRequest(GameContextOptions Game, string Ou
     bool Stitched = true, bool Trees = true, bool Grass = false, bool RenderedObjects = false,
     int BaseSize = 256, int BillboardMaxSize = 512, float UnitsPerPixel = 12, float Brightness = 1,
     float MinTreeHeight = 256, float MinGrassHeight = 16, string ModelFilter = "", bool TreeTrunks = false, Authoring.MaterialBakeSettings? Materials = null,
-    Authoring.BillboardSettings? Billboards = null);
+    Authoring.BillboardSettings? Billboards = null, IReadOnlyList<string>? ResourcePacks = null);
 public sealed record TextureGenerationItem(string Kind, string Source, string Output, string Status, string Detail = "", int Width = 0, int Height = 0);
 public sealed record TextureGenerationResult(string OutputFolder, bool Published, int Files, string Fingerprint,
-    IReadOnlyList<TextureGenerationItem> Items, IReadOnlyList<string> Warnings, TimeSpan Elapsed)
+    IReadOnlyList<TextureGenerationItem> Items, IReadOnlyList<string> Warnings, TimeSpan Elapsed, ResourceDiscoveryReport? Resources = null)
 {
     public int Errors => Items.Count(i => i.Status == "Failed");
 }
@@ -45,12 +45,7 @@ public static partial class TextureGeneration
             throw new ArgumentException("Choose a separate texture output folder; this folder contains a generated grass cache.");
         if (File.Exists(Path.Combine(request.OutputFolder, "AnvilLOD.manifest.json")) || File.Exists(Path.Combine(request.OutputFolder, "AnvilLOD.log")))
             throw new ArgumentException("Choose a separate texture output folder; this folder contains generated LOD.");
-        if (request.DynDolodFolder is { Length: > 0 } resources)
-        {
-            if (!Directory.Exists(resources)) throw new DirectoryNotFoundException("DynDOLOD resource folder not found: " + resources);
-            if (HostPath.IsWithin(request.OutputFolder, resources) || HostPath.IsWithin(resources, request.OutputFolder))
-                throw new ArgumentException("Texture output and DynDOLOD resources must be separate folders.");
-        }
+        ResourceCatalog.ValidateFolders(request.DynDolodFolder, request.ResourcePacks, request.OutputFolder);
         var previous = TextureGenerationManifest.Read(request.OutputFolder);
         if (request.ModelFilter.Length > 0 && previous is { Complete: true, ModelFilter.Length: 0 })
             throw new ArgumentException("Choose a different output folder for a filtered preview; it must not replace your full texture set.");
@@ -71,13 +66,14 @@ public static partial class TextureGeneration
         var assets = game.BuildAssets(p => p.StartsWith("textures\\") || p.StartsWith("meshes\\") || p.StartsWith("dyndolod\\"));
         foreach (var skipped in assets.SkippedArchives) Warn("Archive skipped: " + skipped);
         progress?.Report($"Texture generation: {game.PluginsLoaded:N0} plugins, {assets.ArchiveCount:N0} archives.");
-        string? resources = ResourceRoot(request.DynDolodFolder);
-        var rules = ReadRules(game, assets, resources);
+        var resources = ResourceCatalog.Load(game, assets, request.DynDolodFolder, request.ResourcePacks, ct);
+        var rules = ReadRules(game, resources);
+        progress?.Report($"Resources: {resources.Report.Rules} rules, {resources.Report.Configs} configurations, {resources.Report.RenderModels} render models.");
         if (request.Stitched && rules.Program.Entries.Count == 0)
-            throw new InvalidOperationException("No texture stitching recipes match this load order. Choose the DynDOLOD installation folder, or turn off stitched textures.");
+            throw new InvalidOperationException("No texture stitching recipes match this load order. Add a resource pack with recipes for the enabled plugins, or turn off stitched textures.");
         rules.Program.BaseSize = request.BaseSize; rules.Program.Brightness = request.Brightness;
-        if (request.RenderedObjects && resources is null && !assets.EnumeratePaths(@"dyndolod\render\skyrim\objects\").Any())
-            throw new InvalidOperationException("Rendered objects need DynDOLOD render models. Choose the DynDOLOD installation folder.");
+        if (request.RenderedObjects && !resources.RenderModels("objects").Any())
+            throw new InvalidOperationException("Rendered objects need compatible render models. Add a resource folder or enable a mod supplying them in Data/DynDOLOD/Render.");
 
         Directory.CreateDirectory(request.OutputFolder);
         string lockPath = Path.Combine(request.OutputFolder, ".AnvilLOD.texture.lock");
@@ -196,40 +192,17 @@ public static partial class TextureGeneration
                 progress?.Report($"Published {files.Count:N0} texture and billboard files to {request.OutputFolder}.");
             }
             else progress?.Report("Texture output was not published. Review failures; any previous completed output was kept.");
-            var result = new TextureGenerationResult(request.OutputFolder, publish, files.Count, fingerprint, items, warnings, timer.Elapsed);
+            var result = new TextureGenerationResult(request.OutputFolder, publish, files.Count, fingerprint, items, warnings, timer.Elapsed, resources.Report);
             File.WriteAllText(Path.Combine(request.OutputFolder, "AnvilLOD.textures-report.json"), JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
             return result;
         }
         finally { if (!keepStage && Directory.Exists(stage)) Directory.Delete(stage, true); }
     }
 
-    internal static string? ResourceRoot(string? folder)
-    {
-        if (string.IsNullOrWhiteSpace(folder)) return null;
-        foreach (var sub in new[] { @"Edit Scripts\DynDOLOD", "DynDOLOD", "" })
-        {
-            var root = sub.Length == 0 ? folder : GamePath.ResolveExisting(folder, sub);
-            if (root is not null && (GamePath.ResolveExisting(root, "Configs") is not null || GamePath.ResolveExisting(root, "Render") is not null)) return root;
-        }
-        throw new DirectoryNotFoundException("Choose the DynDOLOD folder containing Edit Scripts/DynDOLOD/Configs.");
-    }
-
     internal sealed record Recipes(TextureRecipeSet Program, List<string> Billboards);
-    internal static Recipes ReadRules(GameContext game, AssetIndex assets, string? resources)
+    internal static Recipes ReadRules(GameContext game, ResourceCatalog resources)
     {
-        var sources = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase);
-        if (resources is not null && GamePath.ResolveExisting(resources, "Configs") is { } configs)
-            foreach (var file in Directory.EnumerateFiles(configs).Order(StringComparer.OrdinalIgnoreCase))
-                sources[Path.GetFileName(file)] = () => File.ReadAllText(file);
-        foreach (var path in assets.EnumeratePaths("dyndolod\\").Order(StringComparer.OrdinalIgnoreCase))
-        {
-            if (path[9..].Contains('\\')) continue;
-            sources[GamePath.GetFileName(path)] = () =>
-            {
-                if (!assets.TryOpen(path, out var stream)) throw new FileNotFoundException(path);
-                using (stream) using (var reader = new StreamReader(stream)) return reader.ReadToEnd();
-            };
-        }
+        var sources = resources.TextFiles("configs");
         var tokens = game.LoadOrder.ListedOrder.Select((p, i) => (Token: TextureRecipe.PluginToken(p.ModKey.FileName.String), Index: i)).ToDictionary(p => p.Token, p => p.Index, StringComparer.OrdinalIgnoreCase);
         var result = new Recipes(new(), []);
         var matched = sources.Select(s => (s.Key, s.Value, Match: System.Text.RegularExpressions.Regex.Match(s.Key,

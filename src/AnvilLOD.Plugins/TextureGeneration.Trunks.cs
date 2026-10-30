@@ -16,32 +16,18 @@ public static partial class TextureGeneration
         public string? Error { get; set; }
     }
 
-    private static void GenerateTrunks(TextureGenerationRequest request, AssetIndex assets, string? resources,
+    private static void GenerateTrunks(TextureGenerationRequest request, AssetIndex assets, ResourceCatalog resources,
         Func<string, byte[]?> read, Action<string, byte[]> write, List<TextureGenerationItem> items,
         Action<string> warn, IProgress<string>? progress, CancellationToken ct)
     {
         progress?.Report("Finding hybrid tree trunk render resources and matching cards...");
         var models = new Dictionary<string, TrunkResource>(StringComparer.OrdinalIgnoreCase);
-        // Both the older game-specific bundle layout and the current mod layout are used in the wild.
-        var folders = new[] { @"render\skyrim\billboards\", @"render\billboards\" };
-        if (resources is not null)
-            foreach (var prefix in folders)
-                if (GamePath.ResolveExisting(resources, prefix) is { } folder)
-                    foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        if (!file.EndsWith("_trunk.nif", StringComparison.OrdinalIgnoreCase)) continue;
-                        string relative = GamePath.Normalize(Path.GetRelativePath(folder, file));
-                        models[@"textures\" + relative[..^4]] = new(file, () => File.ReadAllBytes(file));
-                    }
-        // Assets resolve enabled mod priority and archives, and always override the standalone bundle.
-        foreach (var prefix in folders.Select(p => @"dyndolod\" + p))
-            foreach (var path in assets.EnumeratePaths(prefix).Order(StringComparer.Ordinal))
-            {
-                ct.ThrowIfCancellationRequested();
-                if (path.EndsWith("_trunk.nif", StringComparison.OrdinalIgnoreCase))
-                    models[@"textures\" + path[prefix.Length..^4]] = new(path, () => read(path) ?? throw new FileNotFoundException(path));
-            }
+        foreach (var (relative, resource) in resources.RenderModels("billboards"))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (relative.EndsWith("_trunk.nif", StringComparison.OrdinalIgnoreCase))
+                models[@"textures\" + relative[..^4]] = new(resource.Origin, resource.Read);
+        }
 
         var cards = new Dictionary<string, TrunkCards>(StringComparer.OrdinalIgnoreCase);
         var hybridPaths = assets.EnumeratePaths(@"meshes\dyndolod\lod\trees\")

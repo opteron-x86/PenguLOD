@@ -13,6 +13,22 @@ namespace AnvilLOD.Core.Tests;
 public class CliParityTests
 {
     [Fact]
+    public void RepeatedResourceFlagsSelectLaterPacksInScanReports()
+    {
+        using var f = new TerrainFixture();
+        string first = Path.Combine(f.Root, "first"), second = Path.Combine(f.Root, "second"), report = Path.Combine(f.Root, "resources.json");
+        const string file = @"Rules\DynDOLOD_SSE_all.ini";
+        TextureFixture.Put(first, file, System.Text.Encoding.UTF8.GetBytes("[Skyrim LODGen]\n"));
+        TextureFixture.Put(second, file, System.Text.Encoding.UTF8.GetBytes("[Skyrim LODGen]\n;later\n"));
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["scan", "--data", f.Textures.Data, "--plugins", f.Textures.Plugins,
+            "--resources", first, "--resources", second, "--report", report, "--no-match-textures", "--cache-folder", Path.Combine(f.Root, "cache")]));
+        using var result = JsonDocument.Parse(File.ReadAllText(report));
+        var row = Assert.Single(result.RootElement.GetProperty("resources").GetProperty("Files").EnumerateArray());
+        Assert.Contains("second", row.GetProperty("Origin").GetString());
+        Assert.Single(row.GetProperty("Overridden").EnumerateArray());
+    }
+
+    [Fact]
     public void ScanHonorsTheRequestAndNeverPublishesEvenWhenGenerateIsSet()
     {
         using var f = new TerrainFixture();

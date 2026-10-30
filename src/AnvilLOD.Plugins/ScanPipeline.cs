@@ -17,7 +17,7 @@ public sealed record ScanRequest(
     string SettingsFingerprint = "default",
     IReadOnlyCollection<LodLevel>? Levels = null, // null = all levels the .lod file allows
     bool Generate = false,                         // also write the .bto files (needs OutputFolder)
-    string? DynDolodFolder = null,                 // DynDOLOD install folder: its rule files are reused (optional)
+    string? DynDolodFolder = null,                 // Optional primary resource folder (legacy setting name)
     LodPreset Preset = LodPreset.High,
     bool RemoveBuried = true,                      // drop LOD triangles buried under the terrain (reads LAND)
     bool RemoveUnderwater = true,                  // also drop triangles completely below the water surface of their cell, as DynDOLOD does (part of the same terrain read)
@@ -62,7 +62,7 @@ public sealed record ScanRequest(
     string? GeneratedTextureFolder = null,
     string? GeneratedGrassFolder = null,
     string? GeneratedTerrainFolder = null, bool ObjectAtlas = false, int AtlasCellSize = 256,
-    AutomaticObjectSettings? AutomaticObjects = null);
+    AutomaticObjectSettings? AutomaticObjects = null, IReadOnlyList<string>? ResourcePacks = null);
 
 public sealed record ScanSummary(
     ScanStats Stats,
@@ -89,7 +89,7 @@ public sealed record ScanSummary(
     int DynamicRefs = 0,
     Tree3DStats? Tree3D = null,
     BaseObjectSwapReport? BaseObjectSwaps = null,
-    IReadOnlyList<AutomaticObjectLevel>? AutomaticObjects = null);
+    IReadOnlyList<AutomaticObjectLevel>? AutomaticObjects = null, ResourceDiscoveryReport? Resources = null);
 
 /// <summary>
 /// Load order → asset index → reference scan → quad buckets → hashes → build plan,
@@ -121,6 +121,7 @@ public static class ScanPipeline
     public static ScanSummary Run(ScanRequest req, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+        ResourceCatalog.ValidateFolders(req.DynDolodFolder, req.ResourcePacks, req.OutputFolder);
         req.Scan.Tree3D?.Validate();
         req.AutomaticObjects?.Validate();
         if (req.AutomaticObjects is { Enabled: true })
@@ -244,62 +245,28 @@ public static class ScanPipeline
         if (assets.ArchiveCount == 0)
             Warn("No BSA archives were found. Vanilla LOD meshes and LOD settings live in BSAs, so check the Data folder / MO2 instance path.");
 
-        // LOD meshes found by file name (name_lod_N.nif) + DynDOLOD-format rules from the DynDOLOD install and Data\DynDOLOD
+        // Named LOD meshes plus compatible rules from resource folders and the enabled Data view.
         var lodIndex = LodMeshIndex.Build(assets.EnumeratePaths("meshes\\").Where(p => p.Contains("_lod", StringComparison.Ordinal)));
-        var dataRuleFiles = new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in assets.EnumeratePaths("dyndolod\\"))
-        {
-            var rest = path["dyndolod\\".Length..];
-            if (rest.Contains('\\') || !rest.EndsWith(".ini", StringComparison.Ordinal)) continue;
-            var p = path;
-            dataRuleFiles[rest] = () =>
-            {
-                if (!assets.TryOpen(p, out var st)) return "";
-                using var reader = new StreamReader(st);
-                return reader.ReadToEnd();
-            };
-        }
-        // Some mods ship their rule file in the Data root instead of Data\DynDOLOD (BIRDS does). DynDOLOD would
-        // skip those; the mod author clearly meant them to be used, so they're read too (Data\DynDOLOD wins).
-        var misplaced = new List<string>();
-        foreach (var (name, full) in game.RootFiles())
-        {
-            if (!name.StartsWith("dyndolod_", StringComparison.OrdinalIgnoreCase) || !name.EndsWith(".ini", StringComparison.OrdinalIgnoreCase)) continue;
-            if (dataRuleFiles.ContainsKey(name)) continue;
-            var f = full;
-            dataRuleFiles[name] = () => File.ReadAllText(f);
-            misplaced.Add(name);
-        }
-        if (misplaced.Count > 0)
-            progress?.Report($"Rule files found in the Data root instead of Data\\DynDOLOD (used anyway): {string.Join(", ", misplaced)}");
-        var rulesFolder = ResolveRulesFolder(req.DynDolodFolder);
+        var resources = ResourceCatalog.Load(game, assets, req.DynDolodFolder, req.ResourcePacks, ct);
+        var dataRuleFiles = resources.TextFiles("rules");
+        progress?.Report($"Resources: {resources.Report.Rules} rules, {resources.Report.Configs} configurations, {resources.Report.RenderModels} render models; {resources.Report.Files.Count(f => f.Overridden.Count > 0)} file overrides. See resources in the scan report.");
         var plugins = game.LoadOrder.ListedOrder.Where(l => l.Mod is not null).Select(l => l.ModKey.ToString()).ToList();
         bool animatedShips = req.AnimatedShips && req.NativeGridObjects && req.Scan.GridObjects && plugins.Any(p => p.StartsWith("AnimatedShips", StringComparison.OrdinalIgnoreCase));
         var ruleOptions = new LodRuleOptions(req.Candles, req.FxGlow, string.IsNullOrWhiteSpace(req.CustomRulesFile) ? null : req.CustomRulesFile, animatedShips);
         if (ruleOptions.CustomFile is not null && !File.Exists(ruleOptions.CustomFile))
             throw new FileNotFoundException($"The custom LOD rules file was not found: {ruleOptions.CustomFile}. Untick \"Use custom rules\" or pick the file again.", ruleOptions.CustomFile);
-        if ((req.Candles || req.FxGlow) && rulesFolder is null)
-            progress?.Report("Candles / FXGlow need the DynDOLOD folder (their rule files are part of DynDOLOD); nothing was added.");
-        var rules = LodRules.Load(rulesFolder, dataRuleFiles, plugins, req.Preset, "SSE", ruleOptions);
+        foreach (string feature in new[] { req.Candles ? "Candles" : "", req.FxGlow ? "FXGlow" : "" }.Where(f => f.Length > 0))
+            if (!dataRuleFiles.ContainsKey($"DynDOLOD_SSE_{feature}.ini")) Warn($"{feature} rules were requested but not found. Add a resource pack supplying DynDOLOD_SSE_{feature}.ini.");
+        var rules = LodRules.Load(null, dataRuleFiles, plugins, req.Preset, "SSE", ruleOptions);
         // A mod's rule file is only read when it is named for a plugin; one named after the mod (spaces, no .esp key) never is.
         var unreadable = dataRuleFiles.Keys.Where(n => n.StartsWith("DynDOLOD_", StringComparison.OrdinalIgnoreCase) && !LodRules.IsReadableRuleFileName(n))
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
         if (unreadable.Count > 0)
-            progress?.Report($"WARNING: {unreadable.Count} rule file(s) in Data\\DynDOLOD are named for no plugin, so their rules are never used: {string.Join(", ", unreadable)}. "
+            progress?.Report($"WARNING: {unreadable.Count} resource rule file(s) are named for no plugin, so their rules are never used: {string.Join(", ", unreadable)}. "
                              + "Rename each to DynDOLOD_SSE_<plugin key>.ini for the plugin that places the models (TMDDirtRoads.esp -> DynDOLOD_SSE_tmddirtroadsesp.ini).");
-        if (rulesFolder is not null)
-        {
-            var worldIgnore = Path.Combine(Path.GetDirectoryName(rulesFolder)!, "Configs", "DynDOLOD_SSE_mod_world_ignore.txt");
-            if (File.Exists(worldIgnore)) rules.AddModWorldIgnore(File.ReadAllText(worldIgnore));
-        }
-        progress?.Report($"LOD meshes by name: {lodIndex.Count:N0} objects; rules: {rules.Count:N0} from {rules.Files.Count} files ({req.Preset} preset{(ruleOptions.Candles ? " + Candles" : "")}{(ruleOptions.FxGlow ? " + FXGlow" : "")}{(ruleOptions.CustomFile is null ? "" : " + custom rules")}"
-                         + (rulesFolder is null ? ", no DynDOLOD install set: mod rule files and defaults only)" : ")"));
-        Dictionary<string, string>? meshLookup = null;
-        if (rulesFolder is not null)
-        {
-            var lookupFile = Path.Combine(Path.GetDirectoryName(rulesFolder)!, "Configs", "DynDOLOD_SSE_mesh_lookup.txt");
-            if (File.Exists(lookupFile)) meshLookup = LodMeshResolver.ParseMeshLookup(File.ReadAllText(lookupFile));
-        }
+        if (resources.Text(@"configs\DynDOLOD_SSE_mod_world_ignore.txt") is { } worldIgnore) rules.AddModWorldIgnore(worldIgnore);
+        progress?.Report($"LOD meshes by name: {lodIndex.Count:N0} objects; rules: {rules.Count:N0} from {rules.Files.Count} files ({req.Preset} preset{(ruleOptions.Candles ? " + Candles" : "")}{(ruleOptions.FxGlow ? " + FXGlow" : "")}{(ruleOptions.CustomFile is null ? "" : " + custom rules")})");
+        var meshLookup = resources.Text(@"configs\DynDOLOD_SSE_mesh_lookup.txt") is { } lookupText ? LodMeshResolver.ParseMeshLookup(lookupText) : null;
         var ships = req.DetailedShips ? new ShipLodSource(assets) : null;
         int mapObjectLevel = req.MapObjectLevel;
         if (mapObjectLevel == -2)
@@ -316,16 +283,16 @@ public static class ScanPipeline
 
         // Walled cities: DynDOLOD's child world configs say which child worldspaces are copied into the parent's LOD.
         var childCopies = ChildWorldCopies.None;
-        if ((req.ChildWorlds || req.Scan.ParentCopies) && rulesFolder is not null)
+        if (req.ChildWorlds || req.Scan.ParentCopies)
         {
-            var configs = Path.Combine(Path.GetDirectoryName(rulesFolder)!, "Configs");
-            childCopies = ChildWorldCopies.Load(configs, plugins, req.Preset);
+            var configs = resources.TextFiles("configs");
+            childCopies = ChildWorldCopies.FromFiles(configs, plugins, req.Preset);
+            if (req.Scan.ParentCopies && !configs.Keys.Any(n => n.StartsWith("DynDOLOD_SSE_childworld_", StringComparison.OrdinalIgnoreCase)))
+                Warn("Parent > Child copies were requested but no child-world configurations were found. Add a resource pack supplying them.");
             if (!req.ChildWorlds) childCopies = childCopies.WithoutChildCopies();
             if (childCopies.Worlds.Count > 0)
                 progress?.Report($"Child worldspaces copied into their parent's LOD: {string.Join(", ", childCopies.Worlds.Select(w => $"{w.Child} -> {w.Parent}"))}");
         }
-        else if (req.Scan.ParentCopies && rulesFolder is null)
-            progress?.Report("Parent > Child copies need DynDOLOD's Configs folder (set the DynDOLOD install folder); none written.");
         var scanner = new MutagenReferenceScanner(game, assets, resolver, childCopies);
         // The PBR option also picks the PBR-patched waterfall models (Community Shaders only), when the load order has them.
         var scan = scanner.Scan(req.Scan with { PbrWaterfalls = req.PbrLod }, progress, ct);
@@ -348,7 +315,7 @@ public static class ScanPipeline
         progress?.Report($"Scan: {scan.Stats.LodReferencesFound:N0} LOD refs from {scan.Stats.PlacedObjectsVisited:N0} refs in {scan.Stats.Elapsed.TotalSeconds:F1}s");
 
         TerrainReader.Result? terrain = null;
-        if ((req.RemoveBuried || req.Underside || req.Occlusion is not null) && scan.Grids.Count > 0)
+        if ((req.RemoveBuried || req.Generate && (req.Underside || req.Occlusion is not null)) && scan.Grids.Count > 0)
         {
             progress?.Report("Reading terrain heights (LAND)...");
             terrain = TerrainReader.Read(game, scan.Grids.Keys.ToList(), ct);
@@ -375,7 +342,7 @@ public static class ScanPipeline
         }
 
         // Validate and prepare grass inputs before the potentially long occlusion pass.
-        if (req.Occlusion is not null && terrain is not null && (req.OcclusionFolder ?? req.OutputFolder) is { } occlusionFolder)
+        if (req.Generate && req.Occlusion is not null && terrain is not null && (req.OcclusionFolder ?? req.OutputFolder) is { } occlusionFolder)
         {
             var occ = OcclusionStage.Run(game, terrain.Heights, scan.Grids, scan.References, scan.Trees, assets, occlusionFolder, req.Occlusion, progress, Warn, ct);
             if (occ.Path is not null)
@@ -524,7 +491,7 @@ public static class ScanPipeline
         if (req.Scan.MatchTextures)
         {
             var generated = req.GeneratedTextureFolder is { } textureFolder ? TextureGenerationManifest.Read(textureFolder, true) : null;
-            var recipeSet = generated?.Recipes ?? TextureGeneration.ReadRules(game, assets, TextureGeneration.ResourceRoot(req.DynDolodFolder)).Program;
+            var recipeSet = generated?.Recipes ?? TextureGeneration.ReadRules(game, resources).Program;
             if (recipeSet.Entries.Count > 0)
             {
                 byte[]? RecipeSource(string path)
@@ -952,6 +919,7 @@ public static class ScanPipeline
             if (objectReport.Any(r => r.Mesh is null)) Warn("Some automatic object LOD levels were skipped; installed levels are preserved. See the object coverage report for model-specific reasons.");
             if (req.Generate) File.WriteAllText(Path.Combine(req.OutputFolder!, "PenguLOD.objects.json"), JsonSerializer.Serialize(objectReport, PersistentPipeline.Json));
         }
+        if (req.Generate) File.WriteAllText(Path.Combine(req.OutputFolder!, "PenguLOD.resources.json"), JsonSerializer.Serialize(resources.Report, PersistentPipeline.Json));
         return new ScanSummary(
             scan.Stats,
             assets.ArchiveCount,
@@ -977,7 +945,7 @@ public static class ScanPipeline
             scan.Dynamic?.Count ?? 0,
             tree3dStats,
             scanner.BaseObjectSwaps,
-            objectReport);
+            objectReport, resources.Report);
 
         // "plugin.esm\\model_000a7329" -> "plugin.esm;000a7329"
         static string TexGenKey(string missingKey) => TexGenLists.Key(missingKey);
@@ -1001,8 +969,6 @@ public static class ScanPipeline
 
         // TexGen_SSE_Tree_Billboards.txt / TexGen_SSE_Grass_Billboards.txt: "plugin;FORMID;EditorID[,Complex]"
         static HashSet<string> ReadTexGenLists(AssetIndex assets) => TexGenLists.Read(assets);
-
-        static string? ResolveRulesFolder(string? dyndolod) => LodRules.FindInstallRulesFolder(dyndolod);
 
         void Warn(string w)
         {

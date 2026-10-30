@@ -17,6 +17,8 @@ public static class RequestFactory
         => Optional(value) is { } p ? PathValue(p, s) : throw new ArgumentException($"Choose {label} first.");
     public static string[] Lines(string text) => text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    public static string[] ResourcePaths(DesktopSettings s) => Lines(s.ResourceFolders).Select(p => PathValue(p, s)).ToArray();
+
     public static GameContextOptions Game(DesktopSettings s)
     {
         string? P(string value) => Optional(value) is { } p ? PathValue(p, s) : null;
@@ -61,7 +63,7 @@ public static class RequestFactory
                 (float)s.BakePbrScale, (float)s.BakePbrGamma, (float)s.BakeAo, (float)s.BakeAmbient, (float)s.BakeDirectional),
             Billboards: new(s.TextureGenHdViews, s.TextureGenReferenceScale, (float)s.TextureGenUnplacedTreeScale,
                 Enum.TryParse<AnvilLOD.Plugins.Authoring.GrassTextureMode>(s.TextureGenGrassTextures, out var grassTextures) ? grassTextures
-                    : throw new ArgumentException("Grass texture layout must be Auto, Basic or Packed."), (float)s.TextureGenComplexThreshold));
+                    : throw new ArgumentException("Grass texture layout must be Auto, Basic or Packed."), (float)s.TextureGenComplexThreshold), ResourcePacks: ResourcePaths(s));
         TextureGeneration.Validate(request);
         if (Optional(s.GrassOutput) is { } grassOutput)
         {
@@ -126,7 +128,7 @@ public static class RequestFactory
             DynamicLod: B("dynamic"), GridObjects: B("grid"), Tree3D: new Tree3DSettings(B("tree3d"), B("tree3d8"), B("treePlain"), B("mapTrees"), B("treeNamed"), I("treeNearBudget"), I("treeFarBudget"), F("treeNearError"), F("treeFarError"), B("treeNative"), B("treeFoliage"), F("treeNearCoverage") / 100, F("treeFarCoverage") / 100, B("treeHybrid"), int.Parse(C("treeTrunkSize")), F("treeTrunkUnits")),
             MatchTextures: B("matchTextures"), ParentCopies: B("parentCopies"), GlowWindows: B("glowWindows"), PbrWaterfalls: B("pbrWaterfalls"), RenderTreeBillboards: B("renderBillboards")),
             OutputFolder: output, Levels: levels, Generate: generate,
-            DynDolodFolder: Optional(s.DynDolodFolder) is { } d ? PathValue(d, s) : null,
+            DynDolodFolder: Optional(s.DynDolodFolder) is { } d ? PathValue(d, s) : null, ResourcePacks: ResourcePaths(s),
             CustomRulesFile: Optional(s.CustomRulesFile) is { } r ? PathValue(r, s) : null,
             Preset: Enum.Parse<LodPreset>(C("preset")), RemoveBuried: B("removeBuried"), RemoveUnderwater: B("removeUnderwater"),
             GrassLod: B("grass"), GrassDensity: F("grassDensity"), GrassSize: F("grassSize"), GrassTop: F("grassTop"), GrassBottom: F("grassBottom"),

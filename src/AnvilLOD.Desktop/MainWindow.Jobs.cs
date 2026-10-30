@@ -95,6 +95,7 @@ public sealed partial class MainWindow
             .Concat(s.Generation?.BlockErrors.Select(m => "Block error: " + m) ?? []);
         _treeCoverage.ItemsSource = s.Tree3D?.Levels;
         _objectCoverage.ItemsSource = s.AutomaticObjects;
+        _resourceCoverage.ItemsSource = s.Resources?.Files;
         _issues.Text = string.Join('\n', issues);
     }
     public sealed record WorldRow(string World, int Lod4, int Lod8, int Lod16, int Lod32);
@@ -196,7 +197,7 @@ public sealed partial class MainWindow
             RequestFactory.Optional(s.CacheFolder) is { } c ? RequestFactory.PathValue(c, s) : SettingsStore.CacheRoot, "analysis", Guid.NewGuid().ToString("N"));
         return RunJob(generate ? "Asset authoring" : "Asset analysis", s, (p, ct) => ModAuthorTool.Run(new AuthorRequest(game, s.AuthorPlugin.Trim(), output,
             generate && s.AuthorMeshes, generate && s.AuthorBillboards, generate && s.AuthorRules, (float)s.AuthorMinSize, (float)s.AuthorTreeHeight, generate && s.AuthorOverwrite,
-            RequestFactory.Optional(s.DynDolodFolder) is { } d ? RequestFactory.PathValue(d, s) : null, TreeStandIns: generate && s.AuthorStandIns), p, ct),
+            RequestFactory.Optional(s.DynDolodFolder) is { } d ? RequestFactory.PathValue(d, s) : null, TreeStandIns: generate && s.AuthorStandIns, ResourcePacks: RequestFactory.ResourcePaths(s)), p, ct),
             (r, folder, _) => { _resultViews["Mod author"].ItemsSource = r.Items; WriteResult(folder, r); Notice($"{r.Items.Count:N0} models inspected · {r.MeshesWritten:N0} meshes · {r.BillboardsWritten:N0} billboards. Full report: {r.ReportFile}"); });
     }
     private static void WriteResult<T>(string folder, T result) => File.WriteAllText(Path.Combine(folder, "report.json"), JsonSerializer.Serialize(result, SettingsStore.JsonOptions));
