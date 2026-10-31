@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using System.Text;
+using AnvilLOD.Core.Lod;
 using AnvilLOD.Core.World;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Binary.Parameters;
@@ -36,23 +37,33 @@ public static class LargeReferenceStage
         var linkCache = game.LinkCache;
         var wanted = new HashSet<string>(worldspaces, StringComparer.OrdinalIgnoreCase);
 
+        // Installed output is being replaced by this run. Its lists must not satisfy the
+        // source load order, and its overrides must not become the basis of the new master.
+        var sourceOrder = game.LoadOrder.ListedOrder
+            .Where(l => !GeneratedLodInputs.IsPlugin(l.ModKey.FileName.String)).ToList();
+        var priorityOrder = game.LoadOrder.PriorityOrder
+            .Where(l => !GeneratedLodInputs.IsPlugin(l.ModKey.FileName.String)).ToList();
+        int excludedPlugins = game.LoadOrder.Count - sourceOrder.Count;
+        if (excludedPlugins > 0)
+            progress?.Report($"Large references: ignoring {excludedPlugins} previous generated plugin(s); rebuilding a replacement from source plugins.");
+
         // ESM-flagged plugins (an ESL-flagged ESM counts). Only they can define or override a large reference.
-        var master = game.LoadOrder.ListedOrder
+        var master = sourceOrder
             .Where(l => l.Mod is { } m && m.ModHeader.Flags.HasFlag(SkyrimModHeader.HeaderFlag.Master))
             .Select(l => l.ModKey).ToHashSet();
 
         float minSize = LargeReferenceRules.DefaultMinSize;
-        foreach (var g in game.LoadOrder.PriorityOrder.GameSetting().WinningOverrides())
+        foreach (var g in priorityOrder.GameSetting().WinningOverrides())
             if (g.EditorID == "fLargeRefMinSize" && g is IGameSettingFloatGetter f) { minSize = f.Data ?? minSize; break; }
 
         // The worldspaces we may list in, and everything already listed in them (by any plugin).
         var wsName = new Dictionary<FormKey, string>();
-        foreach (var ws in game.LoadOrder.PriorityOrder.Worldspace().WinningOverrides())
+        foreach (var ws in priorityOrder.Worldspace().WinningOverrides())
             if (ws.EditorID is { } id && wanted.Contains(id)) wsName[ws.FormKey] = id;
 
         var listed = new HashSet<(FormKey Ws, FormKey Ref)>();
         var existing = new Dictionary<(FormKey Ws, P2Int16 Cell), Dictionary<FormKey, P2Int16>>();
-        foreach (var listing in game.LoadOrder.ListedOrder)
+        foreach (var listing in sourceOrder)
         {
             if (listing.Mod is not { } mod) continue;
             foreach (var ws in mod.Worldspaces)
@@ -74,7 +85,7 @@ public static class LargeReferenceStage
 
         // References that a plugin outside the ESMs overrides: listing those is a known source of flicker (DynDOLOD documents it).
         var overriddenOutside = new HashSet<FormKey>();
-        foreach (var listing in game.LoadOrder.ListedOrder)
+        foreach (var listing in sourceOrder)
         {
             ct.ThrowIfCancellationRequested();
             if (listing.Mod is not { } mod || master.Contains(listing.ModKey)) continue;
@@ -89,7 +100,7 @@ public static class LargeReferenceStage
         long visited = 0;
         var bySource = new Dictionary<ModKey, int>();
 
-        foreach (var ctx in game.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(linkCache))
+        foreach (var ctx in priorityOrder.PlacedObject().WinningContextOverrides(linkCache))
         {
             ct.ThrowIfCancellationRequested();
             if ((++visited & 0x3FFFF) == 0) progress?.Report($"Large references: {visited:N0} references checked...");
