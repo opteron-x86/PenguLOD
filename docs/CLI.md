@@ -46,3 +46,9 @@ priority order. Later folders win; enabled mod resources win over external folde
 `--dyndolod` remains a compatible name for the primary resource folder. For stage commands
 using presets or JSON, set `ResourceFolders` (one path per line in a desktop preset) or
 `ResourcePacks` (an array on each texture/LOD request). See [resource packs](RESOURCE-PACKS.md).
+
+Flag-based generation exposes `--object-atlas --atlas-cell 512` and the independent
+`--optimize-object-textures --object-texture-size 1024`. Presets store `objectAtlas`,
+`atlasCell`, `objectTextures` and `objectTextureSize` in `Options`; raw LOD requests use
+`ObjectAtlas`, `AtlasCellSize`, `OptimizeObjectTextures` and `ObjectTextureSize`.
+See [object materials and LOD textures](ATLASES.md) for quality tradeoffs and rebuild scope.

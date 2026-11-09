@@ -489,6 +489,14 @@ public sealed class DesktopTests : IDisposable
     {
         var settings = new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = _root, PluginsFile = Path.Combine(_root, "plugins.txt"), Worldspaces = "*" };
         var request = RequestFactory.Scan(settings, false);
+        Assert.False(request.OptimizeObjectTextures);
+        settings.Options["objectTextures"] = JsonSerializer.SerializeToElement(true);
+        settings.Options["objectTextureSize"] = JsonSerializer.SerializeToElement("2048");
+        var optimized = RequestFactory.Scan(settings, false);
+        Assert.True(optimized.OptimizeObjectTextures); Assert.Equal(2048, optimized.ObjectTextureSize);
+        settings.Options["objectTextureSize"] = JsonSerializer.SerializeToElement("300");
+        Assert.Throws<ArgumentException>(() => RequestFactory.Scan(settings, false));
+        settings.Options["objectTextureSize"] = JsonSerializer.SerializeToElement("1024");
         settings.Options["occlusion"] = JsonSerializer.SerializeToElement(true);
         Assert.Null(RequestFactory.Scan(settings, false).Occlusion);
         Assert.Null(request.Scan.Worldspaces); Assert.False(request.CleanOutput); Assert.Equal(4, request.Levels!.Count);

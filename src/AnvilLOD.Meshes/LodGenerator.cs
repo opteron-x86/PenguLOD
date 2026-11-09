@@ -480,7 +480,7 @@ public sealed class LodGenerator
     /// mesh that uses it and how many meshes do.
     /// </summary>
     public IReadOnlyDictionary<string, (string FirstMesh, int Meshes)> AuditTextures(string outputFolder) =>
-        FindMissingTextures(_meshes.Values.Where(l => l.IsValueCreated && l.Value is not null).Select(l => l.Value!),
+        FindMissingTextures(OutputMeshes(),
             tex => _assets.Exists(tex) || File.Exists(GamePath.ToFileSystemPath(outputFolder, tex)));
 
     /// <summary>
@@ -488,12 +488,14 @@ public sealed class LodGenerator
     /// worse than a missing one: the shader that uses it dereferences a null texture and the game crashes. Key = texture, value = the
     /// problem and the first mesh that uses it.
     /// </summary>
+    private IEnumerable<LodMesh> OutputMeshes() => _meshes.Where(kv => kv.Value.IsValueCreated && kv.Value.Value is not null)
+        .Select(kv => kv.Key.StartsWith('~') ? kv.Value.Value! : ObjectAtlasTransform?.Invoke(kv.Value.Value!) ?? kv.Value.Value!);
+
     public IReadOnlyDictionary<string, (string Problem, string FirstMesh)> AuditTextureFiles(string outputFolder)
     {
         var used = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var l in _meshes.Values)
+        foreach (var mesh in OutputMeshes())
         {
-            if (!l.IsValueCreated || l.Value is not { } mesh) continue;
             foreach (var part in mesh.Parts)
                 foreach (var raw in part.Material.Textures)
                 {

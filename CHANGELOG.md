@@ -5,6 +5,25 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.4.0-alpha.14] - 2026-10-30
+
+- Consolidate shader-compatible object materials with matching auxiliary texture pages,
+  nonstandard cutout thresholds and integer-shifted wrapping UVs. Preserve normal gloss
+  alpha, color-space metadata, cubemaps, emittance and HD/plain snow-shader selection.
+- Add optional private object LOD texture sizing and compression in desktop, presets,
+  pipeline JSON and CLI. Reuse authored compressed mip levels without recompression;
+  supported uncompressed textures receive smaller BC7 copies. Full-detail assets and
+  geometry stay unchanged. The standalone texture limit defaults to 1024 pixels.
+- Keep unsupported texture inputs local to the affected material, report fallback reasons
+  and audit the final remapped texture paths. Retain previous content-addressed textures
+  needed by blocks outside the rebuild scope. Repair damaged generated texture copies.
+- Report material consolidation and encoded texture byte counts. These are generation
+  diagnostics, not estimates of in-game FPS or resident VRAM.
+
+Regenerate object LOD with the desired optimization options and replace the complete
+installed object output, including its textures. Texture generation, terrain and grass
+caches do not need regeneration solely for these changes.
+
 ## [0.4.0-alpha.13] - 2026-10-30
 
 - Prevent previous output from feeding back into object LOD. Generated plugin references,

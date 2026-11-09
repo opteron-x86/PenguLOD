@@ -141,6 +141,10 @@ public static class Program
           --occlusion               Work out the occlusion data (Occlusion.esp) ourselves instead of running xLODGen (EXPERIMENTAL)
           --occlusion-clearance <u> Units a hill must stand above the line of sight to hide what is behind it (default 3072; larger = safer, hides less)
           --occlusion-folder <dir>  Where Occlusion.esp goes (default: the output folder; also works with scan)
+          --object-atlas         Consolidate compatible object materials on padded texture pages
+          --atlas-cell N         Atlas cell size including border: 64/128/256/512 (default 256)
+          --optimize-object-textures  Make private compressed/sized object LOD textures; leave source assets untouched
+          --object-texture-size N    Maximum standalone LOD texture side: 128–4096, power of two (default 1024)
           --no-trees             Don't build billboard tree LOD (.lst/.btt + atlas)
           --render-trees         Trees without a TexGen billboard get one drawn from their own model, so TexGen is not needed
                                  for them (tall trees only; small plants TexGen skipped on purpose stay without LOD).
@@ -448,6 +452,8 @@ public static class Program
             MountainInset: a.Get("mountain-inset") is { } mi && float.TryParse(mi, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mip) ? Math.Clamp(mip, 0f, 64f) : 12f,
             Occlusion: a.Has("occlusion") ? new AnvilLOD.Core.Occlusion.OcclusionSettings(Clearance: a.Get("occlusion-clearance") is { } oc && float.TryParse(oc, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv) ? Math.Max(0f, ocv) : 3072f, ParentClearance: a.Get("occlusion-clearance") is { } oc2 && float.TryParse(oc2, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv2) ? Math.Max(0f, ocv2) : 3072f) : null,
             OcclusionFolder: a.Get("occlusion-folder"), ObjectAtlas: a.Has("object-atlas"),
+            OptimizeObjectTextures: a.Has("optimize-object-textures"),
+            ObjectTextureSize: a.Get("object-texture-size") is { } textureSize && int.TryParse(textureSize, out var ts) ? ts : a.Has("object-texture-size") ? throw new CliArgException("Invalid --object-texture-size.") : 1024,
             AutomaticObjects: new AnvilLOD.Plugins.Authoring.AutomaticObjectSettings(a.Has("auto-objects"), ObjectInt("object-near-budget", 2500), ObjectInt("object-middle-budget", 1000), ObjectInt("object-far-budget", 400), ObjectFloat("object-min-size", 128), ObjectFloat("object-detail", 1)),
             AtlasCellSize: a.Get("atlas-cell") is { } cell && int.TryParse(cell,out var size) ? size : a.Has("atlas-cell") ? throw new CliArgException("Invalid --atlas-cell.") : 256,
             MapObjectLevel: a.Get("map-objects")?.ToLowerInvariant() switch { null or "auto" => -2, "rules" => -1, "0" => 0, "1" => 1, "2" => 2, var bad => throw new CliArgException($"--map-objects must be auto, rules, 0, 1 or 2 (got '{bad}').") },

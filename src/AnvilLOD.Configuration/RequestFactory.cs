@@ -144,6 +144,7 @@ public static class RequestFactory
             GeneratedTextureFolder: s.UseGeneratedTextures ? RequiredPath(s.TextureGenOutput, "a texture output folder", s) : null,
             GeneratedGrassFolder: s.UseGeneratedGrass ? RequiredPath(s.GrassOutput, "a grass cache output folder", s) : null,
             ObjectAtlas: B("objectAtlas"), AtlasCellSize: int.Parse(C("atlasCell")),
+            OptimizeObjectTextures: B("objectTextures"), ObjectTextureSize: int.Parse(C("objectTextureSize")),
             AutomaticObjects: new AnvilLOD.Plugins.Authoring.AutomaticObjectSettings(B("autoObjects"), I("autoObjectNear"), I("autoObjectMiddle"), I("autoObjectFar"), F("autoObjectMin"), F("autoObjectDetail")),
             GeneratedTerrainFolder: s.UseGeneratedTerrain ? RequiredPath(s.TerrainOutput, "a terrain output folder", s) : null);
     }
