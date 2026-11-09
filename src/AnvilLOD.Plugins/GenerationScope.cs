@@ -14,7 +14,14 @@ public static class GenerationScope
 {
     public static GenerationScopePlan Review(GenerationPipelineRequest request, CancellationToken ct = default)
     {
-        var changes = new List<string>(); var lod = request.Lod; var terrain = request.Terrain;
+        var changes = new List<string>(); var lod = request.Lod; var terrain = request.Terrain; var grass = request.Grass;
+        if (grass is not null && Directory.Exists(grass.OutputFolder))
+        {
+            var scope = Inspect(grass.OutputFolder, "grass");
+            var selected = GrassGeneration.SplitWorlds(grass.Worldspaces);
+            if (!selected.Contains("all", StringComparer.OrdinalIgnoreCase))
+                grass = grass with { Worldspaces = string.Join(",", ExpandWorlds(selected, scope.Worlds, "Grass cache") ?? ["all"]) };
+        }
         if (lod?.OutputFolder is { } folder && Directory.Exists(folder))
         {
             var scope = Inspect(folder, "lod");
@@ -28,7 +35,7 @@ public static class GenerationScope
             terrain = terrain with { Worldspaces = ExpandWorlds(terrain.Worldspaces, scope.Worlds, "Terrain"),
                 Levels = ExpandLevels(terrain.Levels, scope.Levels, "Terrain") };
         }
-        return new(request with { Lod = lod, Terrain = terrain }, changes);
+        return new(request with { Lod = lod, Terrain = terrain, Grass = grass }, changes);
 
         OutputScope Inspect(string root, string stage)
         {

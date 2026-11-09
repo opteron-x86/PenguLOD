@@ -248,4 +248,32 @@ public sealed class OutputManagementTests : IDisposable
         File.CreateSymbolicLink(link, Path.Combine(source, "AnvilLOD.esm"));
         Assert.Throws<IOException>(() => OutputManagement.ValidateReportPath(link, [source]));
     }
+
+    [Fact]
+    public void GrassAndTexturePipelineCanRegenerateFoldersWithReceipts()
+    {
+        using var fixture = new GrassFixture(); using var limits = RunLimits.Enter(2);
+        var request = new GenerationPipelineRequest(Grass: fixture.Request, Textures: fixture.Textures.Request,
+            Resume: false, Preflight: false);
+        string cache = Path.Combine(fixture.Root, "pipeline-cache");
+        var first = GenerationPipeline.Run(request, cache); Assert.True(first.Success, first.Error);
+        Assert.Contains("tamriel", OutputSetReceipt.Read(fixture.Output).Stages[0].Scope.Worlds, StringComparer.OrdinalIgnoreCase);
+        var second = GenerationPipeline.Run(request, cache); Assert.True(second.Success, second.Error);
+        Assert.All(second.Journal.Stages, stage => Assert.False(stage.Reused));
+        Assert.True(OutputManagement.Verify([fixture.Output, fixture.Textures.Output]).Valid);
+    }
+
+    [Fact]
+    public void PartialGrassReplacementRequiresThePreviousWorlds()
+    {
+        using var fixture = new GrassFixture();
+        string previous = Stage("previous", "grass", "grass/WorldAx0000y0000.cgid");
+        Stage("previous", "grass", "grass/WorldBx0000y0000.cgid");
+        string incoming = Stage("incoming", "grass", "grass/WorldAx0000y0000.cgid");
+        Assert.False(OutputManagement.Plan([incoming], previous).CanPublish);
+        var request = new GenerationPipelineRequest(Grass: fixture.Request with { OutputFolder = previous, Worldspaces = "WorldA" });
+        var plan = GenerationScope.Review(request);
+        Assert.True(plan.RequiresExpansion); Assert.Equal("WorldA,WorldB", plan.Request.Grass!.Worldspaces);
+        Assert.Equal("WorldA", request.Grass!.Worldspaces);
+    }
 }

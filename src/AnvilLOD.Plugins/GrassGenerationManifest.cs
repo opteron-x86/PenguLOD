@@ -154,7 +154,7 @@ public sealed class GrassGenerationManifest
                 if (relative != "grass") throw new IOException("Unexpected directory in grass output: " + path);
                 continue;
             }
-            if (relative is "meta.ini" or "fasterngio.log" or "readme-grass.txt" or "anvillod.grass.json" || old.Files.ContainsKey(relative)) continue;
+            if (relative is "meta.ini" or "fasterngio.log" or "readme-grass.txt" or "anvillod.grass.json" or "pengulod.output-set.json" || old.Files.ContainsKey(relative)) continue;
             throw new IOException("Unexpected file in grass output; choose a fresh output folder: " + path);
         }
         old.Verify(folder, progress, ct);

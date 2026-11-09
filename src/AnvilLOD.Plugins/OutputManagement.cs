@@ -90,6 +90,9 @@ public sealed class OutputSetReceipt
         foreach (string path in files)
         {
             string[] parts = path.Replace('\\', '/').Split('/');
+            if (parts.Length == 2 && parts[0].Equals("grass", StringComparison.OrdinalIgnoreCase)
+                && GrassCache.TryParseFileName(parts[1], out string grassWorld, out _, out _, out _))
+                worlds.Add(grassWorld);
             if (parts.Length >= 4 && parts[0].Equals("meshes", StringComparison.OrdinalIgnoreCase) && parts[1].Equals("terrain", StringComparison.OrdinalIgnoreCase))
             {
                 worlds.Add(parts[2]);
