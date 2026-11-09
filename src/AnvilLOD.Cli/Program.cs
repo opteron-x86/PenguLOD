@@ -9,7 +9,7 @@ using AnvilLOD.Desktop.Services;
 
 namespace AnvilLOD.Cli;
 
-public static class Program
+public static partial class Program
 {
     private static CancellationToken Cancellation;
     private const string Usage = """
@@ -69,7 +69,17 @@ public static class Program
                                          "recommended", scales with the model's size (from real SE/AE LOD meshes);
                                          "off" has none; three numbers set the maximums (0 = no limit), e.g. 800,500,300
 
+          PenguLOD cost-report --input <output folder> --report <costs.json>
+          PenguLOD compare-costs --before <costs.json> --after <costs.json> [--report <comparison.json>]
+          PenguLOD verify-output --input <stage folder> [--input <other stage folder>] [--report <verification.json>]
+          PenguLOD plan-update --input <stage folder> [--input ...] --output <package folder> --report <plan.json>
+          PenguLOD publish-update --plan <reviewed plan.json>
+          PenguLOD plan-generation --settings <preset.json> --report <scope-plan.json>
+                                         Review the scope needed to retain existing worlds and levels.
+                                         --expand-output-scope explicitly permits the expanded generation.
+
         Options:
+          --pbr-waterfalls      Use full PBR-patched waterfall models independently of --pbr-lod
           --version             Show PenguLOD and upstream engine versions
           --mo2 <path>           MO2 instance folder (with ModOrganizer.ini) — reads mods directly, no need to launch from MO2
           --wine-prefix <path>   Wine/Proton pfx folder used to resolve Windows drive paths
@@ -276,6 +286,12 @@ public static class Program
             using var limits = RunLimits.Enter(threads, Cancellation, options.Get("cache-folder"));
             return args[0].ToLowerInvariant() switch
             {
+                "cost-report" => RunCostReport(options),
+                "compare-costs" => CompareCosts(options),
+                "verify-output" => VerifyOutput(options),
+                "plan-update" => PlanUpdate(options),
+                "publish-update" => PublishUpdate(options),
+                "plan-generation" => PlanGeneration(options),
                 "compute-info" => RunComputeInfo(options),
                 "pipeline" => RunPipeline(options),
                 "grass" => RunPipeline(options,"grass"),
@@ -347,6 +363,7 @@ public static class Program
             }
         }
         return request with {Resume=!a.Has("no-resume")&&request.Resume,VerifySourceContents=a.Has("verify-source-contents")||request.VerifySourceContents,
+            ExpandOutputScope=a.Has("expand-output-scope")||request.ExpandOutputScope,
             Preflight=!a.Has("no-preflight")&&request.Preflight,TextureCompute=a.Get("texture-compute")??request.TextureCompute};
     }
 
@@ -401,7 +418,7 @@ public static class Program
         var req = new ScanRequest(
             gameOptions,
             new ScanOptions(
-                Worldspaces: a.GetAll("worldspace"),
+                Worldspaces: RequestFactory.Worldspaces(string.Join(",", a.GetAll("worldspace") ?? [])),
                 IncludeInitiallyDisabled: a.Has("include-disabled"),
                 IncludeEnableParented: !a.Has("no-enable-parented"),
                 TreeLod: !a.Has("no-trees"),
@@ -411,6 +428,7 @@ public static class Program
                 MatchTextures: !a.Has("no-match-textures"),
                 ParentCopies: a.Has("parent-copies"),
                 GlowWindows: a.Has("glow-windows"),
+                PbrWaterfalls: a.Has("pbr-waterfalls"),
                 RenderTreeBillboards: a.Has("render-trees")),
             OutputFolder: outputFolder,
             CleanOutput: !a.Has("keep-output"),
@@ -476,7 +494,7 @@ public static class Program
         ScanSummary s;
         if(generate)
         {
-            var generated=GenerationPipeline.Run(new(Lod:req,Resume:!a.Has("no-resume"),VerifySourceContents:a.Has("verify-source-contents"),Preflight:!a.Has("no-preflight"),TextureCompute:a.Get("texture-compute")??"Cpu"),
+            var generated=GenerationPipeline.Run(new(Lod:req,Resume:!a.Has("no-resume"),VerifySourceContents:a.Has("verify-source-contents"),Preflight:!a.Has("no-preflight"),TextureCompute:a.Get("texture-compute")??"Cpu",ExpandOutputScope:a.Has("expand-output-scope")),
                 CacheFolder(a),sync,Cancellation);
             Console.WriteLine("Saved job: "+generated.JobFolder);
             if(!generated.Success)return Fail(generated.Error!);

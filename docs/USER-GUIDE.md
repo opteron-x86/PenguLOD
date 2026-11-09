@@ -48,8 +48,7 @@ folder. Use the individual path overrides only when the saved locations are wron
 
 Set **Output mod folder** to the object LOD folder. Choose **Worldspaces**:
 `Tamriel` for the main Skyrim world, a comma-separated list for selected worlds,
-or leave it blank for every world with LOD settings. In alpha-14, `*` works for
-object LOD only; use a blank field when the run includes all-world terrain.
+or leave it blank (or enter `*`) for every world with LOD settings.
 
 The world selection applies to terrain and object LOD. **Grass cache has its own
 worldspace selection. Texture generation uses the selected load order and is not
@@ -169,3 +168,10 @@ still covers the load order even when object LOD is restricted to Tamriel.
 
 See [troubleshooting](TROUBLESHOOTING.md) for failed runs and
 [diagnostics](DIAGNOSTICS.md) for repeatable visual checks.
+
+## Keep and compare a working generation
+
+Use [Reports & outputs](REPORTS-AND-OUTPUTS.md) to measure a saved generation,
+compare a test run and prepare a verified package. Keep the working output in its
+own folder and generate experiments elsewhere. Existing presets are not retuned
+when you upgrade.

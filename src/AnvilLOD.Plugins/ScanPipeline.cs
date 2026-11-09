@@ -300,7 +300,7 @@ public static class ScanPipeline
         }
         var scanner = new MutagenReferenceScanner(game, assets, resolver, childCopies);
         // The PBR option also picks the PBR-patched waterfall models (Community Shaders only), when the load order has them.
-        var scan = scanner.Scan(req.Scan with { PbrWaterfalls = req.PbrLod }, progress, ct);
+        var scan = scanner.Scan(req.Scan, progress, ct);
         if (scanner.BaseObjectSwaps is { ConfigFiles: > 0 } bos)
         {
             if (!bos.RuntimeInstalled)

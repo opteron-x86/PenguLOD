@@ -1,6 +1,6 @@
 # PenguLOD settings reference
 
-This reference follows the **alpha-14** desktop interface. Use the
+This reference follows the **v0.5** desktop interface. Use the
 [walkthrough](USER-GUIDE.md) for a normal run and the [tool reference](TOOLS.md) for
 mesh authoring, texture repair and custom rules. Settings save automatically.
 
@@ -36,7 +36,7 @@ together. **Game units** measure distance or size in Skyrim; they are not metres
 | Game / Data folder | For a deployed installation, select the game folder or its `Data` folder. |
 | plugins.txt | The enabled-plugin list for a deployed installation. Use an explicit file; an empty file is valid for a vanilla game. |
 | Output mod folder | Destination for object, tree and grass LOD. Keep it separate from the game, enabled mods and the other stages' output folders. |
-| Worldspaces | World editor IDs separated by commas, such as `Tamriel, DLC2SolstheimWorld`. Blank selects all worlds with LOD settings. Applies to terrain and object LOD; in alpha-14, `*` works for object LOD only. Grass cache has its own selection; texture generation uses the load order. |
+| Worldspaces | World editor IDs separated by commas, such as `Tamriel, DLC2SolstheimWorld`. Blank or `*` selects all worlds with LOD settings for both terrain and object LOD. Grass cache has its own selection; texture generation uses the load order. |
 | Clear previous AnvilLOD output before generation | Rebuilds the object LOD output without reusing its previous blocks. Off by default. Use a dedicated output folder in either mode. |
 
 **Advanced source paths** are overrides for installations whose saved paths need
@@ -69,6 +69,7 @@ folder. Newly generated inputs are passed to later stages automatically.
 | Object / tree / grass LOD | Builds distant scenery using Generation settings. |
 | Run preflight before generation | Checks the selected stages for missing inputs, conflicting output folders and other blocking problems. On by default. |
 | Reuse completed stages after verifying their files | Skips successful stages when their settings, inputs and output checks still match. On by default; useful after a later stage fails. |
+| Expand generation to preserve existing worlds and levels | Includes worlds and levels already present in the selected output folder when a partial selection would leave shared files inconsistent. Off by default. Use **Review output scope** to see the additional work, or choose a new folder for an isolated test. |
 | Verify all source asset contents | Reads the contents of every source asset when deciding whether previous work can be reused. Off uses a faster size-and-date check for large assets. Plugins and configuration are always content-checked. |
 
 **Run / resume pipeline** starts the selection or resumes a matching saved job.
@@ -369,7 +370,7 @@ before lowering several quality controls together.
 | PBR object LOD | Uses suitable PBR albedo textures and generated equivalents for object LOD. Off by default. Enable when they match the materials used by the game. |
 | PBR brightness | Multiplier on object PBR conversion brightness. Default `1`; separate from TexGen and Terrain calibration. |
 | PBR texture size | Maximum side length for converted object PBR textures. Default `512`. |
-| PBR waterfalls | Selects full models for PBR-patched waterfalls. In alpha-14, waterfall selection follows PBR object LOD; this checkbox does not independently override it. |
+| PBR waterfalls | Selects full models for PBR-patched waterfalls. Independent of PBR object LOD; enable it only when the installed waterfall models need it. |
 | Terrain underside | Adds a lower terrain surface for volumetric lighting. Off by default; this does not generate the landscape LOD itself. |
 | Underside sample step | Spacing used for that surface. Default `16`; smaller values add geometry. |
 
@@ -441,3 +442,8 @@ on its version. They can help compare costs without regenerating.
 For a fair comparison, restore the layers you intend to use, restart after
 replacing generated files, and test the same camera view and conditions. See the
 [walkthrough's testing steps](USER-GUIDE.md#7-compare-in-game).
+
+## Reports & outputs
+
+[Measure and compare saved output, verify a matching set, or review a package update](REPORTS-AND-OUTPUTS.md).
+These tools use their own folder fields and do not change generation settings.

@@ -52,3 +52,14 @@ Flag-based generation exposes `--object-atlas --atlas-cell 512` and the independ
 `atlasCell`, `objectTextures` and `objectTextureSize` in `Options`; raw LOD requests use
 `ObjectAtlas`, `AtlasCellSize`, `OptimizeObjectTextures` and `ObjectTextureSize`.
 See [object materials and LOD textures](ATLASES.md) for quality tradeoffs and rebuild scope.
+
+## Saved-output reports and packages
+
+Use `cost-report`, `compare-costs`, `verify-output`, `plan-update` and
+`publish-update` to inspect saved generations and prepare a verified package.
+`plan-generation` reviews the scope needed to update existing stage folders;
+`--expand-output-scope` permits that expansion for a generation run.
+See [Reports and output management](REPORTS-AND-OUTPUTS.md) for commands and limits.
+
+`--pbr-waterfalls` controls PBR waterfall model selection independently of
+`--pbr-lod`.

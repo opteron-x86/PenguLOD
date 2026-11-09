@@ -18,11 +18,11 @@ namespace AnvilLOD.Desktop;
 public sealed partial class MainWindow
 {
     private async Task RunJob<T>(string title, DesktopSettings snapshot, Func<IProgress<string>, CancellationToken, T> work,
-        Action<T, string, TimeSpan> completed)
+        Action<T, string, TimeSpan> completed, bool saveSettings = true)
     {
         if (_runner.IsRunning) throw new InvalidOperationException("Wait for the active job to finish.");
-        GenerationOptions.Validate(snapshot);
-        Save(); _page.IsEnabled = false; if (_lodActions is not null) _lodActions.IsEnabled = false; _cancel.IsEnabled = true; _progress.IsVisible = true;
+        if (saveSettings) { GenerationOptions.Validate(snapshot); Save(); }
+        _page.IsEnabled = false; if (_lodActions is not null) _lodActions.IsEnabled = false; _cancel.IsEnabled = true; _progress.IsVisible = true;
         _watch.Restart(); _status.Text = title; Notice("");
         try
         {

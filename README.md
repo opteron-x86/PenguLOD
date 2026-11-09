@@ -46,6 +46,7 @@ configuration takes precedence. Windows uses `%APPDATA%\PenguLOD` for settings a
 Follow the [walkthrough](docs/USER-GUIDE.md) for setup, generation and installation.
 Use the [settings reference](docs/SETTINGS.md) to look up an option, or the
 [tool reference](docs/TOOLS.md) for mesh authoring, texture repair and custom rules.
+[Reports & outputs](docs/REPORTS-AND-OUTPUTS.md) explains cost comparisons and verified output packages.
 
 ## Available now
 

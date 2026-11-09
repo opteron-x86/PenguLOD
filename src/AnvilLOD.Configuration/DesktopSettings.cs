@@ -231,6 +231,8 @@ public sealed class DesktopSettings : ObservableObject
 
     private bool _resumeCompletedStages = true;
     public bool ResumeCompletedStages { get => _resumeCompletedStages; set => Set(ref _resumeCompletedStages, value); }
+    private bool _expandOutputScope;
+    public bool ExpandOutputScope { get => _expandOutputScope; set => Set(ref _expandOutputScope, value); }
     private bool _verifySourceContents;
     public bool VerifySourceContents { get => _verifySourceContents; set => Set(ref _verifySourceContents, value); }
     private bool _pipelineGrass = true;

@@ -13,6 +13,24 @@ namespace AnvilLOD.Core.Tests;
 public class CliParityTests
 {
     [Fact]
+    public void OutputCommandsMeasureComparePlanAndPublishThroughTheCli()
+    {
+        using var f = new TextureFixture();
+        string stage = Path.Combine(f.Root, "stage"), package = Path.Combine(f.Root, "package");
+        Directory.CreateDirectory(stage); File.WriteAllText(Path.Combine(stage, "AnvilLOD.esm"), "fixture");
+        OutputSetReceipt.Record(stage, "lod", "fixture", OutputSnapshot.Capture(stage));
+        string costs = Path.Combine(f.Root, "costs.json"), plan = Path.Combine(f.Root, "plan.json");
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["cost-report", "--input", stage, "--report", costs]));
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["compare-costs", "--before", costs, "--after", costs]));
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["verify-output", "--input", stage]));
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["plan-update", "--input", stage, "--output", package, "--report", plan]));
+        Assert.False(Directory.Exists(package));
+        Assert.Equal(0, AnvilLOD.Cli.Program.Main(["publish-update", "--plan", plan]));
+        Assert.True(OutputManagement.Verify([package]).Valid);
+        Assert.Equal(2, AnvilLOD.Cli.Program.Main(["cost-report", "--input", stage, "--report", Path.Combine(stage, "costs.json")]));
+    }
+
+    [Fact]
     public void TreeGeometryTargetRoundTripsThroughSettingsAndRejectsInvalidCliValues()
     {
         using var f = new TextureFixture();

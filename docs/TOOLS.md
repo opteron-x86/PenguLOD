@@ -98,8 +98,8 @@ saved last.
 | LOD16 | Model choice for distant LOD. |
 | LOD32 | Model choice for world-map LOD. |
 | Grid | Distance behaviour for an animated object whose static LOD columns are all empty. See choices below. |
-| Reference | Preserves imported reference-handling text. Alpha-14 does not apply these reference-edit actions; leave **Unchanged** for a new rule. |
-| Flags | Preserves imported flags: `1` VWD, `2` NoGlow, `4` NoMATO, `8` Dynamic, `16` TREE. Alpha-14 does not apply these flags as generation overrides; leave `0` for a new rule. |
+| Reference | Read-only. Preserves imported reference-handling text, but these actions are not applied during generation. New rules use **Unchanged**. |
+| Flags | Read-only. Preserves imported flags: `1` VWD, `2` NoGlow, `4` NoMATO, `8` Dynamic, `16` TREE. These flags are not applied as generation overrides; new rules use `0`. |
 | Description | Your note explaining the rule. Does not affect output. |
 
 For the four LOD columns:
@@ -108,7 +108,7 @@ For the four LOD columns:
 - **Level0–Level3** requests a supplied or generated LOD model level.
 - **Full model** uses the full source model. Apply narrowly: repeated detailed
   models can be expensive at a distance.
-- **Billboard1–Billboard6** are accepted billboard choices, but alpha-14 treats
+- **Billboard1–Billboard6** are accepted billboard choices, but PenguLOD currently treats
   them as the same billboard request. They do not select six distinct view styles;
   usable billboard resources are still needed.
 
@@ -124,4 +124,4 @@ written, so retain the original if it also contains other settings.
 
 To remove an object from static LOD, use **None** in its LOD columns or correct
 its placement in the source load order. A Reference value such as Disable or
-Delete is not a substitute for that in alpha-14.
+Delete is not a substitute for that.
