@@ -24,6 +24,11 @@ Regenerate object LOD with the desired optimization options and replace the comp
 installed object output, including its textures. Texture generation, terrain and grass
 caches do not need regeneration solely for these changes.
 
+- Rebuild large-reference lists from source plugins even when previous generated output
+  remains enabled. An installed `AnvilLOD.esm` or `PenguLOD.esm` no longer causes the
+  replacement master to be omitted. Current source overrides and other mods' lists
+  still determine which references qualify.
+
 ## [0.4.0-alpha.13] - 2026-10-30
 
 - Prevent previous output from feeding back into object LOD. Generated plugin references,
