@@ -4,6 +4,14 @@ PenguLOD currently provides a native grass → textures → terrain → object/t
 pipeline, with resumable stages, diagnostics, a desktop and CLI. The project is in alpha.
 The [user guide](USER-GUIDE.md) and feature guides describe the supported workflows and limits.
 
+## Release consolidation and output management
+
+The [v0.5 milestone](https://github.com/opteron-x86/PenguLOD/milestone/12) combines
+release fixes, saved-output cost reports and managed output packages. It preserves
+existing quality defaults and adds scope/dependency checks before replacing output.
+See [Reports & outputs](REPORTS-AND-OUTPUTS.md). Broader visual and hardware
+acceptance remains separate from this milestone.
+
 ## Compatibility priorities
 
 Each priority has a milestone, implementation issues and acceptance checks. Work advances

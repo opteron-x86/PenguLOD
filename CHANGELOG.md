@@ -5,6 +5,53 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.5.0-alpha.1] - 2026-11-09
+
+- Add saved-output cost reports and comparisons in the desktop and CLI. Count
+  finished blocks, triangles, mesh groups and local texture storage, including
+  reused blocks. Compare matching worlds, levels and seasons, show changed
+  settings, and identify measurements that are unavailable.
+- Record completed stages, file ownership and generated dependencies. Verify a
+  selected output set, preview a combined package update, and publish it with a
+  backup. Block mismatched textures, unowned files and incomplete replacements.
+- Review existing generation scope and optionally expand a run to retain its
+  worlds and levels. Shared masters and atlases are never merged from partial sets.
+- Make terrain and object worldspace wildcards consistent, honor PBR waterfalls
+  independently, and label unsupported imported rule actions as read-only.
+- Include the settings reference, walkthrough and output-management guide in Linux
+  and Windows packages. Correct guidance for separately installed SKSE plugins.
+- Consolidate the large-reference regeneration fix and optional material/texture
+  optimizations from the alpha-14 candidate. Quality defaults remain unchanged.
+
+Existing settings and output remain usable. Keep a working generation separate
+while testing. Older output can be measured without conversion; managed updates
+require receipts from a new generation. Install matching texture and object
+outputs together. Runtime filenames remain compatible with the AnvilLOD plugin.
+
+## [0.4.0-alpha.14] - 2026-10-30
+
+- Consolidate shader-compatible object materials with matching auxiliary texture pages,
+  nonstandard cutout thresholds and integer-shifted wrapping UVs. Preserve normal gloss
+  alpha, color-space metadata, cubemaps, emittance and HD/plain snow-shader selection.
+- Add optional private object LOD texture sizing and compression in desktop, presets,
+  pipeline JSON and CLI. Reuse authored compressed mip levels without recompression;
+  supported uncompressed textures receive smaller BC7 copies. Full-detail assets and
+  geometry stay unchanged. The standalone texture limit defaults to 1024 pixels.
+- Keep unsupported texture inputs local to the affected material, report fallback reasons
+  and audit the final remapped texture paths. Retain previous content-addressed textures
+  needed by blocks outside the rebuild scope. Repair damaged generated texture copies.
+- Report material consolidation and encoded texture byte counts. These are generation
+  diagnostics, not estimates of in-game FPS or resident VRAM.
+
+Regenerate object LOD with the desired optimization options and replace the complete
+installed object output, including its textures. Texture generation, terrain and grass
+caches do not need regeneration solely for these changes.
+
+- Rebuild large-reference lists from source plugins even when previous generated output
+  remains enabled. An installed `AnvilLOD.esm` or `PenguLOD.esm` no longer causes the
+  replacement master to be omitted. Current source overrides and other mods' lists
+  still determine which references qualify.
+
 ## [0.4.0-alpha.13] - 2026-10-30
 
 - Prevent previous output from feeding back into object LOD. Generated plugin references,

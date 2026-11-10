@@ -36,7 +36,7 @@ public sealed class DesktopTests : IDisposable
     private MainWindow Window() => new(new SettingsStore(Path.Combine(_root, "settings.json")));
     private static Button FindButton(MainWindow w, string text) => w.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == text);
     private static void Click(MainWindow w, string text)
-    { FindButton(w, text).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs(); }
+    { w.UpdateLayout(); Dispatcher.UIThread.RunJobs(); FindButton(w, text).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs(); }
     private static async Task WaitFor(Func<bool> condition)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -469,6 +469,85 @@ public sealed class DesktopTests : IDisposable
         Assert.False(window.Settings.UseGeneratedTextures); window.Close();
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("*")]
+    [InlineData(" Tamriel, * ")]
+    public void TerrainAndObjectWildcardRequestsAgree(string worlds)
+    {
+        using var f = new TextureFixture();
+        var settings = new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = f.Data,
+            PluginsFile = f.Plugins, TerrainOutput = Path.Combine(f.Root, "terrain"), Worldspaces = worlds };
+        Assert.Null(RequestFactory.Scan(settings, false).Scan.Worldspaces);
+        Assert.Null(RequestFactory.Terrain(settings).Worldspaces);
+        settings.Worldspaces = "Tamriel, tamriel; OtherWorld";
+        Assert.Equal(new[] { "Tamriel", "OtherWorld" }, RequestFactory.Terrain(settings).Worldspaces);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void WaterfallAndObjectPbrControlsRemainIndependent(bool objects, bool waterfalls)
+    {
+        using var f = new TextureFixture();
+        var settings = new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = f.Data, PluginsFile = f.Plugins };
+        settings.Options["pbr"] = JsonSerializer.SerializeToElement(objects);
+        settings.Options["pbrWaterfalls"] = JsonSerializer.SerializeToElement(waterfalls);
+        var request = RequestFactory.Scan(settings, false);
+        Assert.Equal(objects, request.PbrLod); Assert.Equal(waterfalls, request.Scan.PbrWaterfalls);
+    }
+
+    [AvaloniaFact]
+    public void ImportedRuleActionsAreReadOnlyAndClearlyExplained()
+    {
+        var window = Window(); window.Show();
+        try
+        {
+            Click(window, "Custom rules");
+            var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+            Assert.True(grid.Columns.Single(c => c.Header as string == "Reference").IsReadOnly);
+            Assert.True(grid.Columns.Single(c => c.Header as string == "Flags").IsReadOnly);
+            Assert.False(grid.Columns.Single(c => c.Header as string == "LOD4").IsReadOnly);
+            var imported = AnvilLOD.Core.Lod.RuleEntry.Parse("tree,Level0,Level1,Level2,,Near LOD,Disable,19,imported", "fixture")!;
+            imported.Lod4 = "Level1";
+            var restored = AnvilLOD.Core.Lod.RuleEntry.Parse(imported.Format(), "fixture")!;
+            Assert.Equal("Disable", restored.Reference); Assert.Equal(19, restored.Flags);
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("not applied during generation") == true);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task ReportsMeasureSavedOutputWithoutRewritingItAndPlansRequirePreview()
+    {
+        var window = Window();
+        string output = Path.Combine(_root, "output"); Directory.CreateDirectory(output);
+        File.WriteAllText(Path.Combine(output, "AnvilLOD.esm"), "fixture");
+        AnvilLOD.Plugins.OutputSetReceipt.Record(output, "lod", "fixture", AnvilLOD.Core.Pipeline.OutputSnapshot.Capture(output));
+        var before = AnvilLOD.Core.Pipeline.OutputSnapshot.Capture(output);
+        window.ReplaceSettings(new DesktopSettings { CacheFolder = Path.Combine(_root, "cache") }); window.Show();
+        try
+        {
+            Click(window, "Reports & outputs");
+            Assert.False(FindButton(window, "Publish reviewed package").IsEnabled);
+            window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "CostFolder").Text = output;
+            await window.MeasureOutput(); before.Verify(output);
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("not FPS") == true);
+            window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputFolders").Text = output;
+            window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PackageFolder").Text = Path.Combine(_root, "package");
+            await window.PreviewOutputUpdate(); Assert.True(FindButton(window, "Publish reviewed package").IsEnabled);
+            Assert.False(Directory.Exists(Path.Combine(_root, "package")));
+            window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PackageFolder").Text += "-changed";
+            Assert.False(FindButton(window, "Publish reviewed package").IsEnabled);
+            if (Environment.GetEnvironmentVariable("ANVILLOD_SCREENSHOTS") is { } screenshots)
+                window.CaptureRenderedFrame()?.Save(Path.Combine(screenshots, "reports-outputs.png"));
+        }
+        finally { window.Close(); }
+    }
+
     [Fact]
     public void PresetRoundTripAndValidation()
     {
@@ -489,6 +568,14 @@ public sealed class DesktopTests : IDisposable
     {
         var settings = new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = _root, PluginsFile = Path.Combine(_root, "plugins.txt"), Worldspaces = "*" };
         var request = RequestFactory.Scan(settings, false);
+        Assert.False(request.OptimizeObjectTextures);
+        settings.Options["objectTextures"] = JsonSerializer.SerializeToElement(true);
+        settings.Options["objectTextureSize"] = JsonSerializer.SerializeToElement("2048");
+        var optimized = RequestFactory.Scan(settings, false);
+        Assert.True(optimized.OptimizeObjectTextures); Assert.Equal(2048, optimized.ObjectTextureSize);
+        settings.Options["objectTextureSize"] = JsonSerializer.SerializeToElement("300");
+        Assert.Throws<ArgumentException>(() => RequestFactory.Scan(settings, false));
+        settings.Options["objectTextureSize"] = JsonSerializer.SerializeToElement("1024");
         settings.Options["occlusion"] = JsonSerializer.SerializeToElement(true);
         Assert.Null(RequestFactory.Scan(settings, false).Occlusion);
         Assert.Null(request.Scan.Worldspaces); Assert.False(request.CleanOutput); Assert.Equal(4, request.Levels!.Count);

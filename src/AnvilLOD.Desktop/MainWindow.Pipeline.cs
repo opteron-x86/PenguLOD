@@ -31,6 +31,8 @@ public sealed partial class MainWindow
         Card("RESUME & VERIFICATION", Stack(12,
             Check("Run preflight before generation", nameof(DesktopSettings.PipelinePreflight)),
             Check("Reuse completed stages after verifying their files", nameof(DesktopSettings.ResumeCompletedStages)),
+            Check("Expand generation to preserve existing worlds and levels", nameof(DesktopSettings.ExpandOutputScope)),
+            Button("Review output scope", ReviewOutputScope),
             Check("Verify all source asset contents", nameof(DesktopSettings.VerifySourceContents)),
             Text("Plugins and configuration are always content-checked. The normal input check uses file size and timestamps for large assets. Full verification hashes every source asset and can take longer on large lists. Published outputs are always content-verified before reuse.", true),
             Text("Changed settings or inputs invalidate the affected stage and its dependents. LOD is built in a separate folder and published only when successful; the previous output is retained alongside it.", true))),
@@ -49,7 +51,7 @@ public sealed partial class MainWindow
         {
             progress.Report("Checking pipeline settings and output paths...");
             string cache = RequestFactory.Optional(snapshot.CacheFolder) is { } folder ? RequestFactory.PathValue(folder, snapshot) : SettingsStore.CacheRoot;
-            return GenerationPipeline.Run(request(snapshot) with {TextureCompute=snapshot.TextureCompute}, cache, progress, ct);
+            return GenerationPipeline.Run(request(snapshot) with {TextureCompute=snapshot.TextureCompute, ExpandOutputScope=snapshot.ExpandOutputScope}, cache, progress, ct);
         }, (result, folder, elapsed) =>
         {
             _lastPipelineFolder = result.JobFolder;

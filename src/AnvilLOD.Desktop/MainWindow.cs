@@ -127,7 +127,7 @@ public sealed partial class MainWindow : Window
     private void BuildShell()
     {
         _page.Content = null;
-        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary, _pipelineSummary, _pipelineStages, _terrainSummary, _terrainResults, _treeCoverage, _objectCoverage, _resourceCoverage, _diagnosticSummary, _diagnosticIssues, _diagnosticEstimates, _seasonCoverage })
+        foreach (var control in new Control[] { _notice, _page, _status, _elapsed, _cancel, _progress, _log, _profiles, _counts, _worlds, _issues, _textures, _textureGenResults, _textureGenSummary, _grassSummary, _pipelineSummary, _pipelineStages, _terrainSummary, _terrainResults, _treeCoverage, _objectCoverage, _resourceCoverage, _diagnosticSummary, _diagnosticIssues, _diagnosticEstimates, _seasonCoverage, _costFolder, _costBefore, _costAfter, _outputFolders, _packageFolder, _outputSummary, _costGroups, _costBlocks, _settingChanges })
         {
             if (control.Parent is Panel panel) panel.Children.Remove(control);
             else if (control.Parent is ContentControl content) content.Content = null;
@@ -143,6 +143,7 @@ public sealed partial class MainWindow : Window
         _pages["Mod author"] = ModAuthor();
         _pages["Texture tools"] = TextureTools();
         _pages["Custom rules"] = RulesPage();
+        _pages["Reports & outputs"] = ReportsPage();
         _pages["Diagnostics"] = DiagnosticsPage();
         _pages["Preferences"] = Preferences();
         var nav = Stack(6);
@@ -155,7 +156,7 @@ public sealed partial class MainWindow : Window
         }
         var side = new DockPanel();
         var version = Text($"v{ProductInfo.Version}\nSkyrim SE / AE / VR", true); version.Margin = new Thickness(12, 0, 0, 10);
-        DockPanel.SetDock(version, Dock.Bottom); side.Children.Add(version); side.Children.Add(nav);
+        DockPanel.SetDock(version, Dock.Bottom); side.Children.Add(version); side.Children.Add(new ScrollViewer { Content = nav });
         var sidebar = new Border { Background = Surface, Padding = new Thickness(12, 16), Child = side };
         var main = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto"), Margin = new Thickness(28, 20, 28, 16), RowSpacing = 12 };
         _notice.IsVisible = !string.IsNullOrEmpty(_notice.Text);
@@ -301,9 +302,14 @@ public sealed partial class MainWindow : Window
     {
         var grid = Table(("Mask / FormID", "Mask"), ("LOD4", "Lod4"), ("LOD8", "Lod8"), ("LOD16", "Lod16"), ("LOD32", "Lod32"), ("Grid", "Grid"), ("Reference", "Reference"), ("Flags", "Flags"), ("Description", "Description"));
         grid.IsReadOnly = false; grid.ItemsSource = _rules; grid.MinHeight = 320; grid.MaxHeight = 600;
-        foreach (var col in grid.Columns.OfType<DataGridTextColumn>()) if (col.Binding is Binding binding) binding.Mode = BindingMode.TwoWay;
+        foreach (var col in grid.Columns.OfType<DataGridTextColumn>())
+        {
+            col.IsReadOnly = col.Header as string is "Reference" or "Flags";
+            if (col.Binding is Binding binding) binding.Mode = col.IsReadOnly ? BindingMode.OneWay : BindingMode.TwoWay;
+        }
         return Scroll(Stack(16, Heading("Custom mesh rules", "First matching rule wins. Saving puts the catch-all \\ rule last."),
-            Text("LOD choices: None, Level0–Level3, Full model, Billboard1–Billboard6. Grid: None, Near LOD, Far LOD, Far Full, Never Fade LOD. Flags: 1 VWD, 2 NoGlow, 4 NoMATO, 8 Dynamic, 16 TREE.", true),
+            Text("LOD choices: None, Level0–Level3, Full model, Billboard1–Billboard6. Billboard1–6 currently use the same billboard behavior. Grid: None, Near LOD, Far LOD, Far Full, Never Fade LOD.", true),
+            Text("Reference and Flags are read-only: imported values are preserved when saving, but these actions are not applied during generation.", true),
             Row(Button("Load rule file", LoadRules), Button("Add rule", () => { _rules.Add(new RuleEntry { Mask = "new-mask", Lod4 = "Level0", Lod8 = "Level1", Lod16 = "Level2", IsCustom = true }); }),
                 Button("Remove selected", () => { if (grid.SelectedItem is RuleEntry rule) _rules.Remove(rule); }),
                 Primary("Save rules as…", async () => { grid.CommitEdit(); await SaveRules(); })), grid,

@@ -17,6 +17,12 @@ public static class RequestFactory
         => Optional(value) is { } p ? PathValue(p, s) : throw new ArgumentException($"Choose {label} first.");
     public static string[] Lines(string text) => text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    public static string[]? Worldspaces(string text)
+    {
+        var worlds = text.Split([',', ';', ' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return worlds.Length == 0 || worlds.Contains("*") ? null : worlds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     public static string[] ResourcePaths(DesktopSettings s) => Lines(s.ResourceFolders).Select(p => PathValue(p, s)).ToArray();
 
     public static GameContextOptions Game(DesktopSettings s)
@@ -36,13 +42,12 @@ public static class RequestFactory
     public static GenerationPipelineRequest Pipeline(DesktopSettings s) => new(
         s.PipelineGrass ? Grass(s) : null, s.PipelineTextures ? Textures(s) : null,
         s.PipelineLod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
-        s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute);
+        s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute, s.ExpandOutputScope);
 
     public static TerrainGenerationRequest Terrain(DesktopSettings s)
     {
         int Whole(decimal value) => value == decimal.Truncate(value) ? checked((int)value) : throw new ArgumentException("Terrain sizes must be whole numbers.");
-        var worlds = s.Worldspaces.Split([',', ';', ' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var request = new TerrainGenerationRequest(Game(s), RequiredPath(s.TerrainOutput, "a terrain output folder", s), worlds.Length == 0 ? null : worlds,
+        var request = new TerrainGenerationRequest(Game(s), RequiredPath(s.TerrainOutput, "a terrain output folder", s), Worldspaces(s.Worldspaces),
             TextureSize: Whole(s.TerrainTextureSize), Brightness: (float)s.TerrainBrightness, VertexColorStrength: (float)s.TerrainVertexColor,
             TextureRepeatsPerCell: (float)s.TerrainRepeats, SkirtDepth: (float)s.TerrainSkirt, Water: s.TerrainWater,
             UseExistingTerrain: s.TerrainFallback, ExportHeightmaps: s.TerrainHeightmaps, HeightmapMaximumSize: Whole(s.TerrainHeightmapSize), Seasons: s.Seasons,
@@ -117,13 +122,11 @@ public static class RequestFactory
         string C(string k) => GenerationOptions.Get<string>(s, k);
         var levels = LodLevels.All.Where(l => B("lod" + (int)l)).ToArray();
         if (levels.Length == 0) throw new ArgumentException("Select at least one LOD level in Generation settings.");
-        var worlds = s.Worldspaces.Split([',', ';', ' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (worlds.Contains("*")) worlds = [];
         string? output = Optional(s.OutputFolder) is { } folder ? PathValue(folder, s) : null;
         if (generate && output is null) throw new ArgumentException("Choose an output mod folder before generating.");
         var game = Game(s);
         if (generate) GenerationDestination.Validate(game, output!);
-        return new ScanRequest(game, new ScanOptions(Worldspaces: worlds.Length == 0 ? null : worlds,
+        return new ScanRequest(game, new ScanOptions(Worldspaces: Worldspaces(s.Worldspaces),
             IncludeInitiallyDisabled: B("disabled"), IncludeEnableParented: B("parented"), TreeLod: B("trees"),
             DynamicLod: B("dynamic"), GridObjects: B("grid"), Tree3D: new Tree3DSettings(B("tree3d"), B("tree3d8"), B("treePlain"), B("mapTrees"), B("treeNamed"), I("treeNearBudget"), I("treeFarBudget"), F("treeNearError"), F("treeFarError"), B("treeNative"), B("treeFoliage"), F("treeNearCoverage") / 100, F("treeFarCoverage") / 100, B("treeHybrid"), int.Parse(C("treeTrunkSize")), F("treeTrunkUnits"), F("treeFoliageTarget") / 100),
             MatchTextures: B("matchTextures"), ParentCopies: B("parentCopies"), GlowWindows: B("glowWindows"), PbrWaterfalls: B("pbrWaterfalls"), RenderTreeBillboards: B("renderBillboards")),
@@ -144,6 +147,7 @@ public static class RequestFactory
             GeneratedTextureFolder: s.UseGeneratedTextures ? RequiredPath(s.TextureGenOutput, "a texture output folder", s) : null,
             GeneratedGrassFolder: s.UseGeneratedGrass ? RequiredPath(s.GrassOutput, "a grass cache output folder", s) : null,
             ObjectAtlas: B("objectAtlas"), AtlasCellSize: int.Parse(C("atlasCell")),
+            OptimizeObjectTextures: B("objectTextures"), ObjectTextureSize: int.Parse(C("objectTextureSize")),
             AutomaticObjects: new AnvilLOD.Plugins.Authoring.AutomaticObjectSettings(B("autoObjects"), I("autoObjectNear"), I("autoObjectMiddle"), I("autoObjectFar"), F("autoObjectMin"), F("autoObjectDetail")),
             GeneratedTerrainFolder: s.UseGeneratedTerrain ? RequiredPath(s.TerrainOutput, "a terrain output folder", s) : null);
     }

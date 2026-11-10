@@ -117,7 +117,7 @@ public static class SksePluginInstaller
         var root = toolFolder ?? AppContext.BaseDirectory;
         var source = Path.Combine(root, "SKSE", FolderFor(use), "AnvilLOD.dll");
         if (!File.Exists(source))
-            return new Result(false, $"SKSE plugin: {source} is missing, so no DLL was put in the output (rebuild the tool with build.ps1, which bundles all the builds).", version, use);
+            return new Result(false, $"SKSE plugin: {source} is missing, so no DLL was put in the output. Install the AnvilLOD game plugin for your Skyrim runtime separately, then choose None under SKSE DLL installation.", version, use);
 
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         File.Copy(source, target, overwrite: true);
