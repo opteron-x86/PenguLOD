@@ -13,6 +13,36 @@ namespace PenguLOD.Core.Tests;
 public class CliParityTests
 {
     [Fact]
+    public void ScopePlanningReadsLegacySettingsWithoutSourceValidationOrWritingIntoOutputs()
+    {
+        using var f = new TextureFixture();
+        string grass = Path.Combine(f.Root, "old-grass"), textures = Path.Combine(f.Root, "new-textures");
+        Directory.CreateDirectory(grass); File.WriteAllText(Path.Combine(grass, "AnvilLOD.grass.json"), "legacy");
+        var settings = new DesktopSettings { Instance = "", GrassOutput = grass, TextureGenOutput = textures,
+            PipelineGrass = true, PipelineTextures = true, PipelineTerrain = false, PipelineLod = false };
+        string preset = Path.Combine(f.Root, "preset.json"), report = Path.Combine(f.Root, "scope.json");
+        SettingsStore.Write(preset, settings);
+        var before = OutputSnapshot.Capture(grass); string original = File.ReadAllText(preset);
+        Assert.Equal(0, PenguLOD.Cli.Program.Main(["plan-generation", "--settings", preset, "--report", report]));
+        var reviewed = JsonSerializer.Deserialize<GenerationScopeReport>(File.ReadAllText(report), PersistentPipeline.Json)!;
+        Assert.Single(reviewed.Warnings); Assert.Equal(2, reviewed.Stages.Count);
+        Assert.False(Directory.Exists(textures));
+        Assert.Equal(0, PenguLOD.Cli.Program.Main(["plan-generation", "--settings", preset, "--stages", "textures", "--report", report]));
+        reviewed = JsonSerializer.Deserialize<GenerationScopeReport>(File.ReadAllText(report), PersistentPipeline.Json)!;
+        Assert.Empty(reviewed.Warnings); Assert.Equal("textures", Assert.Single(reviewed.Stages).Id);
+        Assert.Equal(2, PenguLOD.Cli.Program.Main(["plan-generation", "--settings", preset, "--report", Path.Combine(grass, "report.json")]));
+        Assert.Equal(2, PenguLOD.Cli.Program.Main(["plan-generation", "--settings", preset, "--stages", "unknown"]));
+        Assert.Equal(2, PenguLOD.Cli.Program.Main(["plan-generation", "--settings", preset, "--request", preset]));
+        string request = Path.Combine(f.Root, "request.json");
+        File.WriteAllText(request, JsonSerializer.Serialize(new GenerationPipelineRequest(Grass: new(new(), grass)), PersistentPipeline.Json));
+        Assert.Equal(0, PenguLOD.Cli.Program.Main(["plan-generation", "--request", request, "--report", report]));
+        Assert.Single(JsonSerializer.Deserialize<GenerationScopePlan>(File.ReadAllText(report), PersistentPipeline.Json)!.Warnings);
+        Assert.Equal(2, PenguLOD.Cli.Program.Main(["plan-generation", "--request", request, "--report", Path.Combine(grass, "report.json")]));
+        Assert.Equal(before.Digest, OutputSnapshot.Capture(grass).Digest);
+        Assert.Equal(original, File.ReadAllText(preset));
+    }
+
+    [Fact]
     public void OutputCommandsMeasureComparePlanAndPublishThroughTheCli()
     {
         using var f = new TextureFixture();

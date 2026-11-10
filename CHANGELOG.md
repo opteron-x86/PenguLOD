@@ -5,6 +5,17 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.6.0-alpha.4] - 2026-11-10
+
+- Fix Review output scope rejecting older AnvilLOD output before inspecting it.
+  Reviews now read output paths and coverage independently of generation setup.
+- Report old output by stage, folder and identifying files. Generation still
+  requires an empty or compatible PenguLOD output folder.
+- Apply the same read-only review to CLI presets, and prevent scope reports from
+  being saved inside the output folders being inspected.
+
+Scope review does not clear output folders or change saved settings.
+
 ## [0.6.0-alpha.3] - 2026-11-10
 
 - Use Mod Organizer 2 and Community Shaders names in app labels, diagnostics,

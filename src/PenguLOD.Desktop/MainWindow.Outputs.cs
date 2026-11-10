@@ -86,8 +86,8 @@ public sealed partial class MainWindow
     }
     private Task ReviewOutputScope()
     {
-        var request = RequestFactory.Pipeline(_settings.Snapshot());
-        return RunJob("Review output scope", _settings.Snapshot(), (_, ct) => GenerationScope.Review(request, ct),
+        var snapshot = _settings.Snapshot();
+        return RunJob("Review output scope", snapshot, (_, ct) => GenerationScope.ReviewOutputs(RequestFactory.OutputScope(snapshot), ct),
             (plan, _, _) => { _pipelineSummary.Text = plan.Summary(); Notice(plan.Summary()); }, saveSettings: false);
     }
     private async Task ExportOutputReport()

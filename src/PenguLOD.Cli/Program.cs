@@ -338,16 +338,11 @@ public static partial class Program
     private static GenerationPipelineRequest LoadPipelineRequest(CliArgs a, string? stage = null)
     {
         if (a.Has("request") == a.Has("settings")) throw new CliArgException("Choose exactly one of --request or --settings.");
-        var selected = (stage ?? a.Get("stages"))?.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
-        if(selected is not null && (selected.Length==0 || selected.Any(s=>s is not ("grass" or "textures" or "terrain" or "lod"))))
-            throw new CliArgException("--stages accepts grass,textures,terrain,lod.");
+        var selected = SelectedStages(a, stage);
         GenerationPipelineRequest request;
         if(a.Get("settings") is { } preset)
         {
-            var settings=SettingsStore.Read(preset);
-            if(selected is not null)
-            {settings.PipelineGrass=selected.Contains("grass");settings.PipelineTextures=selected.Contains("textures");settings.PipelineTerrain=selected.Contains("terrain");settings.PipelineLod=selected.Contains("lod");}
-            request=RequestFactory.Pipeline(settings);
+            request=RequestFactory.Pipeline(LoadStageSettings(preset, selected));
         }
         else
         {
@@ -365,6 +360,22 @@ public static partial class Program
         return request with {Resume=!a.Has("no-resume")&&request.Resume,VerifySourceContents=a.Has("verify-source-contents")||request.VerifySourceContents,
             ExpandOutputScope=a.Has("expand-output-scope")||request.ExpandOutputScope,
             Preflight=!a.Has("no-preflight")&&request.Preflight,TextureCompute=a.Get("texture-compute")??request.TextureCompute};
+    }
+
+    private static string[]? SelectedStages(CliArgs a, string? stage = null)
+    {
+        var selected = (stage ?? a.Get("stages"))?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (selected is not null && (selected.Length == 0 || selected.Any(s => s is not ("grass" or "textures" or "terrain" or "lod"))))
+            throw new CliArgException("--stages accepts grass,textures,terrain,lod.");
+        return selected;
+    }
+
+    private static DesktopSettings LoadStageSettings(string preset, string[]? selected)
+    {
+        var settings = SettingsStore.Read(preset);
+        if (selected is not null)
+        { settings.PipelineGrass = selected.Contains("grass"); settings.PipelineTextures = selected.Contains("textures"); settings.PipelineTerrain = selected.Contains("terrain"); settings.PipelineLod = selected.Contains("lod"); }
+        return settings;
     }
 
     private static string CacheFolder(CliArgs a)

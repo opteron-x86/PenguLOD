@@ -51,7 +51,22 @@ public static partial class Program
     }
     private static int PlanGeneration(CliArgs a)
     {
-        var plan = GenerationScope.Review(LoadPipelineRequest(a), Cancellation);
-        Console.WriteLine(plan.Summary()); WriteReport(a, plan); return 0;
+        if (a.Has("request") == a.Has("settings")) throw new CliArgException("Choose exactly one of --request or --settings.");
+        object report; string summary; IEnumerable<string> outputs;
+        if (a.Get("settings") is { } preset)
+        {
+            var stages = PenguLOD.Desktop.Services.RequestFactory.OutputScope(LoadStageSettings(preset, SelectedStages(a)));
+            var plan = GenerationScope.ReviewOutputs(stages, Cancellation);
+            report = plan; summary = plan.Summary(); outputs = stages.Select(s => s.OutputFolder);
+        }
+        else
+        {
+            var request = LoadPipelineRequest(a);
+            var plan = GenerationScope.Review(request, Cancellation);
+            report = plan; summary = plan.Summary();
+            outputs = new[] { request.Grass?.OutputFolder, request.Textures?.OutputFolder, request.Terrain?.OutputFolder, request.Lod?.OutputFolder }.OfType<string>();
+        }
+        if (a.Get("report") is { } destination) OutputManagement.ValidateReportPath(destination, outputs);
+        Console.WriteLine(summary); WriteReport(a, report); return 0;
     }
 }

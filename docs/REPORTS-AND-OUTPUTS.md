@@ -88,10 +88,15 @@ automatically. The previous package is kept until you choose to remove it.
 Generated masters, dynamic data and some atlases are shared across worlds. A
 partial set cannot safely replace those files while retaining unrelated old blocks.
 
-Use **Pipeline → Review output scope** before updating an existing generation
-folder. If more worlds or levels are needed, enable **Expand generation to preserve
-existing worlds and levels**. The run includes the union of the old and requested
+Use **Generation Overview → Run options → Review output scope** before updating an existing generation
+folder. If more worlds or levels are needed, enable **Keep existing worlds and levels**.
+The run includes the union of the old and requested
 scope. Your saved world selection is unchanged. Expansion is off by default.
+
+Scope review only reads the selected output folders. It can inspect older AnvilLOD
+output and reports its stage, path and identifying files. Before generating into
+that location, choose an empty folder or clear the complete old generated output.
+The review does not delete files or validate the game installation.
 
 For a quick isolated test, use a new output folder. Managed package updates reject
 a replacement that omits worlds or levels from the previous stage. They do not

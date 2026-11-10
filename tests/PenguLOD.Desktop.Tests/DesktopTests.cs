@@ -106,6 +106,37 @@ public sealed class DesktopTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task OutputScopeReviewInspectsLegacyCacheWithoutAConfiguredGameOrModifyingOutput()
+    {
+        string grass = Path.Combine(_root, "grass-output"); Directory.CreateDirectory(Path.Combine(grass, "grass"));
+        string marker = Path.Combine(grass, "AnvilLOD.grass.json"); File.WriteAllText(marker, "legacy manifest");
+        File.WriteAllBytes(Path.Combine(grass, "grass", "Tamrielx0000y0000.cgid"), [1, 2, 3]);
+        var old = PenguLOD.Core.Pipeline.OutputSnapshot.Capture(grass);
+        var window = Window();
+        window.ReplaceSettings(new DesktopSettings { Instance = "", CacheFolder = Path.Combine(_root, "cache"),
+            PipelineGrass = true, PipelineTextures = true, PipelineTerrain = true, PipelineLod = true,
+            GrassOutput = grass, TextureGenOutput = Path.Combine(_root, "new-textures"),
+            TerrainOutput = Path.Combine(_root, "new-terrain"), OutputFolder = Path.Combine(_root, "new-lod"),
+            GrassWorldspaces = "all", Worldspaces = "*", GrassNgioConfig = Path.Combine(_root, "missing.ini") });
+        string settings = JsonSerializer.Serialize(window.Settings);
+        window.Show();
+        try
+        {
+            window.GetVisualDescendants().OfType<Expander>().Single(e => e.Header as string == "Run options").IsExpanded = true;
+            Click(window, "Review output scope"); await WaitFor(() => window.Status == "Review output scope completed");
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text?.Contains("Grass cache:") == true
+                && t.Text.Contains(grass) && t.Text.Contains("AnvilLOD.grass.json"));
+            Assert.Equal(settings, JsonSerializer.Serialize(window.Settings));
+            Assert.Equal(old.Digest, PenguLOD.Core.Pipeline.OutputSnapshot.Capture(grass).Digest);
+            Assert.False(Directory.Exists(window.Settings.TextureGenOutput));
+            Assert.False(Directory.Exists(window.Settings.TerrainOutput));
+            Assert.False(Directory.Exists(window.Settings.OutputFolder));
+            Assert.DoesNotContain("System.InvalidOperationException", File.ReadAllText(Assert.Single(Directory.GetFiles(window.Settings.CacheFolder, "run.log", SearchOption.AllDirectories))));
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task DiagnosticsShowRuntimeRequirementsAndExportMetadataOnly()
     {
         using var fixture = new TextureFixture(); var window = Window();

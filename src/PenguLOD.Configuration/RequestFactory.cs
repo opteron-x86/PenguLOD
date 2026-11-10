@@ -44,6 +44,21 @@ public static class RequestFactory
         s.PipelineLod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
         s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute, s.ExpandOutputScope);
 
+    public static IReadOnlyList<GenerationScopeStage> OutputScope(DesktopSettings s)
+    {
+        var stages = new List<GenerationScopeStage>();
+        if (s.PipelineGrass) stages.Add(new("grass", RequiredPath(s.GrassOutput, "a grass cache output folder", s), Worldspaces(s.GrassWorldspaces)));
+        if (s.PipelineTextures) stages.Add(new("textures", RequiredPath(s.TextureGenOutput, "a texture output folder", s)));
+        if (s.PipelineTerrain) stages.Add(new("terrain", RequiredPath(s.TerrainOutput, "a terrain output folder", s), Worldspaces(s.Worldspaces)));
+        if (s.PipelineLod)
+        {
+            var levels = LodLevels.All.Where(l => GenerationOptions.Get<bool>(s, "lod" + (int)l)).ToArray();
+            if (levels.Length == 0) throw new ArgumentException("Select at least one LOD level on Object LOD.");
+            stages.Add(new("lod", RequiredPath(s.OutputFolder, "an object LOD output folder", s), Worldspaces(s.Worldspaces), levels));
+        }
+        return stages;
+    }
+
     public static TerrainGenerationRequest Terrain(DesktopSettings s)
     {
         int Whole(decimal value) => value == decimal.Truncate(value) ? checked((int)value) : throw new ArgumentException("Terrain sizes must be whole numbers.");
