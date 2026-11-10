@@ -50,6 +50,62 @@ public sealed class DesktopTests : IDisposable
             .Children.OfType<T>().Single();
 
     [AvaloniaFact]
+    public void WorkflowStageOutputsStayInSyncAndOnlySelectedStagesRun()
+    {
+        using var fixture = new TextureFixture(); var window = Window();
+        window.ReplaceSettings(new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = fixture.Data,
+            PluginsFile = fixture.Plugins, Worldspaces = "Tamriel", GrassWorldspaces = "DLC2SolstheimWorld" });
+        var before = JsonSerializer.Serialize(window.Settings);
+        window.Show();
+        try
+        {
+            foreach (string page in new[] { "Game & resources", "Grass cache", "Textures", "Terrain", "Object LOD", "Overview" }) Click(window, page);
+            Assert.Equal(before, JsonSerializer.Serialize(window.Settings));
+            foreach (bool rebuild in new[] { false, true })
+            {
+                if (rebuild) window.ReplaceSettings(window.Settings.Snapshot());
+                foreach (var (flag, output, page) in new[] {
+                    ("PipelineGrass", "GrassOutput", "Grass cache"), ("PipelineTextures", "TextureGenOutput", "Textures"),
+                    ("PipelineTerrain", "TerrainOutput", "Terrain"), ("PipelineLod", "OutputFolder", "Object LOD") })
+                {
+                    Click(window, "Overview");
+                    string path = Path.Combine(fixture.Root, output);
+                    window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == output).Text = path;
+                    var configure = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "Configure" + flag);
+                    configure.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
+                    var field = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == output);
+                    Assert.Equal(path, field.Text);
+                    field.Text = path + "-updated";
+                    Click(window, "Overview");
+                    Assert.Equal(path + "-updated", window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == output).Text);
+                }
+                foreach (var check in window.GetVisualDescendants().OfType<CheckBox>().Where(c => c.Name?.StartsWith("Pipeline") == true))
+                    check.SetCurrentValue(CheckBox.IsCheckedProperty, false);
+                Assert.False(FindButton(window, "Run selected stages").IsEffectivelyEnabled);
+                window.GetVisualDescendants().OfType<CheckBox>().Single(c => c.Name == "PipelineTerrain").SetCurrentValue(CheckBox.IsCheckedProperty, true);
+                Assert.True(FindButton(window, "Run selected stages").IsEffectivelyEnabled);
+                var request = RequestFactory.Pipeline(window.Settings.Snapshot());
+                Assert.NotNull(request.Terrain); Assert.Null(request.Grass); Assert.Null(request.Textures); Assert.Null(request.Lod);
+                Click(window, "Object LOD");
+                window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Worldspaces").Text = "FixtureWorld";
+                Click(window, "Terrain");
+                Assert.Equal("FixtureWorld", window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Worldspaces").Text);
+                Assert.Equal("DLC2SolstheimWorld", window.Settings.GrassWorldspaces);
+                Click(window, "Overview");
+            }
+            window.Width = 960; window.Height = 680; window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+            foreach (string text in new[] { "Run selected stages", "Check setup", "Cancel job" })
+            {
+                var button = FindButton(window, text);
+                var point = button.TranslatePoint(new Point(), window)!.Value;
+                Assert.InRange(point.X, 0, window.Bounds.Width - button.Bounds.Width);
+                Assert.InRange(point.Y, 0, window.Bounds.Height - button.Bounds.Height);
+            }
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task DiagnosticsShowRuntimeRequirementsAndExportMetadataOnly()
     {
         using var fixture = new TextureFixture(); var window = Window();
@@ -59,7 +115,8 @@ public sealed class DesktopTests : IDisposable
         window.Show();
         try
         {
-            Click(window, "Diagnostics"); await window.RunDiagnostics(); Assert.Equal("Diagnostics complete", window.Status);
+            Click(window, "Check setup"); await WaitFor(() => window.Status == "Diagnostics complete");
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Diagnostics" && t.FontSize == 28);
             var report = Assert.Single(Directory.GetFiles(window.Settings.CacheFolder, "diagnostics.json", SearchOption.AllDirectories));
             var json = File.ReadAllText(report); Assert.Contains("runtime-plugin-missing", json); Assert.DoesNotContain(fixture.Root, json);
             Assert.False(Directory.Exists(window.Settings.OutputFolder));
@@ -81,7 +138,7 @@ public sealed class DesktopTests : IDisposable
         window.Show();
         try
         {
-            Click(window, "Pipeline"); await window.RunSelectedPipeline();
+            Click(window, "Overview"); await window.RunSelectedPipeline();
             Assert.Equal("Completed", window.Status);
             Assert.True(window.Settings.UseGeneratedTerrain);
             Assert.True(File.Exists(Path.Combine(fixture.Output, TerrainGeneration.ManifestName)));
@@ -130,15 +187,17 @@ public sealed class DesktopTests : IDisposable
             // Exercise initial creation, preset page rebuilding and imported settings.
             foreach (string state in new[] { "Initial", "Preset", "Imported" })
             {
-                Click(window, "Generation settings");
+                Click(window, "Object LOD");
                 if (state == "Preset") Click(window, "Balanced preset");
                 if (state == "Imported") window.ReplaceSettings(new DesktopSettings());
                 Click(window, "Overview");
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
                 GC.WaitForPendingFinalizers();
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
-                Click(window, "Generation settings");
+                Click(window, "Object LOD");
 
+                foreach (var group in window.GetVisualDescendants().OfType<Expander>().ToArray()) group.IsExpanded = true;
+                Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
                 var tip = LabeledInput<NumericUpDown>(window, "Grass tip brightness");
                 var root = LabeledInput<NumericUpDown>(window, "Grass root brightness");
                 var tree = window.GetVisualDescendants().OfType<CheckBox>().Single(c => c.Content as string == "Tree billboards");
@@ -175,18 +234,19 @@ public sealed class DesktopTests : IDisposable
     public void PagesRenderAndBindingsPersist()
     {
         var window = Window(); window.Show();
+        Click(window, "Game & resources");
         var input = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "Instance");
         input.Text = "/mnt/mods/My MO2";
         Assert.Equal(input.Text, window.Settings.Instance);
         string? screenshots = Environment.GetEnvironmentVariable("PENGULOD_SCREENSHOTS");
-        foreach (var (title, file) in new[] { ("Overview", "overview"), ("Pipeline", "pipeline"), ("Grass cache", "grass-cache"), ("Texture generation", "texture-generation"), ("Terrain", "terrain"), ("Generation settings", "settings"), ("Mesh maker", "meshes"), ("Mod author", "author"), ("Texture tools", "textures"), ("Custom rules", "rules"), ("Diagnostics", "diagnostics"), ("Preferences", "preferences") })
+        foreach (var (title, file) in new[] { ("Overview", "overview"), ("Game & resources", "source"), ("Grass cache", "grass-cache"), ("Textures", "texture-generation"), ("Terrain", "terrain"), ("Object LOD", "settings"), ("Scan results", "scan"), ("Reports & outputs", "outputs"), ("Mesh maker", "meshes"), ("Mod author", "author"), ("Texture tools", "textures"), ("Custom rules", "rules"), ("Diagnostics", "diagnostics"), ("Preferences", "preferences") })
         {
             Click(window, title);
             Assert.Contains(window.GetVisualDescendants().OfType<ScrollViewer>(), s => s.Bounds.Width > 0);
             if (screenshots is not null)
             { Directory.CreateDirectory(screenshots); using var bitmap = window.CaptureRenderedFrame(); Assert.NotNull(bitmap); bitmap.Save(Path.Combine(screenshots, file + ".png")); }
         }
-        Click(window, "Generation settings"); Click(window, "Objects only");
+        Click(window, "Object LOD"); Click(window, "Objects only");
         Assert.False(GenerationOptions.Get<bool>(window.Settings, "trees"));
         Assert.False(GenerationOptions.Get<bool>(window.Settings, "dynamic"));
         Assert.Equal("/mnt/mods/My MO2", window.Settings.Instance);
@@ -203,7 +263,7 @@ public sealed class DesktopTests : IDisposable
     public async Task InvalidSourceShowsAnActionableErrorAndRestoresTheUi()
     {
         var window = Window(); window.Settings.CacheFolder = Path.Combine(_root, "Cache");
-        window.Show(); Click(window, "Scan load order");
+        window.Show(); Click(window, "Game & resources"); Click(window, "Scan load order");
         await WaitFor(() => !window.Busy);
         Assert.False(window.Busy);
         Assert.True(FindButton(window, "Scan load order").IsEffectivelyEnabled);
@@ -304,8 +364,9 @@ public sealed class DesktopTests : IDisposable
             GrassOutput = fixture.Output, GrassExecutable = fixture.Executable, MaxThreads = 2,
             TextureGenOutput = fixture.Textures.Output, DynDolodFolder = fixture.Textures.Resources, TextureGenTrees = false,
             OutputFolder = Path.Combine(fixture.Root, "LOD"), CacheFolder = Path.Combine(fixture.Root, "Cache") });
-        window.Show(); Click(window, "Grass cache");
-        Click(window, "Grass, textures, then LOD");
+        window.Settings.PipelineGrass = true; window.Settings.PipelineTextures = true;
+        window.Settings.PipelineTerrain = false; window.Settings.PipelineLod = true;
+        window.Show(); Click(window, "Run selected stages");
         try
         {
             await WaitFor(() => window.Status == "FAKE_READY");
@@ -314,10 +375,16 @@ public sealed class DesktopTests : IDisposable
             bool heartbeat = false;
             await Dispatcher.UIThread.InvokeAsync(() => heartbeat = true);
             Assert.True(heartbeat);
+            Click(window, "Object LOD");
+            Assert.False(FindButton(window, "Generate object LOD").IsEffectivelyEnabled);
+            Click(window, "Textures");
+            Assert.False(FindButton(window, "Generate textures").IsEffectivelyEnabled);
+            Click(window, "Overview");
+            Assert.False(FindButton(window, "Run selected stages").IsEffectivelyEnabled);
             Click(window, "Cancel job");
             await WaitFor(() => !window.Busy);
             Assert.Equal("Cancelled", window.Status);
-            Assert.True(FindButton(window, "Grass, textures, then LOD").IsEffectivelyEnabled);
+            Assert.True(FindButton(window, "Run selected stages").IsEffectivelyEnabled);
             Assert.Equal(manifest, File.ReadAllText(Path.Combine(fixture.Output, GrassGenerationManifest.FileName)));
             Assert.False(File.Exists(Path.Combine(fixture.Textures.Output, TextureGenerationManifest.FileName)));
             Assert.False(Directory.Exists(window.Settings.OutputFolder));
@@ -395,8 +462,9 @@ public sealed class DesktopTests : IDisposable
             TextureGenGrass = false, TextureGenBaseSize = 64, MaxThreads = 2,
             OutputFolder = Path.Combine(fixture.Root, "LOD"), CacheFolder = Path.Combine(fixture.Root, "Cache")
         };
-        window.ReplaceSettings(settings); window.Show(); Click(window, "Texture generation");
+        window.ReplaceSettings(settings); window.Show(); Click(window, "Game & resources");
         Assert.Equal(fixture.Resources, window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "ResourceFolders").Text);
+        Click(window, "Textures");
         var output = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "TextureGenOutput");
         Assert.Equal(fixture.Output, output.Text);
         var size = window.GetVisualDescendants().OfType<ComboBox>().Single(t => t.Name == "TextureGenBaseSize");

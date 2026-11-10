@@ -6,7 +6,7 @@ resources distributed under `Data/DynDOLOD` can be consumed natively.
 
 Enabled mods are searched automatically through the selected Data/Fluorine/MO2 view.
 For external packs, set **Primary resource folder (optional)** and **Additional resource
-folders** on Generation or Texture generation. Enter additional folders one per line.
+folders** on **Game & resources**. Enter additional folders one per line.
 The settings are shared between texture, LOD and mod-author tools and saved in presets.
 
 ## Layouts
@@ -53,7 +53,7 @@ over the legacy `Render/Skyrim` versions. A custom LOD rule file remains the hig
 rule priority. File discovery and rule evaluation order are separate: plugin order and
 the selected preset still determine which rules match.
 
-Overview's **Resource files** table lists winning logical files and their sources.
+The **Scan results → Resource files** table lists winning logical files and their sources.
 Scan JSON and texture reports include `resources`/`Resources`; generated LOD also contains
 `PenguLOD.resources.json`. Replaced sources are listed in `Overridden`. These are private
 run reports and may contain local paths. Use Diagnostics for a redacted report to share.

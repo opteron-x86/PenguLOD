@@ -1,6 +1,6 @@
 # PenguLOD settings reference
 
-This reference follows the **v0.5** desktop interface. Use the
+This reference follows the **v0.6** desktop interface. Use the
 [walkthrough](USER-GUIDE.md) for a normal run and the [tool reference](TOOLS.md) for
 mesh authoring, texture repair and custom rules. Settings save automatically.
 
@@ -10,12 +10,12 @@ install the regenerated output to see the change in game.
 
 ## Find a page
 
-- [Overview: source and output](#overview-source-and-output)
-- [Pipeline](#pipeline)
-- [Texture generation](#texture-generation)
+- [Generation Overview](#generation-overview)
+- [Game & resources](#game--resources)
+- [Textures](#textures)
 - [Terrain](#terrain)
 - [Grass cache](#grass-cache)
-- [Generation settings](#generation-settings)
+- [Object LOD](#object-lod)
 - [Diagnostics](#diagnostics)
 - [Preferences](#preferences)
 - [In-game quality controls](#in-game-quality-controls)
@@ -25,65 +25,79 @@ A **3D LOD model** has more geometry and usually costs more to draw. An **atlas*
 combines several textures into one sheet so compatible surfaces can be drawn
 together. **Game units** measure distance or size in Skyrim; they are not metres.
 
-## Overview: source and output
+## Generation Overview
+
+**Overview** is the run screen. Check the stages you want and set their output
+folders. Each **Settings** button opens that stage's page. The folders shown here
+and on the stage pages are the same settings.
+
+| Stage | What it generates |
+| --- | --- |
+| Grass cache | Grass placements for the selected grass worldspaces. |
+| Textures | The texture categories selected on Textures. |
+| Terrain | Terrain and, when enabled, water LOD. |
+| Object LOD | Object, tree and grass LOD using the Object LOD settings. |
+
+The stages run in that order. Give each stage a separate output folder. Newly
+generated inputs are passed to later stages automatically. The **Terrain and
+object LOD** worldspace field accepts comma-separated editor IDs, such as
+`Tamriel, DLC2SolstheimWorld`; blank or `*` includes all worlds with LOD settings.
+**Grass cache** has an independent worldspace selection. Textures use the load order.
+
+**Check setup** checks the selected stages. **Run selected stages** starts them,
+or resumes a matching saved run. The run button is disabled when no stages are
+selected. Individual stage pages have their own generation button at the bottom
+of the window; those buttons run only that stage.
+
+### Run options
 
 | Setting | What it does |
 | --- | --- |
-| Source | **Mod Organizer 2** reads an MO2 or Fluorine instance and its enabled mods. **Data folder / Vortex** reads files already deployed to the game. |
-| Game edition | Select **SE / AE** or **VR** to match the game. |
-| MO2 instance | The folder containing `ModOrganizer.ini`. The mod manager does not need to be running. |
-| Profile | The profile to read. Blank uses the instance's selected profile. **Read profiles** fills the list from the instance. |
-| Game / Data folder | For a deployed installation, select the game folder or its `Data` folder. |
-| plugins.txt | The enabled-plugin list for a deployed installation. Use an explicit file; an empty file is valid for a vanilla game. |
-| Output mod folder | Destination for object, tree and grass LOD. Keep it separate from the game, enabled mods and the other stages' output folders. |
-| Worldspaces | World editor IDs separated by commas, such as `Tamriel, DLC2SolstheimWorld`. Blank or `*` selects all worlds with LOD settings for both terrain and object LOD. Grass cache has its own selection; texture generation uses the load order. |
-| Clear previous PenguLOD output before generation | Rebuilds the object LOD output without reusing its previous blocks. Off by default. Use a dedicated output folder in either mode. |
+| Check setup before generation | Checks missing inputs, output conflicts and other blocking problems. On by default. |
+| Reuse completed stages | Reuses successful stages when settings, inputs and output checks match. On by default. |
+| Keep existing worlds and levels | Expands a partial run when needed to preserve the current output's coverage. Off by default. **Review output scope** shows the additional work. Use a new folder for an isolated test. |
+| Verify all source files | Reads every source asset instead of checking sizes and modification times for large assets. Off by default. |
 
-**Advanced source paths** are overrides for installations whose saved paths need
-help. Leave them blank when the normal source selection works.
+**Export run configuration** saves the selection for the [CLI](CLI.md).
+**Open saved job** opens the run's records. Results show stage status, reuse,
+generation time and verification time. Detailed timings remain in the run report.
+
+## Game & resources
+
+These inputs are shared by all generation stages.
 
 | Setting | What it does |
 | --- | --- |
-| Wine / Proton prefix | On Linux, resolves Windows drive letters stored by the mod manager. Select the game's `pfx` folder or its containing compatdata folder. |
+| Source | **Mod Organizer 2** reads an MO2 or Fluorine instance and its enabled mods. **Data folder / Vortex** reads the deployed game files. |
+| Game edition | Choose **SE / AE** or **VR**. |
+| MO2 / Fluorine instance | The folder containing `ModOrganizer.ini`. |
+| Profile | The profile to read. Blank uses the selected instance profile. **Read profiles** fills the list. |
+| Game / Data folder | For a deployed installation, choose the game folder or its `Data` folder. |
+| plugins.txt | The enabled-plugin list for a deployed installation. An empty file is valid for a vanilla game. |
+| Primary resource folder (optional) | Additional recipes, rules and render models outside enabled mods. DynDOLOD resource folders are supported. |
+| Additional resource folders · one per line | Later external folders take precedence over earlier ones. Enabled mods take precedence over external packs. |
+| Custom rule file | An optional override file for object LOD rules. |
+
+### Advanced source paths
+
+Leave these blank when the normal source selection works.
+
+| Setting | What it does |
+| --- | --- |
+| Wine / Proton prefix | On Linux, resolves Windows drive letters stored by the mod manager. Choose the game's `pfx` folder or its containing compatdata folder. |
 | Game folder override (MO2) | Replaces the game location saved in the instance. |
 | Mods folder override | Replaces the instance's mod-storage location. |
-| Profiles folder override | Replaces the location used to find profiles. |
-| Overwrite folder override | Replaces the instance's Overwrite location. Files there can override enabled mods. |
-| Skyrim.ini override | Uses a specific game INI instead of the one found through the source. |
+| Profiles folder override | Replaces the profile location. |
+| Overwrite folder override | Replaces the instance's Overwrite location. |
+| Skyrim.ini override | Uses a specific game INI. |
 
-**Scan load order** checks coverage without generating the final LOD. **Generate
-LOD** builds object, tree and grass LOD using Generation settings. It does not run
-texture generation or terrain generation. **Open output** opens the destination;
-**Open run folder** opens logs and reports for the current job.
+**Scan load order** checks object and tree coverage and opens **Scan results**.
+It does not generate output. **Scan results** also contains resource sources,
+missing models and tree geometry counts.
 
-## Pipeline
+## Textures
 
-The pipeline runs the checked stages in order. Give each stage its own output
-folder. Newly generated inputs are passed to later stages automatically.
-
-| Setting | What it does |
-| --- | --- |
-| Cache grass | Saves grass placements using the Grass cache page's settings. |
-| Textures | Generates the categories selected on Texture generation. |
-| Terrain and water | Generates terrain and, if enabled on Terrain, water LOD. |
-| Object / tree / grass LOD | Builds distant scenery using Generation settings. |
-| Run preflight before generation | Checks the selected stages for missing inputs, conflicting output folders and other blocking problems. On by default. |
-| Reuse completed stages after verifying their files | Skips successful stages when their settings, inputs and output checks still match. On by default; useful after a later stage fails. |
-| Expand generation to preserve existing worlds and levels | Includes worlds and levels already present in the selected output folder when a partial selection would leave shared files inconsistent. Off by default. Use **Review output scope** to see the additional work, or choose a new folder for an isolated test. |
-| Verify all source asset contents | Reads the contents of every source asset when deciding whether previous work can be reused. Off uses a faster size-and-date check for large assets. Plugins and configuration are always content-checked. |
-
-**Run / resume pipeline** starts the selection or resumes a matching saved job.
-**Export pipeline request** saves that selection for the [CLI](CLI.md).
-**Open saved job** opens its records. Output files are verified before reuse even
-when full source verification is off.
-
-The results separate preparation, processing and verification. **Write worker s**
-can overlap processing and add together work from several threads; it is not an
-extra amount to add to total elapsed time.
-
-## Texture generation
-
-Texture generation reads the selected load order. Overview's Worldspaces field
+Texture generation reads the selected load order. Overview's worldspace selection
 does not limit it. Changes here normally need **textures, then object LOD** to be
 regenerated and installed together. Each texture run replaces that folder's
 generated set, so keep all the categories you want selected.
@@ -92,10 +106,8 @@ generated set, so keep all the categories you want selected.
 
 | Setting | What it does |
 | --- | --- |
-| Primary resource folder (optional) | Supplies compatible recipes, rules and render models kept outside enabled mods. Existing DynDOLOD resource folders work without running DynDOLOD executables. |
-| Additional resource folders · one per line, later folders win | Adds more resource packs. Later folders take precedence over earlier external folders; enabled mods take precedence over external packs. |
-| Texture output mod folder | Destination for the generated texture mod. Keep it separate from object LOD output. |
-| Use this generated texture output for subsequent LOD jobs | Makes later LOD jobs read this folder. You must still install it as a mod for the game. |
+| Texture output | Destination for the generated texture mod. Keep it separate from object LOD output. |
+| Use generated textures for LOD | Makes later LOD jobs read this folder. You must still install it as a mod for the game. |
 | Stitched object textures | Builds object texture sheets from supplied copy and stitching recipes. On by default. |
 | Tree billboards | Renders distant tree images from the winning tree models. On by default. |
 | Grass billboards | Renders grass images needed by grass billboard LOD. Off by default. |
@@ -111,7 +123,7 @@ Keep defaults for the first comparison, then adjust one control at a time.
 | Setting | What it does |
 | --- | --- |
 | Bake source normal maps | Carries fine surface shading from the source model into the render. On by default. |
-| Calibrate explicit PBR albedo paths | Adjusts source textures already identified as PBR albedo for the distant shader. On by default. |
+| Calibrate PBR albedo | Adjusts source textures already identified as PBR albedo for the distant shader. On by default. |
 | PBR scale | Brightness scale for calibrated PBR colour. Default `0.65`; lower is darker. |
 | PBR gamma | Adjusts PBR midtones. Default `1.15`; higher darkens midtones, lower brightens them. |
 | PBR occlusion strength | Amount of shading taken from the PBR ambient-occlusion map. Default `0.5`; `0` ignores it, `1` uses its full effect. |
@@ -133,18 +145,18 @@ Keep defaults for the first comparison, then adjust one control at a time.
 | Brightness multiplier | Overall generated-texture brightness. Default `1`; below `1` darkens, above `1` brightens. |
 | Minimum tree height | Skips billboard rendering for trees shorter than this height in game units. Default `256`. |
 | Minimum grass height | Skips billboard rendering for grass shorter than this height in game units. Default `16`. |
-| Model path contains (optional) | Restricts billboards and rendered objects to matching paths for a preview. Stitching still processes all matching recipes. Leave blank for a complete output. |
+| Model path filter | Restricts billboards and rendered objects to matching paths for a preview. Stitching still processes all matching recipes. Leave blank for a complete output. |
 
 Supplied billboard rules can override automatic sizing and minimum-height filters.
 Use a separate folder for a filtered preview; it is not a complete texture mod.
 
-**Generate textures** runs only this stage. **Textures, then LOD** runs textures
-and object LOD; it does not add terrain. After a successful run, select a written
-or retained result and choose **Preview selected texture** to inspect it.
+**Generate textures** runs only this stage. Select **Textures** and **Object LOD**
+on **Overview** to run both. After a successful run, select a written or retained
+result and choose **Preview selected texture** to inspect it.
 
 ## Terrain
 
-Terrain uses Overview's source and worldspaces. These settings affect the distant
+Terrain uses Game & resources and the worldspaces shared with Object LOD. These settings affect the distant
 landscape, separately from the object settings. Regenerate terrain after changing
 them; also regenerate object LOD when its terrain input changes.
 
@@ -154,9 +166,9 @@ them; also regenerate object LOD when its terrain input changes.
 | --- | --- |
 | Terrain output | Destination for the terrain mod. Keep it separate from the other outputs. |
 | Fill missing landscape from existing terrain LOD | Uses existing terrain tiles where source landscape is unavailable. On by default. The run stops if it still cannot cover the required area. |
-| Generate seasonal terrain from Seasons of Skyrim swaps | Builds seasonal variants from installed swaps. Off by default. This is the same switch as **Seasonal LOD** in Generation settings. |
+| Generate seasonal terrain from Seasons of Skyrim swaps | Builds seasonal variants from installed swaps. Off by default. This is the same switch as **Seasonal LOD** in Object LOD. |
 | Generate water LOD | Builds distant water surfaces. On by default. |
-| Use generated terrain in object LOD generation | Makes object LOD use this terrain output, including for hidden-geometry removal. A pipeline that generates both stages passes it on automatically. |
+| Use generated terrain for object LOD | Makes object LOD use this terrain output, including for hidden-geometry removal. A pipeline that generates both stages passes it on automatically. |
 
 ### Textures and materials
 
@@ -192,8 +204,8 @@ Skyrim; install it as a mod and keep the appropriate NGIO setup for the game.
 
 | Setting | What it does |
 | --- | --- |
-| Grass output mod folder | Destination for the cache mod. PenguLOD creates its `grass` subfolder. |
-| Worldspaces | `all`, or world editor IDs separated by commas. Independent of Overview's Worldspaces. |
+| Grass cache output | Destination for the cache mod. PenguLOD creates its `grass` subfolder. |
+| Worldspaces | `all`, or world editor IDs separated by commas. Independent of the terrain and object LOD worldspaces. |
 | Use generated grass cache for LOD | Makes later LOD jobs read this cache folder. The combined pipeline passes a completed full cache automatically. |
 | Placement | **Smooth** blends placement across cell and texture boundaries. **Vanilla** follows the game's placement style. Default Smooth. |
 | Collision rejection | Prevents grass growing through obstructing geometry. **Auto** selects an available method; **CPU** uses the bundled method. **GPU** requires a compatible external FasterNGIO build. |
@@ -209,7 +221,7 @@ Skyrim; install it as a mod and keep the appropriate NGIO setup for the game.
 | --- | --- |
 | FasterNGIO executable override | Uses an external compatible grass generator. Leave blank to use the bundled one. |
 | GrassControl.ini override | Uses a specific NGIO configuration instead of the one found in the selected profile. |
-| Minimum grass size · 0 = profile | Placement-density control: lower values produce denser grass. Default `0` uses the profile's setting. Despite the name, it does not set blade height. |
+| Minimum grass size | Placement-density control: lower values produce denser grass. Default `0` uses the profile's setting. Despite the name, it does not set blade height. |
 | Writer threads | Number of workers writing cache files. Default `1`; increasing it can help on fast storage but does not add placement workers. |
 | Use visible geometry for rejection (experimental) | Checks visible model surfaces as well as the normal collision data. Off by default; can avoid more intersections but takes more work. |
 
@@ -217,19 +229,27 @@ Use **Preferences → Worker threads** for general processing parallelism. Grass
 cache generation currently supports SE/AE, not VR. Changing the cache settings
 does not change game or NGIO configuration files.
 
-**Generate grass cache** runs this stage alone. **Grass, textures, then LOD** also
-runs texture and object LOD generation; it does not include terrain.
+**Generate grass cache** runs this stage alone. Select multiple stages on
+**Overview** to run them together.
 
-## Generation settings
+## Object LOD
 
-These settings govern the object LOD stage, including its trees and grass.
-Use **Find a setting…** to search labels. The resource-folder controls have the
-same meaning as on Texture generation. **Custom rule file** selects an optional
-saved [mesh rule file](TOOLS.md#custom-mesh-rules).
+These settings govern object LOD, including its trees and grass. Open a settings
+group or use **Find a setting…** to search labels and help text. Resource folders
+and the custom rule file are on **Game & resources**.
+
+| Setting | What it does |
+| --- | --- |
+| Object LOD output | Destination for object, tree and grass LOD. Separate from the other stages' output. |
+| Worldspaces | Shared with Terrain and Overview. Accepts worldspace IDs or `*` for all worlds. |
+| Clear previous output before generation | Rebuilds the output without reusing previous blocks. Off by default. |
+
+**Generate object LOD** runs this stage alone. **Scan load order** checks coverage
+and opens **Scan results** without generating output.
 
 ### Presets
 
-Each button resets the Generation settings options before applying its choices.
+Each button resets the Object LOD options before applying its choices.
 It leaves source paths and the separate TexGen and grass-cache settings in place.
 Terrain's seasonal switch is shared with this page and therefore resets too.
 
@@ -394,7 +414,7 @@ scenery disappearing too early.
 
 ## Diagnostics
 
-Diagnostics checks the stages selected on Pipeline. It does not generate their
+Diagnostics checks the stages selected on Overview. It does not generate their
 outputs or predict game FPS.
 
 | Setting | What it does |

@@ -20,7 +20,7 @@ Give each stage its own folder outside the game and installed mods. For example:
 | Stage | Example output folder | What it supplies |
 | --- | --- | --- |
 | Grass cache | `PenguLOD-output/Grass` | Saved grass placements |
-| Texture generation | `PenguLOD-output/Textures` | Distant textures and images of trees and grass |
+| Textures | `PenguLOD-output/Textures` | Distant textures and images of trees and grass |
 | Terrain | `PenguLOD-output/Terrain` | Distant landscape, water and terrain textures |
 | Object / tree / grass LOD | `PenguLOD-output/LOD` | Distant scenery and any selected generated plugins |
 
@@ -34,7 +34,7 @@ On Linux, run `linux-x64/run-pengulod.sh`; on Windows, run
 
 ## 2. Select the correct source
 
-On **Overview**, choose your game edition and source:
+On **Game & resources**, choose your game edition and source:
 
 - **Fluorine or Mod Organizer 2:** select **Mod Organizer 2**, browse to the instance
   containing `ModOrganizer.ini`, click **Read profiles**, and choose your profile.
@@ -46,23 +46,25 @@ For a Linux setup whose manager stores Windows paths, use **Advanced source path
 Wine / Proton prefix**. Select the game's `pfx` folder or its containing compatdata
 folder. Use the individual path overrides only when the saved locations are wrong.
 
-Set **Output mod folder** to the object LOD folder. Choose **Worldspaces**:
+On **Overview**, set a separate output folder for each stage you plan to run.
+Choose the terrain and object LOD worldspaces:
 `Tamriel` for the main Skyrim world, a comma-separated list for selected worlds,
 or leave it blank (or enter `*`) for every world with LOD settings.
 
 The world selection applies to terrain and object LOD. **Grass cache has its own
 worldspace selection. Texture generation uses the selected load order and is not
-limited by Overview's Worldspaces field.**
+limited by Overview's worldspace selection.**
 
 ## 3. Choose a starting point
 
-On **Generation settings**, apply **Balanced preset** for a first comparison. It
+On **Object LOD**, apply **Balanced preset** for a first comparison. It
 sets Medium mesh rules, grass LOD density to `0.05`, and turns Detailed ships off.
 It also resets the other generation options to their defaults. It keeps source
 paths and the separate texture-generation and grass-cache settings; the shared
 Seasonal LOD switch turns off for both terrain and objects.
 
-Then make the choices your setup needs:
+Open a settings group, or use the search box to find an option. Hover over a
+control for a short explanation. Then make the choices your setup needs:
 
 - Enable **3D tree LOD** if you want 3D trees in the nearest LOD band. Balanced leaves
   this off. Leave **3D trees at LOD 8** off for the initial test.
@@ -85,13 +87,13 @@ hard to explain.
 | Stage | Normal setup |
 | --- | --- |
 | Grass cache | Choose its output and worldspaces. Leave the bundled generator selected. Use an existing valid cache if grass placement and the relevant load order have not changed. |
-| Texture generation | Choose its output. Enable Stitched object textures and Tree billboards; add Grass billboards when using grass LOD. Use Hybrid tree trunk textures for installed hybrid tree models that need them. Leave the model filter blank for a full run. |
+| Textures | Choose its output. Enable Stitched object textures and Tree billboards; add Grass billboards when using grass LOD. Use Hybrid tree trunk textures for installed hybrid tree models that need them. Leave the model filter blank for a full run. |
 | Terrain | Choose its output. Start with the current size and brightness defaults. Enable seasonal or shader-specific output only when needed. |
-| Object LOD | Review tree, grass and object choices on Generation settings. Keep texture matching and hidden-geometry removal enabled unless diagnosing a specific problem. |
+| Object LOD | Review tree, grass and object choices on Object LOD. Keep texture matching and hidden-geometry removal enabled unless diagnosing a specific problem. |
 
 Compatible recipes and render resources in enabled mods are found automatically.
-Use **Primary resource folder** or **Additional resource folders** for resources
-kept elsewhere. An existing DynDOLOD resource folder is accepted; its executables
+Use **Primary resource folder** or **Additional resource folders** on
+**Game & resources** for resources kept elsewhere. An existing DynDOLOD resource folder is accepted; its executables
 are not required. See [resource packs](RESOURCE-PACKS.md) for supported layouts.
 
 If reusing completed output, enable its **Use generated…** option and check the
@@ -101,15 +103,17 @@ the game.
 
 ## 5. Check and generate
 
-On **Pipeline**, select the required stages. They run in this order:
+On **Overview**, select the required stages. Each stage has a **Settings** button
+for its options. The stages run in this order:
 **grass → textures → terrain → object LOD**. For textures and object LOD only,
-select **Textures** and **Object / tree / grass LOD**.
+select **Textures** and **Object LOD**.
 
-Use **Diagnostics → Run diagnostics** to review missing inputs and output conflicts.
-**Scan load order** on Overview shows which objects and trees can receive LOD.
+Use **Check setup** to review missing inputs and output conflicts.
+**Scan load order** on **Game & resources** or **Object LOD** shows which objects
+and trees can receive LOD.
 For a large setup, both checks can take time.
 
-Click **Run / resume pipeline**. Leave reuse enabled so completed stages can be
+Click **Run selected stages**. Leave reuse enabled so completed stages can be
 verified and reused after a restart or a later-stage failure. After a failed run,
 correct the reported problem and repeat the same selection. A cancelled or failed
 LOD stage preserves the previously published output.

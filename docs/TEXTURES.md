@@ -1,13 +1,13 @@
 # Texture generation
 
-On **Texture generation**, choose a separate **Texture output mod folder**. Recipes and
+On **Textures**, choose a separate **Texture output**. Recipes and
 render models in enabled mods are discovered automatically. Use **Primary resource folder**
-and **Additional resource folders** for standalone data packs; existing DynDOLOD resource
-bundles also work. See [resource packs](RESOURCE-PACKS.md) for layouts and precedence.
+and **Additional resource folders** on **Game & resources** for standalone data packs.
+Existing DynDOLOD resource bundles also work. See [resource packs](RESOURCE-PACKS.md) for layouts and precedence.
 PenguLOD does not launch TexGen or Wine. Game/mod assets and resource packs are supplied separately.
 
-**Generate textures** runs this stage alone. **Textures, then LOD** connects the generated
-textures to LOD immediately. Pipeline can also combine textures with grass and terrain.
+**Generate textures** runs this stage alone. On **Overview**, select **Textures**
+and **Object LOD** to run both. Add grass cache or terrain there when needed.
 Install texture and LOD output as separate mods, with LOD output winning conflicts.
 Existing TexGen output can supply textures for unsupported features underneath these mods.
 
@@ -68,8 +68,9 @@ Normal maps and their atlas mipmaps are normalized without weighting by specular
 
 This supports packed color and normals, not the full grass shader: specular alpha, wind,
 translucency and view-dependent lighting are not reproduced. Source-normal baking and
-material calibration still apply. Regenerate **Textures, then LOD** to use these changes;
-changing billboard settings does not require a new grass placement cache.
+material calibration still apply. Regenerate **Textures** and **Object LOD** on
+**Overview** to use these changes. Changing billboard settings does not require
+a new grass placement cache.
 
 ## Previews, reports and replacement
 
@@ -91,9 +92,9 @@ generate into a fresh folder. See [persistent generation](PIPELINE.md).
 
 ## Recipe-driven LOD materials
 
-Run **Textures, then LOD**, or select **Use this generated texture output for subsequent
-LOD jobs**. The generated manifest passes the exact recipe order, base size and brightness
-to LOD generation. CLI pipelines use the same preset with `pipeline --settings <preset.json>
+Run **Textures** and **Object LOD** on **Overview**, or select **Use generated
+textures for LOD**. The generated manifest passes the exact recipe order, base
+size and brightness to LOD generation. CLI pipelines use the same preset with `pipeline --settings <preset.json>
 --stages textures,lod`, or a JSON request with `Lod.GeneratedTextureFolder`. Texture matching
 is enabled by default. Regenerate older texture output once
 to save this metadata. Without a generated manifest, installed recipes can still be read

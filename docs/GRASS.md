@@ -6,7 +6,7 @@ NGIO/runtime configuration; PenguLOD does not change game-side grass or shader s
 
 ## Generate a cache
 
-1. Select the game source and profile on **Overview**.
+1. Select the game source and profile on **Game & resources**.
 2. On **Grass cache**, choose a separate output mod folder, such as
    `~/PenguLOD-output/Grass`. The application creates `grass/` inside it.
 3. Leave worldspaces at `all`, or enter editor IDs such as `Tamriel`. This selection

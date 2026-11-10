@@ -8,23 +8,22 @@ namespace PenguLOD.Desktop;
 
 public sealed partial class MainWindow
 {
-    private readonly TextBlock _diagnosticSummary = Text("Run diagnostics for the stages selected on Pipeline.", true);
+    private readonly TextBlock _diagnosticSummary = Text("No checks run yet.", true);
     private readonly DataGrid _diagnosticIssues = Table(("Severity", "Severity"), ("Finding", "Message"), ("Next step", "Action"), ("Asset", "Asset"), ("Winner", "Source"));
     private readonly DataGrid _diagnosticEstimates = Table(("Metric", "Name"), ("Value", "Value"), ("Unit", "Unit"), ("Basis", "Basis"));
     private readonly DataGrid _seasonCoverage = Table(("Season", "Season"), ("Category", "Category"), ("Entries", "Entries"), ("Resolved", "Resolved"), ("Unresolved", "Unresolved"));
     private DiagnosticReport? _diagnostics;
     private string? _diagnosticFile;
     private Control DiagnosticsPage() => Scroll(Stack(16,
-        Heading("Diagnostics", "Check the selected pipeline, runtime requirements, reusable outputs and model coverage."),
+        Heading("Diagnostics"),
         Card("CHECKS", Stack(12,
-            Check("Scan model and billboard coverage", nameof(DesktopSettings.DiagnosticDeepScan)),
-            Check("Verify generated file contents", nameof(DesktopSettings.DiagnosticVerifyFiles)),
-            Text("Coverage opens the selected worldspaces and checks up to 1,000 distinct models. Content verification reads every recorded generated file and can take several minutes on large outputs.", true),
+            Help(Check("Scan model and billboard coverage", nameof(DesktopSettings.DiagnosticDeepScan)), "Checks up to 1,000 models in the selected worldspaces."),
+            Help(Check("Verify generated file contents", nameof(DesktopSettings.DiagnosticVerifyFiles)), "Reads every generated file. Large outputs may take several minutes."),
             Field("Inspect asset precedence (optional)", nameof(DesktopSettings.DiagnosticAsset), "meshes\\landscape\\trees\\tree.nif"),
             Row(Primary("Run diagnostics", RunDiagnostics), Button("Export diagnostic report", ExportDiagnostics), Button("Open diagnostic report", () => Open(_diagnosticFile))))),
         Card("RESULTS", Stack(12, _diagnosticSummary, _diagnosticIssues)),
         Card("SEASONAL SWAPS", Stack(12, _seasonCoverage)),
-        Card("COUNTS & ESTIMATES", Stack(12, Text("Counts and geometry estimates do not predict elapsed time. Preparation and checks are measured separately from generation.", true), _diagnosticEstimates))));
+        Card("COUNTS & ESTIMATES", _diagnosticEstimates)));
 
     internal Task RunDiagnostics()
     {
@@ -34,7 +33,7 @@ public sealed partial class MainWindow
         {
             string path = Path.Combine(folder, "diagnostics.json"); report.Write(path); ShowDiagnostics(report, path);
             _status.Text = report.CanGenerate ? "Diagnostics complete" : "Diagnostics found blocking issues";
-            Notice("Review the findings. The diagnostic JSON contains metadata and replaces known personal paths; it does not include game assets or the full run log.");
+            Notice(report.CanGenerate ? "Checks complete. Review any warnings before generation." : "Resolve the errors below before generation.");
         });
     }
     private void ShowDiagnostics(DiagnosticReport report, string path)

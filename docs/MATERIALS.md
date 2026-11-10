@@ -14,7 +14,7 @@ Missing optional normal/AO maps fall back to geometry normals/unoccluded albedo.
 The output targets Skyrim's LOD shader. It is a static bake, not an implementation of
 the game's PBR renderer: reflections, displacement, weather, dynamic snow, shader patch
 configuration and view-dependent lighting are not reproduced. PBR twin lookup for object
-LOD remains available separately in Generation settings. Do not apply another PBR curve
+LOD remains available separately in Object LOD. Do not apply another PBR curve
 to already calibrated generated billboards.
 
 For overly bright distant grass, adjust grass LOD root/tip vertex brightness; for ground,

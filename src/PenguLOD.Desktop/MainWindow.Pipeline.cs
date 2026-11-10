@@ -17,28 +17,25 @@ public sealed partial class MainWindow
         File.WriteAllText(file, JsonSerializer.Serialize(request, PersistentPipeline.Json));
         Notice("Exported the selected pipeline stages for the CLI: " + file);
     }
-    private readonly TextBlock _pipelineSummary = Text("No pipeline job has completed in this session. Rerun the same selection to resume a saved job.", true);
+    private readonly TextBlock _pipelineSummary = Text("No runs yet.", true);
     private readonly DataGrid _pipelineStages = Table(("Stage", "Stage"), ("Status", "Status"), ("Reused", "Reused"),
-        ("Prepare s", "Preparation"), ("Process s", "Processing"), ("Write worker s", "Writing"), ("Verify s", "Verification"));
+        ("Generation (s)", "Processing"), ("Verification (s)", "Verification"));
     private string? _lastPipelineFolder;
 
-    private Control PipelinePage() => Scroll(Stack(16,
-        Heading("Pipeline", "Generate a complete set in stages. Completed stages survive cancellation, failure and application restarts."),
-        Card("STAGES", Stack(12,
-            Row(Check("Cache grass", nameof(DesktopSettings.PipelineGrass)), Check("Textures", nameof(DesktopSettings.PipelineTextures)),
-                Check("Terrain and water", nameof(DesktopSettings.PipelineTerrain)), Check("Object / tree / grass LOD", nameof(DesktopSettings.PipelineLod))),
-            Text("Configure the source and output folders on Overview, Grass cache, Texture generation and Terrain. Each stage needs its own output folder. New grass and textures feed LOD automatically.", true))),
-        Card("RESUME & VERIFICATION", Stack(12,
-            Check("Run preflight before generation", nameof(DesktopSettings.PipelinePreflight)),
-            Check("Reuse completed stages after verifying their files", nameof(DesktopSettings.ResumeCompletedStages)),
-            Check("Expand generation to preserve existing worlds and levels", nameof(DesktopSettings.ExpandOutputScope)),
+    private Control GenerationOverview() => Scroll(Stack(16,
+        Heading("Generation Overview"),
+        WorkflowSource(),
+        StageSelection(),
+        WorkflowWorldspaces(),
+        new Expander { Header = "Run options", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch, Content = Stack(12,
+            Check("Check setup before generation", nameof(DesktopSettings.PipelinePreflight)),
+            Help(Check("Reuse completed stages", nameof(DesktopSettings.ResumeCompletedStages)), "Completed output is checked before reuse. Changed inputs or settings trigger a rebuild."),
+            Help(Check("Keep existing worlds and levels", nameof(DesktopSettings.ExpandOutputScope)), "Expands the run when needed to preserve the existing output's coverage."),
             Button("Review output scope", ReviewOutputScope),
-            Check("Verify all source asset contents", nameof(DesktopSettings.VerifySourceContents)),
-            Text("Plugins and configuration are always content-checked. The normal input check uses file size and timestamps for large assets. Full verification hashes every source asset and can take longer on large lists. Published outputs are always content-verified before reuse.", true),
-            Text("Changed settings or inputs invalidate the affected stage and its dependents. LOD is built in a separate folder and published only when successful; the previous output is retained alongside it.", true))),
-        Row(Primary("Run / resume pipeline", RunSelectedPipeline), Button("Export pipeline request", ExportPipelineRequest), Button("Open saved job", () => Open(_lastPipelineFolder))),
-        Card("STAGE RESULTS", Stack(12, _pipelineSummary, _pipelineStages,
-            Text("Times are measured, not estimates. Process time includes generation and its I/O. Write worker time is the sum of instrumented file writes across workers and may overlap process time. The external grass backend includes writing in its process time.", true)))));
+            Help(Check("Verify all source files", nameof(DesktopSettings.VerifySourceContents)), "Reads every source file instead of checking file sizes and modification times. This can take longer on large mod lists."),
+            Button("Export run configuration", ExportPipelineRequest)) },
+        Card("Results", Stack(12, _pipelineSummary, _pipelineStages,
+            Row(Button("View scan results", () => SelectPage("Scan results")), Button("Open saved job", () => Open(_lastPipelineFolder)))))));
 
     internal Task RunSelectedPipeline()
     {
@@ -61,7 +58,7 @@ public sealed partial class MainWindow
                 s.Reused ? "Yes" : "No", s.Reused ? "—" : s.Timings.GetValueOrDefault("preparation").ToString("F1"), s.Reused ? "—" : s.ProcessingSeconds.ToString("F1"),
                 !s.Reused && s.Timings.TryGetValue("file-write-worker", out double writes) ? writes.ToString("F1") : "—",
                 s.VerificationSeconds.ToString("F1"))).ToArray();
-            _pipelineSummary.Text = $"Inputs: {result.Inputs.Files:N0} files checked in {result.Inputs.Seconds:F1}s. Total elapsed: {elapsed:hh\\:mm\\:ss}.\nSaved job: {result.JobFolder}";
+            _pipelineSummary.Text = $"Elapsed: {elapsed:hh\\:mm\\:ss}";
             if (result.Grass is { } grass)
             {
                 File.WriteAllText(Path.Combine(folder, "grass-report.json"), JsonSerializer.Serialize(grass, PersistentPipeline.Json));
@@ -107,7 +104,7 @@ public sealed partial class MainWindow
                 "Grass, textures and LOD" => "Grass, textures and LOD complete",
                 _ => "Completed"
             };
-            Notice("Completed. Review the stage results and warnings, then install the generated folders as separate mods. The saved job can verify and reuse these stages on the next run.");
+            Notice("Generation complete. Review the results and warnings before installing the output.");
         });
 
     public sealed record PipelineStageRow(string Stage, string Status, string Reused, string Preparation, string Processing, string Writing, string Verification);
