@@ -25,13 +25,15 @@ namespace
 
 	void OnMessage(SKSE::MessagingInterface::Message* a_msg)
 	{
+		// Another DLL may load after ours. Suppress every callback if both runtimes are present.
+		if (GetModuleHandleW(L"AnvilLOD.dll")) {
+			if (a_msg->type == SKSE::MessagingInterface::kDataLoaded)
+				logger::critical("AnvilLOD.dll is also loaded; PenguLOD controllers will remain stopped. Enable only one runtime plugin.");
+			return;
+		}
 		auto& controller = PenguLOD::Controller::Get();
 		switch (a_msg->type) {
 		case SKSE::MessagingInterface::kDataLoaded:
-            if (GetModuleHandleW(L"AnvilLOD.dll")) {
-                logger::critical("AnvilLOD.dll is also loaded; PenguLOD controllers will remain stopped. Enable only one runtime plugin.");
-                return;
-            }
 			PenguLOD::Settings::Get().Load();
 			// Related runtime fixes: recommended alongside PenguLOD, never duplicated by it.
 			logger::info("SkyrimLODFixes.dll (LOD Refresh Bug Fix): {}", PenguLOD::LodDistances::PluginInstalled("SkyrimLODFixes.dll") ? "installed" : "not installed (recommended)");

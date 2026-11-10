@@ -38,7 +38,5 @@ foreach ($package in Get-ChildItem "$installed/x64-windows-static-md/share" -Dir
     }
 }
 Copy-Item "$installed/vcpkg/status" "$out/licenses/vcpkg-packages.txt"
-$commonlib = @(Get-ChildItem "$vcpkg/buildtrees/commonlibsse-ng/src" -Directory | Where-Object { Test-Path "$($_.FullName)/CMakeLists.txt" })
-if ($commonlib.Count -ne 1) { throw 'Expected exactly one matching CommonLib source tree for the source archive.' }
-tar -czf "$out/source/CommonLibSSE-NG.tar.gz" -C $commonlib[0].FullName .
+python tools/package-runtime-sources.py "$vcpkg/buildtrees/commonlibsse-ng/src" $out
 Write-Host "Built PenguLOD runtime for $folder into $out"
