@@ -6,10 +6,10 @@
     <PenguLODBackend Condition="'$(PenguLODNativeRid)' == 'linux-x64'">$(MSBuildThisFileDirectory).tools/fasterngio-runtime</PenguLODBackend>
     <PenguLODBackend Condition="'$(PenguLODNativeRid)' == 'win-x64'">$(MSBuildThisFileDirectory).tools/fasterngio-runtime-win-x64</PenguLODBackend>
   </PropertyGroup>
-  <ItemGroup Condition="('$(MSBuildProjectName)' == 'AnvilLOD.Desktop' or '$(MSBuildProjectName)' == 'AnvilLOD.Cli') and '$(PenguLODBackend)' != '' and Exists('$(PenguLODBackend)/backend.json')">
+  <ItemGroup Condition="('$(MSBuildProjectName)' == 'PenguLOD.Desktop' or '$(MSBuildProjectName)' == 'PenguLOD.Cli') and '$(PenguLODBackend)' != '' and Exists('$(PenguLODBackend)/backend.json')">
     <Content Include="$(PenguLODBackend)/**/*" Link="backends/fasterngio/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'AnvilLOD.Textures'">
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'PenguLOD.Textures'">
     <None Include="$(MSBuildThisFileDirectory).tools/texture-compute/libpengulod_compute.so" Link="libpengulod_compute.so" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="'$(PenguLODNativeRid)' == 'linux-x64' and Exists('$(MSBuildThisFileDirectory).tools/texture-compute/libpengulod_compute.so')" />
     <None Include="$(MSBuildThisFileDirectory).tools/texture-compute/win-x64/pengulod_compute.dll" Link="pengulod_compute.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="'$(PenguLODNativeRid)' == 'win-x64' and Exists('$(MSBuildThisFileDirectory).tools/texture-compute/win-x64/pengulod_compute.dll')" />
   </ItemGroup>

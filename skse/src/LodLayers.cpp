@@ -152,13 +152,15 @@ namespace PenguLOD
 			return;
 		}
 		std::thread([this] {
-			const std::filesystem::path ini{ "Data/SKSE/Plugins/PenguLOD.ini" };
+			auto ini = RuntimePaths::SettingsRead();
 			std::error_code             ec;
 			auto                        stamp = std::filesystem::last_write_time(ini, ec);
 			for (;;) {
 				std::this_thread::sleep_for(500ms);
 				// Editing [Layers] in PenguLOD.ini while the game runs applies within half a second (also how it is tested).
-				if (const auto now = std::filesystem::last_write_time(ini, ec); !ec && now != stamp) {
+				auto current = RuntimePaths::SettingsRead();
+				if (const auto now = std::filesystem::last_write_time(current, ec); !ec && (current != ini || now != stamp)) {
+					ini = current;
 					stamp = now;
 					Load();
 					_dirty = true;

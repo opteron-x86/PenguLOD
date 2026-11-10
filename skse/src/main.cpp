@@ -1,10 +1,10 @@
-#include <Windows.h>
 #include "Adaptive.h"
 #include "Controller.h"
 #include "LodDistances.h"
 #include "LodLayers.h"
 #include "Menu.h"
 #include "Settings.h"
+#include <Windows.h>
 
 namespace
 {
@@ -28,6 +28,10 @@ namespace
 		auto& controller = PenguLOD::Controller::Get();
 		switch (a_msg->type) {
 		case SKSE::MessagingInterface::kDataLoaded:
+            if (GetModuleHandleW(L"AnvilLOD.dll")) {
+                logger::critical("AnvilLOD.dll is also loaded; PenguLOD controllers will remain stopped. Enable only one runtime plugin.");
+                return;
+            }
 			PenguLOD::Settings::Get().Load();
 			// Related runtime fixes: recommended alongside PenguLOD, never duplicated by it.
 			logger::info("SkyrimLODFixes.dll (LOD Refresh Bug Fix): {}", PenguLOD::LodDistances::PluginInstalled("SkyrimLODFixes.dll") ? "installed" : "not installed (recommended)");

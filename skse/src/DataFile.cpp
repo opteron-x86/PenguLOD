@@ -51,7 +51,7 @@ namespace PenguLOD
 		std::array<char, 4> magic{};
 		std::uint32_t       version = 0;
 		if (!r.Get(magic) || !RuntimePaths::Magic(std::string_view(magic.data(), 4), "PLCP", "ALCP") || !r.Get(version)) {
-			logger::error("{} is not an PenguLOD copies file", a_path.string());
+			logger::error("{} is not a PenguLOD copies file", a_path.string());
 			return false;
 		}
 		if (version != 1) {
@@ -100,7 +100,7 @@ namespace PenguLOD
 		std::array<char, 4> magic{};
 		std::uint32_t       version = 0;
 		if (!r.Get(magic) || !RuntimePaths::Magic(std::string_view(magic.data(), 4), "PLNV", "ALNV") || !r.Get(version)) {
-			logger::error("{} is not an PenguLOD native file", a_path.string());
+			logger::error("{} is not a PenguLOD native file", a_path.string());
 			return false;
 		}
 		if (version != 1 && version != 2) {
@@ -153,7 +153,7 @@ namespace PenguLOD
 		std::array<char, 4> magic{};
 		std::uint32_t       version = 0;
 		if (!r.Get(magic) || !RuntimePaths::Magic(std::string_view(magic.data(), 4), "PLDY", "ALDY") || !r.Get(version)) {
-			logger::error("{} is not an PenguLOD dynamic LOD file", a_path.string());
+			logger::error("{} is not a PenguLOD dynamic LOD file", a_path.string());
 			return false;
 		}
 		// Version 2 added grid-object flags; the layout is the same, so version 1 files still load.
