@@ -107,6 +107,55 @@ public sealed class OutputManagementTests : IDisposable
     }
 
     [Fact]
+    public void ScopeReviewReportsLegacyStagesAndCoverageWithoutChangingTheirFiles()
+    {
+        Put("grass", "AnvilLOD.grass.json", "old manifest"u8.ToArray());
+        Put("grass", "grass/WorldAx0000y0000.cgid", [1]);
+        Put("grass", "grass/WorldBx0000y0000.cgid", [2]);
+        Put("textures", "AnvilLOD.textures.json", "old textures"u8.ToArray());
+        Put("lod", "AnvilLOD.esm", "old master"u8.ToArray());
+        Put("lod", "meshes/terrain/Other/objects/Other.16.0.0.bto", [3]);
+        var before = OutputSnapshot.Capture(_root);
+        var stages = new GenerationScopeStage[] {
+            new("grass", Folder("grass"), ["WorldA"]), new("textures", Folder("textures")),
+            new("terrain", Folder("new-terrain"), ["World"]), new("lod", Folder("lod"), ["World"], [LodLevel.Lod4]) };
+        var report = GenerationScope.ReviewOutputs(stages);
+        Assert.Equal(3, report.Warnings.Count);
+        Assert.Contains(report.Warnings, w => w.Contains("Grass cache") && w.Contains(Folder("grass")) && w.Contains("AnvilLOD.grass.json"));
+        Assert.Contains(report.Warnings, w => w.Contains("Textures") && w.Contains(Folder("textures")));
+        Assert.Contains(report.Warnings, w => w.Contains("Object LOD") && w.Contains(Folder("lod")));
+        Assert.True(report.RequiresExpansion);
+        Assert.Equal(new[] { "WorldA", "WorldB" }, report.Stages.Single(s => s.Id == "grass").Worldspaces);
+        Assert.Contains(LodLevel.Lod16, report.Stages.Single(s => s.Id == "lod").Levels!);
+        Assert.Equal(new[] { "WorldA" }, stages[0].Worldspaces);
+        Assert.False(Directory.Exists(Folder("new-terrain")));
+        Assert.Equal(before.Digest, OutputSnapshot.Capture(_root).Digest);
+
+        using var cancel = new CancellationTokenSource(); cancel.Cancel();
+        Assert.Throws<OperationCanceledException>(() => GenerationScope.ReviewOutputs(stages, cancel.Token));
+        Assert.Equal(before.Digest, OutputSnapshot.Capture(_root).Digest);
+    }
+
+    [Fact]
+    public void ScopeReviewAcceptsEmptyAndMissingOutputsAndPreservesGenerationExpansion()
+    {
+        Directory.CreateDirectory(Folder("empty"));
+        var empty = GenerationScope.ReviewOutputs([new("grass", Folder("missing"), ["all"]), new("textures", Folder("empty"))]);
+        Assert.False(empty.RequiresExpansion); Assert.Empty(empty.Warnings);
+        Assert.False(Directory.Exists(Folder("missing"))); Assert.Empty(Directory.GetFileSystemEntries(Folder("empty")));
+
+        Put("grass", "AnvilLOD.grass.json", [1]);
+        Put("grass", "grass/Otherx0000y0000.cgid", [2]);
+        var request = new GenerationPipelineRequest(Grass: new(new(), Folder("grass"), Worldspaces: "World"));
+        var plan = GenerationScope.Review(request);
+        Assert.True(plan.RequiresExpansion); Assert.Single(plan.Warnings);
+        Assert.Equal("Other,World", plan.Request.Grass!.Worldspaces);
+        Assert.Equal("World", request.Grass!.Worldspaces);
+        Assert.Throws<InvalidOperationException>(() => GenerationDestination.Validate(new(), Folder("grass")));
+        Assert.Throws<IOException>(() => GenerationScope.ReviewOutputs([new("grass", Path.Combine(Folder("grass"), "AnvilLOD.grass.json"))]));
+    }
+
+    [Fact]
     public void CancelledOrStalePlansLeaveDestinationUntouched()
     {
         string target = Stage("package", "lod", "PenguLOD.esm", "old");

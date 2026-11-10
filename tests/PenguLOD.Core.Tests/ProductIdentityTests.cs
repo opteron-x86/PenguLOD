@@ -36,7 +36,9 @@ public sealed class ProductIdentityTests : IDisposable
         using var fixture = new TextureFixture();
         string original = Path.Combine(_root, name);
         File.WriteAllText(original, "keep this baseline");
-        Assert.Throws<InvalidOperationException>(() => GenerationDestination.Validate(fixture.Game, _root));
+        var error = Assert.Throws<InvalidOperationException>(() => GenerationDestination.Validate(fixture.Game, _root));
+        Assert.Contains(_root, error.Message);
+        Assert.Contains(name, error.Message);
         Assert.False(OutputManagement.Plan([fixture.Data], _root).CanPublish);
         Assert.Equal("keep this baseline", File.ReadAllText(original));
         Assert.Single(Directory.GetFiles(_root));
