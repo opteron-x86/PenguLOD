@@ -1,7 +1,7 @@
 # Contributing to PenguLOD
 
 Use a branch from `main`, keep changes focused, and include the relevant validation in your pull
-request. Preserve upstream copyright notices and game-side compatibility names. Report bugs with
+request. Preserve upstream copyright notices and test both current output and supported legacy input. Report bugs with
 the PenguLOD version, distribution, workflow stage, settings needed to reproduce it, and a relevant
 log excerpt. Use synthetic fixture names and portable example paths. Do not commit game/mod
 assets, personal profiles, local benchmarks, session notes or assistant context files.
@@ -25,7 +25,7 @@ xvfb-run -a bash tools/native-smoke.sh
 For a subsequent local UI-only build, `bash tools/build.sh --reuse-backend` reuses a previously
 prepared `.tools/fasterngio-runtime`. Releases always rebuild the native backend in CI.
 Set `PENGULOD_DOTNET` to use a particular SDK executable; `PENGULOD_NUGET_SOURCE` overrides
-the package source. The previous `ANVILLOD_*` build variables remain accepted.
+the package source. The previous `ANVILLOD_DOTNET` and `ANVILLOD_NUGET_SOURCE` build variables remain accepted.
 
 Set `PENGULOD_PACKAGE_DIR="$PWD/dist/candidate/linux-x64"` for an isolated package build.
 The build and AppImage scripts accept this override; it must be a `linux-x64` folder
@@ -71,18 +71,24 @@ on Windows as well as Linux. Optional game-profile tests remain opt-in.
 
 ## Source layout
 
-- `src/AnvilLOD.Desktop`: PenguLOD Avalonia UI and services.
-- `src/AnvilLOD.Configuration`: desktop/CLI presets, validation and request construction.
-- `src/AnvilLOD.Cli`: PenguLOD command-line entry point.
-- `src/AnvilLOD.Core`, `Plugins`, `Meshes`, `Textures`: shared engine.
+- `src/PenguLOD.Desktop`: PenguLOD Avalonia UI and services.
+- `src/PenguLOD.Configuration`: desktop/CLI presets, validation and request construction.
+- `src/PenguLOD.Cli`: PenguLOD command-line entry point.
+- `src/PenguLOD.Core`, `Plugins`, `Meshes`, `Textures`: shared engine.
 - `tools/fasterngio`: pinned native grass backend patches and packaging.
 - `native/texture-compute`: optional headless Vulkan BC7 helper.
 - `tests`: engine and desktop regression fixtures.
-- `skse`: inherited game-runtime plugin source; versioned separately with `UPSTREAM_VERSION`.
+- `skse`: PenguLOD game-runtime plugin, versioned with the generator through `VERSION`.
 
-The retained `AnvilLOD` names help upstream merges and compatibility. Avoid broad namespace or
-output filename renames. Both packages use the Avalonia desktop; the inherited WPF
-application and root-level upstream release scripts are outside PenguLOD's release pipeline.
+Use `PenguLOD.slnx` for the managed solution. Product-owned names use PenguLOD;
+keep legacy identifiers only in compatibility readers, tests and upstream attribution.
+The Avalonia desktop is shared by Linux and Windows.
+
+Build a runtime DLL on Windows with `./skse/build.ps1 -Line 1`, `-Line 17` or `-Line vr`.
+`-Line all` builds all three. These commands write to `dist/runtime` and never install into a game.
+`python tools/package-runtime.py` assembles the FOMOD after all three builds, including licenses
+and matching sources. `bash tools/test-runtime.sh` checks path selection and INI migration
+on Linux without requiring Skyrim.
 
 ## Upstream synchronization
 

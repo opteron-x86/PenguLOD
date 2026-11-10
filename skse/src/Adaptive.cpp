@@ -3,11 +3,11 @@
 #include "LodLayers.h"
 #include "Settings.h"
 
-#if ANVILLOD_RUNTIME_LINE != 14
+#if PENGULOD_RUNTIME_LINE != 14
 #	include <dxgi.h>
 #endif
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	Adaptive& Adaptive::Get()
 	{
@@ -65,14 +65,14 @@ namespace AnvilLOD
 
 	void Adaptive::Tick()
 	{
-#if ANVILLOD_RUNTIME_LINE == 14
+#if PENGULOD_RUNTIME_LINE == 14
 		_available = false;  // Skyrim VR presents through the compositor: there is no swap chain to count
 		return;
 #else
 		const auto& s = Settings::Get();
 
 		// The frame rate: presents since the last tick over the time since the last tick.
-#	if ANVILLOD_RUNTIME_LINE == 17
+#	if PENGULOD_RUNTIME_LINE == 17
 		// CommonLib 7.2.0 (Skyrim 1.7.x) keeps the renderer's windows behind an accessor and wraps the swap chain type.
 		auto* window = RE::BSGraphics::Renderer::GetCurrentRenderWindow();
 		auto* swap = window ? reinterpret_cast<IDXGISwapChain*>(window->swapChain) : nullptr;

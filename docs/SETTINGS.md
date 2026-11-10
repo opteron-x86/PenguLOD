@@ -37,7 +37,7 @@ together. **Game units** measure distance or size in Skyrim; they are not metres
 | plugins.txt | The enabled-plugin list for a deployed installation. Use an explicit file; an empty file is valid for a vanilla game. |
 | Output mod folder | Destination for object, tree and grass LOD. Keep it separate from the game, enabled mods and the other stages' output folders. |
 | Worldspaces | World editor IDs separated by commas, such as `Tamriel, DLC2SolstheimWorld`. Blank or `*` selects all worlds with LOD settings for both terrain and object LOD. Grass cache has its own selection; texture generation uses the load order. |
-| Clear previous AnvilLOD output before generation | Rebuilds the object LOD output without reusing its previous blocks. Off by default. Use a dedicated output folder in either mode. |
+| Clear previous PenguLOD output before generation | Rebuilds the object LOD output without reusing its previous blocks. Off by default. Use a dedicated output folder in either mode. |
 
 **Advanced source paths** are overrides for installations whose saved paths need
 help. Leave them blank when the normal source selection works.
@@ -327,9 +327,9 @@ the grass included in this LOD output.
 
 | Setting | What it does |
 | --- | --- |
-| Dynamic objects | Generates LOD that can follow supported quest or enable-state changes. On by default; needs the AnvilLOD SKSE plugin in game. |
+| Dynamic objects | Generates LOD that can follow supported quest or enable-state changes. On by default; needs the PenguLOD SKSE plugin in game. |
 | Animated grid objects | Includes nearby distant animations such as windmills, waterfalls and fires. On by default. Uses the SKSE plugin unless supported by game references. |
-| Use game references for grid objects | Writes supported animated objects to `AnvilLOD.esp` so the game can display them. On by default. |
+| Use game references for grid objects | Writes supported animated objects to `PenguLOD.esp` so the game can display them. On by default. |
 | Use game references for effects | Writes supported fires, torches and streams to effects plugins. Off by default. |
 | Animated Ships support | Supports the Animated Ships mod. On by default; requires that mod and Use game references for grid objects. |
 | Parent-to-city copies | Makes suitable outside-world objects visible from walled cities using the SKSE controller. Off by default. |
@@ -343,7 +343,7 @@ the grass included in this LOD output.
 | Include enable-parented objects | Includes objects whose visibility is controlled by another reference. On by default. |
 | SKSE DLL installation | **None** means install the matching DLL separately; it does not disable runtime features. **Auto** or an explicit runtime selects a supplied compatible DLL when available. PenguLOD packages do not bundle that DLL. |
 | ESL record limit | **Auto** detects the game's limit. `2048` is the older limit; `4096` requires Skyrim 1.6.1130 or newer. Normally leave Auto. |
-| Large-reference master | Writes additional eligible large references to `AnvilLOD.esm`, allowing full models to remain visible farther away. Off by default; can add drawing cost. No master is needed when there are no additional eligible entries. |
+| Large-reference master | Writes additional eligible large references to `PenguLOD.esm`, allowing full models to remain visible farther away. Off by default; can add drawing cost. No master is needed when there are no additional eligible entries. |
 | Flag large-reference master as ESL | Uses a light plugin slot when the generated master fits. On by default. |
 
 Disable previous generated object LOD mods, including their plugins, before a new
@@ -429,7 +429,7 @@ in use, including a custom location.
 
 ## In-game quality controls
 
-The separate AnvilLOD SKSE plugin provides these controls; available menus depend
+The separate PenguLOD SKSE plugin provides these controls; available menus depend
 on its version. They can help compare costs without regenerating.
 
 | Control | What to expect |

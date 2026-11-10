@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <fomod>
-    <Name>AnvilLOD SKSE Plugin</Name>
-    <Author>CageTV</Author>
+    <Name>PenguLOD SKSE Plugin</Name>
+    <Author>opteron-x86 and PenguLOD contributors; based on AnvilLOD by CageTV</Author>
     <Version>@VERSION@</Version>
-    <Website>https://github.com/CageTV/AnvilLOD</Website>
-    <Description>Runtime part of AnvilLOD: dynamic LOD for quest-switched places, in-game LOD/grass/fade distance settings (SKSE Menu Framework page) and DynDOLOD MCM settings compatibility. Pick the build for your game version.</Description>
+    <Website>https://github.com/opteron-x86/PenguLOD</Website>
+    <Description>Runtime part of PenguLOD: dynamic LOD for quest-switched places, in-game LOD/grass/fade distance settings (SKSE Menu Framework page) and DynDOLOD MCM settings compatibility. Pick the build for your game version.</Description>
     <Groups>
         <element>Utilities</element>
     </Groups>

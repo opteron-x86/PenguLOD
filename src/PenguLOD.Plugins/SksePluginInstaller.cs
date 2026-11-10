@@ -1,0 +1,131 @@
+using System.Diagnostics;
+
+namespace PenguLOD.Plugins;
+
+/// <summary>Which PenguLOD SKSE plugin build Generate puts into the output folder.</summary>
+public enum SkseDllChoice
+{
+    /// <summary>Read the game's SkyrimSE.exe (or SkyrimVR.exe) version and pick the matching build.</summary>
+    Auto,
+    /// <summary>SE 1.5.97 up to AE 1.6.1170.</summary>
+    UpTo1170,
+    /// <summary>Newer than 1.6.1170 (1.7.x).</summary>
+    Newer,
+    /// <summary>Don't put the DLL in the output (it's installed separately, e.g. from the FOMOD).</summary>
+    None,
+    /// <summary>Skyrim VR 1.4.15. Explicit value: settings files store the numbers above.</summary>
+    Vr = 4,
+}
+
+/// <summary>
+/// Copies the right PenguLOD SKSE plugin build into <c>output\SKSE\Plugins\PenguLOD.dll</c>, so the LOD output is a
+/// single install. The tool ships all three builds next to itself:
+/// <c>SKSE\1.5.97-1.6.1170\PenguLOD.dll</c>, <c>SKSE\1.7.x\PenguLOD.dll</c> and <c>SKSE\1.4.15-VR\PenguLOD.dll</c>.
+/// </summary>
+public static class SksePluginInstaller
+{
+    public const string FolderUpTo1170 = "1.5.97-1.6.1170";
+    public const string FolderNewer = "1.7.x";
+    public const string FolderVr = "1.4.15-VR";
+    /// <summary>Every Skyrim SE/AE runtime is 1.5 or newer; Skyrim VR is 1.4.15.</summary>
+    public static readonly Version FirstSpecialEdition = new(1, 5, 0, 0);
+    public static readonly Version LastOld = new(1, 6, 1170, 0);
+    public const string RelativeDll = "SKSE\\Plugins\\PenguLOD.dll";
+
+    public sealed record Result(bool Installed, string Message, Version? GameVersion = null, SkseDllChoice Used = SkseDllChoice.None);
+
+    /// <summary>
+    /// Version of the game next to the Data folder, or null if it can't be read. SkyrimVR.exe: its file version (1.4.15). SkyrimSE.exe: the
+    /// file version, but some executables (a downgraded 1.5.97 for one) carry a bogus 1.0.0.0 there, which used to be mistaken for VR; then
+    /// the product version and the SKSE runtime DLL next to it (skse64_1_5_97.dll) say which game it is. A SkyrimSE.exe is never VR.
+    /// </summary>
+    public static Version? GameVersion(string gameDataFolder)
+    {
+        var gameFolder = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(gameDataFolder));
+        if (gameFolder is null) return null;
+        var exe = Path.Combine(gameFolder, "SkyrimSE.exe");
+        bool vr = false;
+        if (!File.Exists(exe)) { exe = Path.Combine(gameFolder, "SkyrimVR.exe"); vr = true; }
+        if (!File.Exists(exe)) return null;
+        var info = FileVersionInfo.GetVersionInfo(exe);
+        var v = new Version(info.FileMajorPart, info.FileMinorPart, info.FileBuildPart, info.FilePrivatePart);
+        if (vr) return v.Major == 0 && v.Minor == 0 ? null : v;
+        if (v >= FirstSpecialEdition) return v;
+        if (Version.TryParse(info.ProductVersion?.Replace(',', '.').Replace(" ", ""), out var pv) && pv >= FirstSpecialEdition) return pv;
+        return VersionFromSkseFiles(gameFolder);
+    }
+
+    /// <summary>The game version named by the newest <c>skse64_&lt;major&gt;_&lt;minor&gt;_&lt;build&gt;.dll</c> in a game folder, or null.</summary>
+    public static Version? VersionFromSkseFiles(string gameFolder)
+    {
+        Version? best = null;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(gameFolder, "skse64_*.dll"))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(f), @"^skse64_(\d+)_(\d+)_(\d+)\.dll$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!m.Success) continue;
+                var v = new Version(int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value), 0);
+                if (best is null || v > best) best = v;
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        return best;
+    }
+
+    public static SkseDllChoice ForVersion(Version v) =>
+        v < FirstSpecialEdition ? SkseDllChoice.Vr : v <= LastOld ? SkseDllChoice.UpTo1170 : SkseDllChoice.Newer;
+
+    public static string FolderFor(SkseDllChoice c) => c switch
+    {
+        SkseDllChoice.Newer => FolderNewer,
+        SkseDllChoice.Vr => FolderVr,
+        _ => FolderUpTo1170,
+    };
+
+    public static string Describe(SkseDllChoice c) => c switch
+    {
+        SkseDllChoice.UpTo1170 => "SE 1.5.97 - AE 1.6.1170",
+        SkseDllChoice.Newer => "newer than 1.6.1170 (1.7.x)",
+        SkseDllChoice.Vr => "Skyrim VR 1.4.15",
+        SkseDllChoice.None => "not installed by PenguLOD",
+        _ => "auto-detect",
+    };
+
+    /// <param name="toolFolder">Where the bundled builds live (default: next to the running tool).</param>
+    public static Result Install(string outputFolder, string gameDataFolder, SkseDllChoice choice, string? toolFolder = null)
+    {
+        var target = Path.Combine(outputFolder, RelativeDll.Replace('\\', Path.DirectorySeparatorChar));
+        if (choice == SkseDllChoice.None)
+        {
+            // Don't leave an old copy behind that would fight the separately installed one.
+            if (File.Exists(target)) File.Delete(target);
+            return new Result(false, "SKSE plugin: not put in the output (install it separately, from the PenguLOD SKSE Plugin FOMOD).");
+        }
+
+        Version? version = GameVersion(gameDataFolder);
+        var use = choice;
+        if (choice == SkseDllChoice.Auto)
+        {
+            if (version is null)
+                return new Result(false, "SKSE plugin: couldn't read SkyrimSE.exe's or SkyrimVR.exe's version next to " + gameDataFolder
+                    + ", so no DLL was put in the output. Pick the game version in the SKSE plugin option, or install it from the FOMOD.");
+            use = ForVersion(version);
+        }
+
+        var root = toolFolder ?? AppContext.BaseDirectory;
+        var source = Path.Combine(root, "SKSE", FolderFor(use), "PenguLOD.dll");
+        if (!File.Exists(source))
+            return new Result(false, $"SKSE plugin: {source} is missing, so no DLL was put in the output. Install the PenguLOD game plugin for your Skyrim runtime separately, then choose None under SKSE DLL installation.", version, use);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(source, target, overwrite: true);
+
+        var warn = version is not null && ForVersion(version) != use
+            ? $" WARNING: the game is {version}, which needs the {Describe(ForVersion(version))} build; SKSE will refuse this one."
+            : "";
+        return new Result(true, $"SKSE plugin: {Describe(use)} build installed to {RelativeDll}"
+            + (version is not null ? $" (game {version})" : "") + "." + warn, version, use);
+    }
+}

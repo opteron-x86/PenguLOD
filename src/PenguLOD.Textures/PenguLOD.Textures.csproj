@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Portable texture processing; optional headless Vulkan BC7 acceleration. -->
+  <PropertyGroup>
+    <RootNamespace>PenguLOD.Textures</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BCnEncoder.Net" />
+    <ProjectReference Include="..\PenguLOD.Core\PenguLOD.Core.csproj" />
+  </ItemGroup>
+</Project>

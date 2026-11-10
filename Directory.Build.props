@@ -12,7 +12,7 @@
     <!-- The .NET 10 SDK marks the launcher exe as CET shadow stack compatible. MO2's usvfs hooks break that: the exe crashes at
          start (0xC0000005 in an unknown module) when started from MO2's executables list. Off, it starts in MO2 like any other tool. -->
     <CETCompat>false</CETCompat>
-    <!-- PenguLOD releases use VERSION; the unchanged game plugin uses UPSTREAM_VERSION. -->
+    <!-- PenguLOD generator and game-runtime releases share VERSION; upstream provenance uses UPSTREAM_VERSION. -->
     <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</Version>
     <Authors>CageTV;opteron-x86;PenguLOD contributors</Authors>
     <Product>PenguLOD</Product>

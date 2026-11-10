@@ -1,0 +1,15 @@
+<Solution>
+  <Project Path="src/PenguLOD.Configuration/PenguLOD.Configuration.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/PenguLOD.Core/PenguLOD.Core.csproj" />
+    <Project Path="src/PenguLOD.Meshes/PenguLOD.Meshes.csproj" />
+    <Project Path="src/PenguLOD.Textures/PenguLOD.Textures.csproj" />
+    <Project Path="src/PenguLOD.Plugins/PenguLOD.Plugins.csproj" />
+    <Project Path="src/PenguLOD.Cli/PenguLOD.Cli.csproj" />
+    <Project Path="src/PenguLOD.Desktop/PenguLOD.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PenguLOD.Core.Tests/PenguLOD.Core.Tests.csproj" />
+    <Project Path="tests/PenguLOD.Desktop.Tests/PenguLOD.Desktop.Tests.csproj" />
+  </Folder>
+</Solution>

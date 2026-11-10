@@ -128,7 +128,7 @@
  
  namespace
  {
-+	// The CLI is also AnvilLOD's backend: keep redirected logs useful during a
++	// The CLI is also PenguLOD's backend: keep redirected logs useful during a
 +	// long world, including the writer drain after the last cell was processed.
 +	void ReportProgress(const FasterNGIO::App::RunProgress& a_progress, std::stop_token a_stop)
 +	{
@@ -154,7 +154,7 @@
 +				warned = false;
 +			}
 +			if (!warned && (stage == RunStage::Generating || stage == RunStage::Writing) && now - changedAt >= std::chrono::seconds(120)) {
-+				spdlog::warn("no cell/write progress for 120s; generation may be stalled. AnvilLOD can cancel this run without replacing the installed cache");
++				spdlog::warn("no cell/write progress for 120s; generation may be stalled. PenguLOD can cancel this run without replacing the installed cache");
 +				warned = true;
 +			}
 +			if (now < nextReport || stage == RunStage::Finished) continue;

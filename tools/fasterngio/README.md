@@ -33,7 +33,7 @@ The `FasterNGIO/` tree includes all four dependency submodules and applied patch
 cmake -S FasterNGIO -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DFASTERNGIO_ENABLE_GPU=OFF -DFASTERNGIO_HEADLESS=ON \
   -DBASICTELEMETRY_ENABLE_TRACY=OFF -DFASTERNGIO_BUILD_TESTS=ON \
-  -Dlz4_DIR="$PWD/anvillod-build/tools/fasterngio/cmake"
+  -Dlz4_DIR="$PWD/pengulod-build/tools/fasterngio/cmake"
 cmake --build build --parallel 4
 ctest --test-dir build --output-on-failure
 ```

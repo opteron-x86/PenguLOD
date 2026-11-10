@@ -83,8 +83,8 @@ skipped, retained and failed assets. If an optional object template cannot rende
 installed diffuse/normal pair can be retained unchanged; brightness controls do not alter
 retained textures. Missing fallback pairs and failed required renders stop publication.
 
-`AnvilLOD.textures-report.json` records results. Successful output also includes
-`AnvilLOD.textures.json` with ownership and hashes. Failed rendering and cancellation
+`PenguLOD.textures-report.json` records results. Successful output also includes
+`PenguLOD.textures.json` with ownership and hashes. Failed rendering and cancellation
 preserve published textures; LOD verifies the manifest before using them. If publication
 is interrupted and the next run reports changed files, keep that output disabled and
 generate into a fresh folder. See [persistent generation](PIPELINE.md).

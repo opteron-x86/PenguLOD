@@ -2,7 +2,8 @@
 
 PenguLOD is based on [AnvilLOD by CageTV](https://github.com/CageTV/AnvilLOD) and retains
 its copyright notices and GPL-3.0-only license. The application version is recorded in
-`VERSION`; the integrated AnvilLOD runtime-plugin version is recorded in `UPSTREAM_VERSION`.
+`VERSION` for both the generator and PenguLOD runtime. `UPSTREAM_VERSION` records the
+AnvilLOD revision from which the project was derived; it does not version PenguLOD releases.
 
 ## Generator dependencies
 
@@ -31,17 +32,21 @@ licensed by this repository. Game assets and generated mod output are not distri
 
 ## Game runtime
 
-Dynamic LOD and runtime quality controls require the separate AnvilLOD SKSE plugin
-matching the Skyrim runtime. The integrated upstream version is **0.2.70**, available
-from [upstream releases](https://github.com/CageTV/AnvilLOD/releases/tag/v0.2.70).
-The Windows DLL runs inside Skyrim (under Proton/Wine on Linux) and is installed separately
-from either generator package.
-PenguLOD's application version does not select the game-plugin DLL.
+Dynamic LOD and runtime quality controls require the separate PenguLOD SKSE package
+matching the Skyrim executable. The DLL runs inside Skyrim, including under Proton/Wine,
+and is installed separately from the Linux or Windows generator.
 
-Game-facing identifiers such as `AnvilLOD.esp`, `AnvilLOD.esm`, runtime data paths,
-ownership markers and manifests retain their names for compatibility. Source namespaces
-and project names also remain `AnvilLOD`. Both generator packages use Avalonia. The inherited
-WPF application and root-level upstream release scripts are outside PenguLOD's release pipeline.
+PenguLOD's runtime is derived from AnvilLOD 0.2.70. It has its own product name, data paths
+and release version. It reads older AnvilLOD runtime data when no PenguLOD output is present;
+the older AnvilLOD DLL cannot read new PenguLOD output. Do not enable both DLLs together.
+See [upgrading safely](UPGRADING.md).
+
+CommonLibSSE-NG dependencies are pinned in `skse/vcpkg-configuration.json` and
+`skse/cmake`. The runtime package includes each build's dependency notices and CommonLib
+source, plus the matching PenguLOD source and build instructions.
+
+Game formats and third-party resource paths remain unchanged. In particular, `Data/DynDOLOD`
+recipes and model packs are compatibility inputs, not PenguLOD branding or an executable dependency.
 
 ## AppImage components
 

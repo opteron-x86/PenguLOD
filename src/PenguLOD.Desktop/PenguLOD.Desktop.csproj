@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <ApplicationIcon>../../assets/pengulod.ico</ApplicationIcon>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>PenguLOD.Desktop</AssemblyName>
+    <RootNamespace>PenguLOD.Desktop</RootNamespace>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../PenguLOD.Configuration/PenguLOD.Configuration.csproj" />
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" />
+    <ProjectReference Include="../PenguLOD.Plugins/PenguLOD.Plugins.csproj" />
+    <AvaloniaResource Include="../../assets/pengulod-256.png" Link="Assets/pengulod.png" />
+    <InternalsVisibleTo Include="PenguLOD.Desktop.Tests" />
+  </ItemGroup>
+</Project>

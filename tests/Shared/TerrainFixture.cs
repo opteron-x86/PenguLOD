@@ -1,12 +1,12 @@
-using AnvilLOD.Core.World;
-using AnvilLOD.Plugins;
+using PenguLOD.Core.World;
+using PenguLOD.Plugins;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Records;
 using Mutagen.Bethesda.Skyrim;
 using Noggog;
 
-namespace AnvilLOD.Testing;
+namespace PenguLOD.Testing;
 
 public sealed class TerrainFixture : IDisposable
 {
@@ -36,7 +36,7 @@ public sealed class TerrainFixture : IDisposable
                 var winterAlt = new AlternateTexture { Name = "winter:0", Index = 0 }; winterAlt.NewTexture.SetTo(winterTx);
                 tree.Model.AlternateTextures = [normalAlt]; winterTree.Model.AlternateTextures = [winterAlt];
             }
-            TextureFixture.Put(Textures.Data,@"meshes\trees\wintertree.nif",AnvilLOD.Meshes.Authoring.LodNifWriter.Write("winter",[TextureFixture.Card("crown",@"textures\red.dds")]));
+            TextureFixture.Put(Textures.Data,@"meshes\trees\wintertree.nif",PenguLOD.Meshes.Authoring.LodNifWriter.Write("winter",[TextureFixture.Card("crown",@"textures\red.dds")]));
             TextureFixture.Put(Textures.Data,@"seasons\Fixture_WIN.ini",System.Text.Encoding.UTF8.GetBytes("[LandTextures]\nFixtureLand|WinterLand\n[Trees]\nFixtureTree|WinterTree\n"));
         }
         var block=new WorldspaceBlock { BlockNumberX=-1,BlockNumberY=-1,GroupType=(GroupTypeEnum)4 };

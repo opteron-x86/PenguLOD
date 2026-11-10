@@ -1,7 +1,7 @@
 {
-  "name": "anvillod-skse",
+  "name": "pengulod-skse",
   "version-string": "0.2.0",
-  "description": "AnvilLOD runtime controller: dynamic LOD for references that change while playing.",
+  "description": "PenguLOD runtime controller: dynamic LOD for references that change while playing.",
   "dependencies": [
     "commonlibsse-ng",
     "spdlog"

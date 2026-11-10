@@ -1,6 +1,6 @@
 #pragma once
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	/// Adaptive quality: when the frame rate stays below a target for a while, steps the quality layers (grass, 3D trees, tree cards) down one
 	/// preset (Max, High, Medium, Low); when there is plenty of headroom for long enough, steps back up. Off by default.

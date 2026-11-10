@@ -4,6 +4,7 @@
 #include "LodLayers.h"
 #include "Menu.h"
 #include "Settings.h"
+#include <Windows.h>
 
 namespace
 {
@@ -13,7 +14,7 @@ namespace
 		if (!dir) {
 			return;
 		}
-		auto path = *dir / "AnvilLOD.log";
+		auto path = *dir / "PenguLOD.log";
 		auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), true);
 		auto log = std::make_shared<spdlog::logger>("global", std::move(sink));
 		log->set_level(spdlog::level::info);
@@ -24,24 +25,30 @@ namespace
 
 	void OnMessage(SKSE::MessagingInterface::Message* a_msg)
 	{
-		auto& controller = AnvilLOD::Controller::Get();
+		// Another DLL may load after ours. Suppress every callback if both runtimes are present.
+		if (GetModuleHandleW(L"AnvilLOD.dll")) {
+			if (a_msg->type == SKSE::MessagingInterface::kDataLoaded)
+				logger::critical("AnvilLOD.dll is also loaded; PenguLOD controllers will remain stopped. Enable only one runtime plugin.");
+			return;
+		}
+		auto& controller = PenguLOD::Controller::Get();
 		switch (a_msg->type) {
 		case SKSE::MessagingInterface::kDataLoaded:
-			AnvilLOD::Settings::Get().Load();
-			// Related runtime fixes: recommended alongside AnvilLOD, never duplicated by it.
-			logger::info("SkyrimLODFixes.dll (LOD Refresh Bug Fix): {}", AnvilLOD::LodDistances::PluginInstalled("SkyrimLODFixes.dll") ? "installed" : "not installed (recommended)");
-			logger::info("DynDOLOD.dll: {}", AnvilLOD::LodDistances::PluginInstalled("DynDOLOD.dll") ? "installed" : "not installed");
-			AnvilLOD::LodDistances::Get().Apply("startup");
-			AnvilLOD::LodDistances::Get().StartWatching();
+			PenguLOD::Settings::Get().Load();
+			// Related runtime fixes: recommended alongside PenguLOD, never duplicated by it.
+			logger::info("SkyrimLODFixes.dll (LOD Refresh Bug Fix): {}", PenguLOD::LodDistances::PluginInstalled("SkyrimLODFixes.dll") ? "installed" : "not installed (recommended)");
+			logger::info("DynDOLOD.dll: {}", PenguLOD::LodDistances::PluginInstalled("DynDOLOD.dll") ? "installed" : "not installed");
+			PenguLOD::LodDistances::Get().Apply("startup");
+			PenguLOD::LodDistances::Get().StartWatching();
 			controller.OnDataLoaded();
 			controller.Start();
-			AnvilLOD::Layers::Get().Load();
-			AnvilLOD::Layers::Get().Start();
-			AnvilLOD::Adaptive::Get().Start();
-			AnvilLOD::Menu::Register();
+			PenguLOD::Layers::Get().Load();
+			PenguLOD::Layers::Get().Start();
+			PenguLOD::Adaptive::Get().Start();
+			PenguLOD::Menu::Register();
 			break;
 		case SKSE::MessagingInterface::kPostLoadGame:
-			AnvilLOD::LodDistances::Get().Apply("game loaded");
+			PenguLOD::LodDistances::Get().Apply("game loaded");
 			break;
 		case SKSE::MessagingInterface::kPreLoadGame:
 		case SKSE::MessagingInterface::kNewGame:
@@ -62,10 +69,10 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 	// Line 1: SE 1.5.97 up to AE 1.6.1170. Line 17: everything newer (1.7.99, 1.7.104, ...).
 	constexpr REL::Version kLastOld{ 1, 6, 1170, 0 };
 	constexpr REL::Version kFirstSE{ 1, 5, 0, 0 };   // Skyrim VR is 1.4.15; every SE/AE runtime is 1.5 or newer
-#if ANVILLOD_RUNTIME_LINE == 17
+#if PENGULOD_RUNTIME_LINE == 17
 	constexpr auto kLine = "newer than 1.6.1170 (Skyrim 1.7.x)";
 	if (game <= kLastOld) return false;
-#elif ANVILLOD_RUNTIME_LINE == 14
+#elif PENGULOD_RUNTIME_LINE == 14
 	constexpr auto kLine = "Skyrim VR 1.4.15";
 	if (game >= kFirstSE) return false;
 #else
@@ -75,8 +82,12 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 
 	SKSE::Init(a_skse);
 	SetupLog();
-	logger::info("AnvilLOD SKSE plugin {} loading. Build line: {}; game {}", ANVILLOD_VERSION_STRING, kLine, game.string());
-	AnvilLOD::Menu::SetGameVersion(game.string());
+	if (GetModuleHandleW(L"AnvilLOD.dll")) {
+		logger::critical("AnvilLOD.dll is also loaded. Disable the old runtime plugin before enabling PenguLOD.dll; two LOD controllers cannot run together.");
+		return false;
+	}
+	logger::info("PenguLOD SKSE plugin {} loading. Build line: {}; game {}", PENGULOD_VERSION_STRING, kLine, game.string());
+	PenguLOD::Menu::SetGameVersion(game.string());
 
 	if (!SKSE::GetMessagingInterface()->RegisterListener(OnMessage)) {
 		logger::critical("Could not register for SKSE messages");

@@ -17,7 +17,7 @@ rid = os.environ.get('PENGULOD_RUNTIME', 'linux-x64')
 for runtime in (packages / ('microsoft.netcore.app.runtime.' + rid)).glob('*'):
     if (runtime / 'LICENSE.TXT').exists():
         shutil.copyfile(runtime / 'LICENSE.TXT', licenses / ('dotnet-' + runtime.name + '-LICENSE.txt'))
-sdk_notices = pathlib.Path(os.environ.get('ANVILLOD_SDK_DIR', str(root / '.tools/dotnet'))) / 'ThirdPartyNotices.txt'
+sdk_notices = pathlib.Path(os.environ.get('PENGULOD_SDK_DIR', str(root / '.tools/dotnet'))) / 'ThirdPartyNotices.txt'
 if sdk_notices.exists():
     shutil.copyfile(sdk_notices, out / 'ThirdPartyNotices.txt')
 shutil.copyfile(root / 'assets/water/README.txt', licenses / 'Water-textures.txt')
@@ -25,7 +25,7 @@ lines = ['Third-party package inventory', '=============================', '',
          'PenguLOD is GPL-3.0-only; based on AnvilLOD by CageTV. Dependencies retain their own licenses.',
          'Exact runtime package versions are also recorded in the .deps.json files.',
          'Bundled .NET runtime notices are in ThirdPartyNotices.txt.', '']
-assets = json.loads((root / 'src/AnvilLOD.Desktop/obj/project.assets.json').read_text())
+assets = json.loads((root / 'src/PenguLOD.Desktop/obj/project.assets.json').read_text())
 for name, item in sorted(assets['libraries'].items()):
     if item['type'] != 'package':
         continue

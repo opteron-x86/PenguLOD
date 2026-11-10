@@ -129,12 +129,12 @@ object LOD output win conflicts with the texture output. Terrain and grass-cache
 outputs should replace older outputs of the same type. Enable generated plugins
 that the report asks you to use; place `Occlusion.esp` last if you generated it.
 
-`AnvilLOD.esm`, when present, contains additional large-reference lists.
-`AnvilLOD.esp` and any effects plugins support selected placed objects and effects.
+`PenguLOD.esm`, when present, contains additional large-reference lists.
+`PenguLOD.esp` and any effects plugins support selected placed objects and effects.
 Some configurations need none of these. Read the report before treating an absent
 plugin as a failure.
 
-Dynamic LOD and the in-game quality controls need the separate **AnvilLOD SKSE
+Dynamic LOD and the in-game quality controls need the separate **PenguLOD SKSE
 plugin** for your Skyrim runtime. **SKSE DLL installation → None** means you install
 that DLL yourself. See [runtime dependencies](PROVENANCE.md#game-runtime).
 
@@ -144,7 +144,7 @@ Restart Skyrim after replacing generated files. Compare the same location, camer
 direction, weather and time of day. Check tree silhouettes, building transitions,
 terrain colour, shorelines and grass brightness, then record FPS.
 
-Restore any hidden layers in the AnvilLOD in-game menu before judging coverage.
+Restore any hidden layers in the PenguLOD in-game menu before judging coverage.
 Hiding **3D trees → LOD4** does not substitute tree cards for that band. Saved layer
 settings can remain active when you change generator versions.
 

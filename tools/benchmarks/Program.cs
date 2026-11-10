@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Text.Json;
-using AnvilLOD.Core.Pipeline;
-using AnvilLOD.Core.World;
-using AnvilLOD.Meshes;
-using AnvilLOD.Plugins;
-using AnvilLOD.Testing;
+using PenguLOD.Core.Pipeline;
+using PenguLOD.Core.World;
+using PenguLOD.Meshes;
+using PenguLOD.Plugins;
+using PenguLOD.Testing;
 
 int size=args.Length>0?int.Parse(args[0]):512, iterations=args.Length>1?int.Parse(args[1]):3;
 bool fallback=args.Length>2&&args[2]=="fallback";

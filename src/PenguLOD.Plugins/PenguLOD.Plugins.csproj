@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Everything that touches Mutagen lives here: load order, records, BSAs. -->
+  <PropertyGroup>
+    <RootNamespace>PenguLOD.Plugins</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Mutagen.Bethesda.Skyrim" />
+    <InternalsVisibleTo Include="PenguLOD.Core.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The smooth water tile the LOD fake water uses (CS Water Mod's own flat tile), written to the output so it needs no water mod. -->
+    <EmbeddedResource Include="..\..\assets\water\*.dds" LogicalName="water.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PenguLOD.Core\PenguLOD.Core.csproj" />
+    <ProjectReference Include="..\PenguLOD.Meshes\PenguLOD.Meshes.csproj" />
+    <ProjectReference Include="..\PenguLOD.Textures\PenguLOD.Textures.csproj" />
+  </ItemGroup>
+</Project>

@@ -19,7 +19,9 @@ folder; do not overwrite a running copy. Generation outputs remain where you sel
 
 Windows 10 22H2 and Windows 11 x64 are the intended desktop targets. Automated
 tests use Windows Server runners; full modlist and physical GPU testing is still
-needed. The optional in-game AnvilLOD SKSE plugin is a separate installation.
+needed. The optional in-game PenguLOD SKSE plugin is a separate installation.
 
 Checksums, platform notes and troubleshooting: [packages](docs/PACKAGING.md),
 [troubleshooting](docs/TROUBLESHOOTING.md), [dependency notices](docs/PROVENANCE.md).
+
+For output made by earlier versions, read [Upgrading safely](docs/UPGRADING.md) before replacing installed mods.

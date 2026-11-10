@@ -64,7 +64,7 @@ establish full modlist, MO2 virtual-filesystem or physical GPU compatibility.
 The native grass backend uses the static MSVC runtime. Optional Vulkan encoding needs
 the graphics driver's Vulkan support; generation falls back to CPU if it is unavailable.
 Settings are under `%APPDATA%\PenguLOD`, caches under `%LOCALAPPDATA%\PenguLOD`, unless
-overridden. The AnvilLOD game plugin remains a separate installation.
+overridden. The PenguLOD game plugin remains a separate installation.
 
 Portable archives, the Windows ZIP and AppImage are the supported distribution formats.
 No Flatpak or ARM package is published. Build and release procedures are in the source repository's

@@ -1,6 +1,9 @@
 #include "IniFile.h"
+#include <cctype>
+#include <fstream>
+#include "RuntimePaths.h"
 
-namespace AnvilLOD::IniFile
+namespace PenguLOD::IniFile
 {
 	namespace
 	{
@@ -23,7 +26,7 @@ namespace AnvilLOD::IniFile
 	{
 		std::vector<std::string> lines;
 		{
-			std::ifstream in(a_path);
+			std::ifstream in(a_path == RuntimePaths::Settings ? RuntimePaths::SettingsRead() : a_path);
 			std::string line;
 			while (std::getline(in, line)) {
 				if (!line.empty() && line.back() == '\r') line.pop_back();

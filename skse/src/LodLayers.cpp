@@ -1,8 +1,9 @@
+#include "RuntimePaths.h"
 #include "LodLayers.h"
 
 #include "IniFile.h"
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	namespace
 	{
@@ -12,10 +13,10 @@ namespace AnvilLOD
 
 		std::string KeyFor(int a_layer, int a_level) { return std::format("bShow_{}_{}", kKeys[a_layer], kLevels[a_level]); }
 
-		/// "AL:grass:16" -> layer 0, level index 2, tier 0; "AL:grass:16:2" -> the same with tier 2. False for anything else.
+		/// "PL:grass:16" -> layer 0, level index 2, tier 0; "PL:grass:16:2" -> the same with tier 2. False for anything else.
 		bool Parse(const char* a_name, int& a_layer, int& a_level, int& a_tier)
 		{
-			if (!a_name || a_name[0] != 'A' || a_name[1] != 'L' || a_name[2] != ':') {
+			if (!a_name || !RuntimePaths::Layer(a_name)) {
 				return false;
 			}
 			const std::string_view rest{ a_name + 3 };
@@ -67,7 +68,7 @@ namespace AnvilLOD
 
 	void Layers::Load()
 	{
-		std::ifstream in{ std::filesystem::path{ "Data/SKSE/Plugins/AnvilLOD.ini" } };
+		std::ifstream in{ RuntimePaths::SettingsRead() };
 		if (!in) {
 			return;
 		}
@@ -96,7 +97,7 @@ namespace AnvilLOD
 				}
 			}
 		}
-		logger::info("Quality layers: {}", AnyHidden() ? "some layers are hidden (AnvilLOD.ini [Layers])" : "everything shown");
+		logger::info("Quality layers: {}", AnyHidden() ? "some layers are hidden (PenguLOD.ini [Layers])" : "everything shown");
 	}
 
 	bool Layers::Save() const
@@ -108,7 +109,7 @@ namespace AnvilLOD
 			}
 		}
 		values.emplace_back("iGrassTiers", std::to_string(grassTiers));
-		return IniFile::Write("Data/SKSE/Plugins/AnvilLOD.ini", "Layers", values);
+		return IniFile::Write("Data/SKSE/Plugins/PenguLOD.ini", "Layers", values);
 	}
 
 	bool Layers::AnyHidden() const
@@ -151,13 +152,15 @@ namespace AnvilLOD
 			return;
 		}
 		std::thread([this] {
-			const std::filesystem::path ini{ "Data/SKSE/Plugins/AnvilLOD.ini" };
+			auto ini = RuntimePaths::SettingsRead();
 			std::error_code             ec;
 			auto                        stamp = std::filesystem::last_write_time(ini, ec);
 			for (;;) {
 				std::this_thread::sleep_for(500ms);
-				// Editing [Layers] in AnvilLOD.ini while the game runs applies within half a second (also how it is tested).
-				if (const auto now = std::filesystem::last_write_time(ini, ec); !ec && now != stamp) {
+				// Editing [Layers] in PenguLOD.ini while the game runs applies within half a second (also how it is tested).
+				auto current = RuntimePaths::SettingsRead();
+				if (const auto now = std::filesystem::last_write_time(current, ec); !ec && (current != ini || now != stamp)) {
+					ini = current;
 					stamp = now;
 					Load();
 					_dirty = true;

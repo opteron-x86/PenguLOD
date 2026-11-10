@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print/set PenguLOD's SemVer or verify a release tag. Never changes the SKSE version."""
+"""Print/set PenguLOD's SemVer or verify a release tag. Also versions the PenguLOD SKSE runtime."""
 import argparse
 import pathlib
 import re

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="../../src/PenguLOD.Cli/PenguLOD.Cli.csproj" />
+    <ProjectReference Include="..\..\src\PenguLOD.Core\PenguLOD.Core.csproj" />
+    <ProjectReference Include="..\..\src\PenguLOD.Meshes\PenguLOD.Meshes.csproj" />
+    <ProjectReference Include="..\..\src\PenguLOD.Textures\PenguLOD.Textures.csproj" />
+    <ProjectReference Include="..\..\src\PenguLOD.Plugins\PenguLOD.Plugins.csproj" />
+  </ItemGroup>
+  <ItemGroup><Compile Include="../Shared/TextureFixture.cs" Link="TextureFixture.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/GrassFixture.cs" Link="GrassFixture.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Shared/TerrainFixture.cs" Link="TerrainFixture.cs" /></ItemGroup>
+  <Import Project="../Shared/GrassFixture.targets" />
+</Project>

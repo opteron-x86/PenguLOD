@@ -32,7 +32,7 @@ for name, repository, revision, subdir in sources:
         if hashlib.file_digest(stream, 'sha256').hexdigest() != checksums[archive.name]:
             raise SystemExit('Source checksum mismatch: ' + str(archive))
     target = destination / subdir
-    marker = target / '.anvillod-revision'
+    marker = target / '.pengulod-revision'
     if not marker.exists():
         target.mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive) as tar:
@@ -59,7 +59,7 @@ for name in patches:
     # Normalize checkout line endings so hashes and patch input match on both hosts.
     content = (root / 'tools/fasterngio' / (name + '.patch')).read_bytes().replace(b'\r\n', b'\n')
     checksum = hashlib.sha256(content).hexdigest()
-    marker = destination / ('.anvillod-' + name)
+    marker = destination / ('.pengulod-' + name)
     if not marker.exists():
         subprocess.run([patch, '--batch', '-p1'], cwd=destination, input=content, check=True)
         marker.write_text(checksum + '\n', encoding='utf-8')

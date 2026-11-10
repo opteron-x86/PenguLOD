@@ -1,7 +1,8 @@
+#include "RuntimePaths.h"
 #include "Settings.h"
 #include "IniFile.h"
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	Settings& Settings::Get()
 	{
@@ -37,7 +38,7 @@ namespace AnvilLOD
 
 	void Settings::Load()
 	{
-		const std::filesystem::path path{ "Data/SKSE/Plugins/AnvilLOD.ini" };
+		const auto path = RuntimePaths::SettingsRead();
 		std::ifstream               in(path);
 		if (!in) {
 			logger::info("No {} - using defaults", path.string());
@@ -121,7 +122,7 @@ namespace AnvilLOD
 					verboseLog = value != "0" && !EqualsNoCase(value, "false");
 				}
 			} catch (const std::exception&) {
-				logger::warn("AnvilLOD.ini: bad value for {}: {}", key, value);
+				logger::warn("PenguLOD.ini: bad value for {}: {}", key, value);
 			}
 		}
 		logger::info("Settings: enabled={} maxDistance={} interval={}ms maxShown={} gridObjects={} water={} near={} far={} animate={} animationFps={}",
@@ -131,7 +132,7 @@ namespace AnvilLOD
 
 	bool Settings::Save() const
 	{
-		return IniFile::Write("Data/SKSE/Plugins/AnvilLOD.ini", "Dynamic", {
+		return IniFile::Write("Data/SKSE/Plugins/PenguLOD.ini", "Dynamic", {
 			{ "bEnabled", enabled ? "1" : "0" },
 			{ "fMaxDistance", std::format("{:.0f}", maxDistance) },
 			{ "iUpdateIntervalMs", std::to_string(updateIntervalMs) },

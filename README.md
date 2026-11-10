@@ -9,7 +9,7 @@ A native Linux and Windows LOD toolkit for Skyrim, built on [CageTV’s AnvilLOD
 PenguLOD combines an Avalonia desktop and CLI with native terrain, object, tree and grass LOD,
 texture generation, and offline grass caching. It reads Fluorine/MO2 profiles directly and runs without Wine.
 
-**Current version: 0.4.0-alpha.13**, incorporating AnvilLOD **0.2.70**.
+**Current version: 0.6.0-alpha.1**.
 The all-in-one pipeline supports grass → textures → terrain → object/tree/grass LOD, with
 verified resume and safe output publication. New terrain and seasonal rendering need broader
 in-game validation; this alpha does not claim full TexGen or DynDOLOD parity.
@@ -71,11 +71,14 @@ scanning and author/repair tools. PenguLOD’s texture generator does **not** ye
 match every TexGen feature. It uses assets from your installed mods and does not bundle game assets,
 DynDOLOD Resources or third-party LOD packs.
 
-**Game runtime:** On Linux, Skyrim runs under Proton/Wine. Dynamic LOD and runtime quality controls
-use the separate **AnvilLOD SKSE plugin** appropriate for your game runtime, available from
-[upstream releases](https://github.com/CageTV/AnvilLOD/releases/tag/v0.2.70).
-That Windows DLL is installed separately on both platforms. Game-side `AnvilLOD.esp`,
-`AnvilLOD.esm`, runtime data and output manifest names remain unchanged for compatibility.
+**Game runtime:** Dynamic LOD and in-game quality controls use the separate **PenguLOD SKSE
+package** from the same [release page](https://github.com/opteron-x86/PenguLOD/releases).
+Choose the DLL for your Skyrim version. It runs inside Skyrim on Windows or under Proton/Wine;
+the generator itself runs natively on Linux and Windows.
+
+Upgrading from output with AnvilLOD filenames? Read [upgrading safely](docs/UPGRADING.md).
+New plugins, runtime data, manifests and product-owned asset folders use PenguLOD names.
+Existing settings are preserved; a fresh output folder keeps your working generation available.
 
 ## Build and contribute
 

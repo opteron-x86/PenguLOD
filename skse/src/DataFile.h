@@ -1,8 +1,8 @@
 #pragma once
 
-namespace AnvilLOD
+namespace PenguLOD
 {
-	/// One switchable reference from AnvilLOD.dyn, as written by the AnvilLOD generator.
+	/// One switchable reference from PenguLOD.dyn, as written by the PenguLOD generator.
 	struct DynamicEntry
 	{
 		std::uint32_t refPlugin;
@@ -24,11 +24,11 @@ namespace AnvilLOD
 		static constexpr std::uint32_t kNearGrid = 8;     // "Near LOD": drawn only near the loaded cells
 		static constexpr std::uint32_t kNeverFade = 16;   // "Never Fade LOD": drawn at any distance
 		static constexpr std::uint32_t kGlow = 32;        // window glow mesh: lit by the hour (night only), not always on
-		static constexpr std::uint32_t kNativeBacked = 128;  // a real reference in AnvilLOD.esp draws it in its own worldspace: the plugin only draws the model in other worldspaces (a walled city)
+		static constexpr std::uint32_t kNativeBacked = 128;  // a real reference in PenguLOD.esp draws it in its own worldspace: the plugin only draws the model in other worldspaces (a walled city)
 		static constexpr std::uint32_t kStandIn = 64;     // Tamriel's stand-in for a real object of a city worldspace: hidden inside the loaded cells while the player is in that city
 	};
 
-	/// One Parent > Child copy from AnvilLOD.copies: a parent worldspace reference around a walled city, drawn while the player is
+	/// One Parent > Child copy from PenguLOD.copies: a parent worldspace reference around a walled city, drawn while the player is
 	/// in the city's child worldspace (no plugin, no record).
 	struct CopyEntry
 	{
@@ -49,11 +49,11 @@ namespace AnvilLOD
 		std::vector<std::string> strings;
 		std::vector<CopyEntry>   entries;
 
-		/// Reads Data\SKSE\Plugins\AnvilLOD\AnvilLOD.copies. Returns false (quietly when it just isn't there) if it can't be used.
+		/// Reads Data\SKSE\Plugins\PenguLOD\PenguLOD.copies. Returns false (quietly when it just isn't there) if it can't be used.
 		bool Read(const std::filesystem::path& a_path);
 	};
 
-	/// One grid object that is a real reference in AnvilLOD.esp (AnvilLOD.native): the vanilla reference it stands for, its enable
+	/// One grid object that is a real reference in PenguLOD.esp (PenguLOD.native): the vanilla reference it stands for, its enable
 	/// parent, and the real reference whose enable state follows the source's.
 	struct NativeEntry
 	{
@@ -79,7 +79,7 @@ namespace AnvilLOD
 		std::vector<std::string> strings;
 		std::vector<NativeEntry> entries;
 
-		/// Reads Data\SKSE\Plugins\AnvilLOD\AnvilLOD.native. Returns false (quietly when it just isn't there) if it can't be used.
+		/// Reads Data\SKSE\Plugins\PenguLOD\PenguLOD.native. Returns false (quietly when it just isn't there) if it can't be used.
 		bool Read(const std::filesystem::path& a_path);
 	};
 
@@ -88,7 +88,7 @@ namespace AnvilLOD
 		std::vector<std::string>  strings;
 		std::vector<DynamicEntry> entries;
 
-		/// Reads Data\SKSE\Plugins\AnvilLOD\AnvilLOD.dyn. Returns false (and logs why) if it's missing or broken.
+		/// Reads Data\SKSE\Plugins\PenguLOD\PenguLOD.dyn. Returns false (and logs why) if it's missing or broken.
 		bool Read(const std::filesystem::path& a_path);
 	};
 }

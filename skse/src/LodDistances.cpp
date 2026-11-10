@@ -1,13 +1,14 @@
+#include "RuntimePaths.h"
 #include "LodDistances.h"
 #include "IniFile.h"
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	namespace
 	{
 		const std::filesystem::path kDynDefaults{ "Data/MCM/Config/DynDOLOD/settings.ini" };
 		const std::filesystem::path kDynUser{ "Data/MCM/Settings/DynDOLOD.ini" };
-		const std::filesystem::path kAnvil{ "Data/SKSE/Plugins/AnvilLOD.ini" };
+		const std::filesystem::path kSettings{ "Data/SKSE/Plugins/PenguLOD.ini" };
 
 		// key in the files -> candidate game settings ("name:Section"), first one that exists is used
 		const std::vector<std::pair<std::string, std::vector<std::string>>> kKeys{
@@ -101,7 +102,7 @@ namespace AnvilLOD
 		std::map<std::string, std::string> raw;
 		ReadSection(kDynDefaults, "Settings", raw);
 		ReadSection(kDynUser, "Settings", raw);
-		ReadSection(kAnvil, "LOD", raw);
+		ReadSection(RuntimePaths::SettingsRead(), "LOD", raw);
 
 		std::map<std::string, float> values;
 		for (const auto& [key, candidates] : kKeys) {
@@ -119,7 +120,8 @@ namespace AnvilLOD
 	std::filesystem::file_time_type LodDistances::NewestWrite() const
 	{
 		std::filesystem::file_time_type newest{};
-		for (const auto* p : { &kDynDefaults, &kDynUser, &kAnvil }) {
+		const auto currentSettings = RuntimePaths::SettingsRead();
+		for (const auto* p : { &kDynDefaults, &kDynUser, &currentSettings }) {
 			std::error_code ec;
 			const auto t = std::filesystem::last_write_time(*p, ec);
 			if (!ec && t > newest) newest = t;
@@ -129,11 +131,11 @@ namespace AnvilLOD
 
 	void LodDistances::Apply(const char* a_reason)
 	{
-		std::map<std::string, std::string> anvil;
-		ReadSection(kAnvil, "LOD", anvil);
+		std::map<std::string, std::string> settings;
+		ReadSection(RuntimePaths::SettingsRead(), "LOD", settings);
 		const auto flag = [&](const char* k, bool def) {
-			auto it = anvil.find(Lower(k));
-			return it == anvil.end() ? def : (it->second != "0" && Lower(it->second) != "false");
+			auto it = settings.find(Lower(k));
+			return it == settings.end() ? def : (it->second != "0" && Lower(it->second) != "false");
 		};
 		_lastWrite = NewestWrite();
 		if (!flag("bApplyLodDistances", true)) return;
@@ -229,18 +231,18 @@ namespace AnvilLOD
 		for (const auto& e : Entries()) {
 			if (auto v = GetGame(e.key)) values.emplace_back(e.key, std::format("{:.2f}", *v));
 		}
-		const bool ok = IniFile::Write(kAnvil, "LOD", values);
+		const bool ok = IniFile::Write(kSettings, "LOD", values);
 		_lastWrite = NewestWrite();  // our own save is not a change to re-apply
-		logger::info("LOD settings saved to {}: {}", kAnvil.string(), ok ? "ok" : "FAILED");
+		logger::info("LOD settings saved to {}: {}", kSettings.string(), ok ? "ok" : "FAILED");
 		return ok;
 	}
 
 	bool LodDistances::DeferringToDynDolod() const
 	{
-		std::map<std::string, std::string> anvil;
-		ReadSection(kAnvil, "LOD", anvil);
-		auto it = anvil.find("boverridedyndolod");
-		bool overrideDyn = it != anvil.end() && it->second != "0" && Lower(it->second) != "false";
+		std::map<std::string, std::string> settings;
+		ReadSection(RuntimePaths::SettingsRead(), "LOD", settings);
+		auto it = settings.find("boverridedyndolod");
+		bool overrideDyn = it != settings.end() && it->second != "0" && Lower(it->second) != "false";
 		return DynDolodDllLoaded() && !overrideDyn;
 	}
 }
