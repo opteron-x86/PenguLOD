@@ -145,7 +145,7 @@ public static class PipelineDiagnostics
                 if(lod.Seasons && !assets.Exists(@"skse\plugins\po3_SeasonsOfSkyrim.dll"))
                     Add("Warning","seasons-runtime-missing","Seasonal LOD is selected but Seasons of Skyrim is not present in the profile.","Install and configure the matching seasonal runtime before testing seasonal output.");
                 if(lod.CsGrassLod)
-                    Add("Info","grass-runtime","Grass LOD still needs generated cache and billboards; shader support does not generate those files.","Use the compatible Grass Optimizations/LOD feature in Community or Bottled Shaders and test the grass transition distance.");
+                    Add("Info","grass-runtime","Grass LOD still needs generated cache and billboards; shader support does not generate those files.","Use the compatible Grass Optimizations/LOD feature in Community Shaders and test the grass transition distance.");
                 if(lod.GeneratedGrassFolder is {} grass)
                     Check("grass-cache",()=> {var m=GrassGenerationManifest.Read(grass,true)!;m.ValidateLoadOrder(game);if(verifyOutputs)m.Verify(grass,progress,ct);},request.Grass is not null);
                 if(lod.GeneratedTextureFolder is {} textures)
@@ -154,7 +154,7 @@ public static class PipelineDiagnostics
                     Check("terrain-output",()=>{var m=TerrainGeneration.ReadManifest(terrain);if(verifyOutputs)m.Verify(terrain,progress,ct);},request.Terrain is not null);
             }
             if(request.Terrain?.ExportHeightmaps==true)
-                Add("Info","terrain-shadows","Terrain heightmaps are exported for the Terrain Shadows feature.","Enable compatible Community/Bottled Shaders Terrain Shadows and leave the generated heightmap DDS files loose.");
+                Add("Info","terrain-shadows","Terrain heightmaps are exported for the Terrain Shadows feature.","Enable compatible Community Shaders Terrain Shadows and leave the generated heightmap DDS files loose.");
             if(inspectAsset is {Length:>0})
             {
                 GamePath.ValidateRelative(inspectAsset);

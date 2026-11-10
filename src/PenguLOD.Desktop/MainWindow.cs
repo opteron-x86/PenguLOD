@@ -201,7 +201,7 @@ public sealed partial class MainWindow : Window
                 PathField("Profiles folder override", nameof(DesktopSettings.ProfilesFolder)),
                 PathField("Overwrite folder override", nameof(DesktopSettings.OverwriteFolder)),
                 PathField("Skyrim.ini override", nameof(DesktopSettings.GameIni), file: true)) };
-        var mo2 = Stack(12, PathField("MO2 / Fluorine instance", nameof(DesktopSettings.Instance)),
+        var mo2 = Stack(12, PathField("Mod Organizer 2 instance", nameof(DesktopSettings.Instance)),
             Field("Profile", nameof(DesktopSettings.Profile)), profileRow);
         var data = Stack(12, PathField("Game / Data folder", nameof(DesktopSettings.GameFolder)),
             PathField("plugins.txt", nameof(DesktopSettings.PluginsFile), file: true, hint: "Choose an explicit plugin list; an empty file works for a vanilla game."));
@@ -331,7 +331,6 @@ public sealed partial class MainWindow : Window
             Text("Import replaces the current settings and saves a backup.", true))),
         Card("ABOUT PENGULOD", Stack(10, Text(ProductInfo.Description),
             Text("GPL-3.0-only"),
-            Text("Based on CageTV’s AnvilLOD. Maintained by opteron-x86 and PenguLOD contributors.", true),
             Button("Open project on GitHub", () => Open(ProductInfo.Repository))))));
 
     private Border ToolResults(string page)

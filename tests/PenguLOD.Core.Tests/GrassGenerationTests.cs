@@ -161,7 +161,7 @@ public sealed class GrassGenerationTests
     public void VirtualInputRespectsPriorityCasingIniSelectionAndPreservesSources()
     {
         using var f = new GrassFixture(); using var limits = RunLimits.Enter(2);
-        var instance = Path.Combine(f.Root, "Fluorine");
+        var instance = Path.Combine(f.Root, "ModOrganizer");
         var profile = Path.Combine(instance, "profiles", "Selected"); Directory.CreateDirectory(profile);
         File.WriteAllText(Path.Combine(instance, "ModOrganizer.ini"), $"[General]\ngamePath={Path.GetDirectoryName(f.Textures.Data)}\nselected_profile=Selected\n");
         File.WriteAllText(Path.Combine(profile, "modlist.txt"), "+High\n+Low\n-Disabled\n");

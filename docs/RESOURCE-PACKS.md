@@ -4,7 +4,7 @@ PenguLOD reads compatible data directly. No DynDOLOD or TexGen executable, Wine 
 or installed application is needed. The paths and file names identify data formats;
 resources distributed under `Data/DynDOLOD` can be consumed natively.
 
-Enabled mods are searched automatically through the selected Data/Fluorine/MO2 view.
+Enabled mods are searched automatically through the selected Data/MO2 view.
 For external packs, set **Primary resource folder (optional)** and **Additional resource
 folders** on **Game & resources**. Enter additional folders one per line.
 The settings are shared between texture, LOD and mod-author tools and saved in presets.

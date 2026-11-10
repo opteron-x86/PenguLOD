@@ -5,6 +5,14 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.6.0-alpha.3] - 2026-11-10
+
+- Use Mod Organizer 2 and Community Shaders names in app labels, diagnostics,
+  setup instructions and package descriptions, without naming specific forks.
+- Remove the additional attribution line from the About panel.
+
+This is a text-only update. Settings, generation behavior and existing output are unchanged.
+
 ## [0.6.0-alpha.2] - 2026-11-10
 
 - Replaced the separate Overview and Pipeline screens with Generation Overview:

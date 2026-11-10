@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace PenguLOD.Plugins;
 
-/// <summary>R16_UNORM DDS and bounds understood by Community/Bottled Shaders TerrainShadows.</summary>
+/// <summary>R16_UNORM DDS and bounds understood by Community Shaders TerrainShadows.</summary>
 public static class TerrainHeightmap
 {
     public sealed record Result(string Path,byte[] Bytes,int Width,int Height,float Minimum,float Maximum);

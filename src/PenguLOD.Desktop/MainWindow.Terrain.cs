@@ -30,7 +30,7 @@ public sealed partial class MainWindow
             Row(Number("PBR scale", nameof(DesktopSettings.TerrainPbrScale), .1m, 4, .05m), Number("PBR gamma", nameof(DesktopSettings.TerrainPbrGamma), .1m, 4, .05m)),
             Number("PBR ambient occlusion", nameof(DesktopSettings.TerrainAo), 0, 1, .05m))),
         Card("Terrain shadows", Stack(12,
-            Help(Check("Export Community / Bottled Shaders heightmaps", nameof(DesktopSettings.TerrainHeightmaps)), "Requires complete rectangular coverage. Install the generated DDS files loose."),
+            Help(Check("Export Community Shaders heightmaps", nameof(DesktopSettings.TerrainHeightmaps)), "Requires complete rectangular coverage. Install the generated DDS files loose."),
             Number("Maximum heightmap dimension", nameof(DesktopSettings.TerrainHeightmapSize), 128, 16384, 128))),
         Card("Results", Stack(12, _terrainSummary, _terrainResults))));
 
