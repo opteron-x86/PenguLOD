@@ -1,6 +1,11 @@
 #pragma once
+#include <filesystem>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
-namespace AnvilLOD::IniFile
+namespace PenguLOD::IniFile
 {
 	/// Sets key=value pairs in one [section] of an ini file, keeping every other line (comments included).
 	/// Keys are matched case-insensitively; missing keys are added at the end of the section, a missing section

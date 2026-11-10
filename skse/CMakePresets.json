@@ -14,7 +14,7 @@
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
         "VCPKG_MANIFEST_INSTALL": "OFF",
         "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed",
-        "ANVILLOD_RUNTIME_LINE": "1"
+        "PENGULOD_RUNTIME_LINE": "1"
       }
     },
     {
@@ -32,7 +32,7 @@
         "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed-17",
         "VCPKG_MANIFEST_DIR": "${sourceDir}/cmake/manifest-17",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports-17",
-        "ANVILLOD_RUNTIME_LINE": "17"
+        "PENGULOD_RUNTIME_LINE": "17"
       }
     },
     {
@@ -50,7 +50,7 @@
         "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed-vr",
         "VCPKG_MANIFEST_DIR": "${sourceDir}/cmake/manifest-vr",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports-vr",
-        "ANVILLOD_RUNTIME_LINE": "14"
+        "PENGULOD_RUNTIME_LINE": "14"
       }
     }
   ],

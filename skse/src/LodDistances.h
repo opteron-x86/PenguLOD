@@ -1,12 +1,12 @@
 #pragma once
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	/// LOD distance settings (fBlockLevel0Distance etc.), applied to the game's INI settings at runtime, like
 	/// DynDOLOD DLL NG does. Read in this order, later files win:
 	///   Data\MCM\Config\DynDOLOD\settings.ini   (DynDOLOD DLL NG defaults, [Settings])
 	///   Data\MCM\Settings\DynDOLOD.ini          (values saved by the DynDOLOD MCM, [Settings])
-	///   Data\SKSE\Plugins\AnvilLOD.ini          ([LOD])
+	///   Data\SKSE\Plugins\PenguLOD.ini          ([LOD])
 	/// so existing DynDOLOD MCM settings keep working after DynDOLOD.dll is removed. The files are watched while
 	/// playing: edit and save one, and the change is applied within a couple of seconds.
 	class LodDistances
@@ -34,9 +34,9 @@ namespace AnvilLOD
 
 		std::optional<float> GetGame(const std::string& a_key) const;  // current value in the game
 		bool                 SetGame(const std::string& a_key, float a_value);
-		/// Writes the game's current values into AnvilLOD.ini [LOD], so they're used from now on.
+		/// Writes the game's current values into PenguLOD.ini [LOD], so they're used from now on.
 		bool                 SaveToIni();
-		/// True when DynDOLOD.dll is installed and AnvilLOD leaves these settings to it.
+		/// True when DynDOLOD.dll is installed and PenguLOD leaves these settings to it.
 		bool                 DeferringToDynDolod() const;
 
 	private:

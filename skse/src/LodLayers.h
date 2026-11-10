@@ -1,9 +1,9 @@
 #pragma once
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	/// Quality layers of the object LOD blocks. The generator writes grass, 3D trees and tree cards into their own
-	/// shapes under a node named "AL:<layer>:<LOD level>" (see src/AnvilLOD.Core/Lod/LodLayers.cs). This finds those
+	/// shapes under a node named "PL:<layer>:<LOD level>" (see src/PenguLOD.Core/Lod/LodLayers.cs). This finds those
 	/// nodes in the loaded scene and hides or shows them, so the quality can be changed in game without regenerating.
 	///
 	/// Hiding a layer saves draw cost (triangles, overdraw). The data stays loaded, so memory and load time are set
@@ -13,8 +13,8 @@ namespace AnvilLOD
 	public:
 		enum Layer : int { kGrass, kTree3D, kTreeCard, kLayerCount };
 		static constexpr int kLevelCount = 4;  // LOD4, LOD8, LOD16, LOD32
-		/// The grass of a block is written in this many density tiers, each in its own node ("AL:grass:<level>" for tier 0,
-		/// "AL:grass:<level>:1" ... for the rest), spread evenly over the ground. Showing the first n of them is n/4 of the grass.
+		/// The grass of a block is written in this many density tiers, each in its own node ("PL:grass:<level>" for tier 0,
+		/// "PL:grass:<level>:1" ... for the rest), spread evenly over the ground. Showing the first n of them is n/4 of the grass.
 		static constexpr int kGrassTiers = 4;
 
 		static Layers& Get();
@@ -30,7 +30,7 @@ namespace AnvilLOD
 		static const char* LayerKey(int a_layer);    // "grass", "tree3d", "treecard" (also the node name part)
 		static int         LevelNumber(int a_level); // 4, 8, 16, 32
 
-		/// Reads bShow_<layer>_<level> from AnvilLOD.ini (everything shown by default).
+		/// Reads bShow_<layer>_<level> from PenguLOD.ini (everything shown by default).
 		void Load();
 		/// Writes them to the [Layers] section.
 		bool Save() const;
@@ -46,7 +46,7 @@ namespace AnvilLOD
 		bool AnyFound() const { return _anyFound; }
 
 		bool show[kLayerCount][kLevelCount]{};
-		/// How many of the grass density tiers are drawn (1 to kGrassTiers; iGrassTiers in AnvilLOD.ini). LODs generated before
+		/// How many of the grass density tiers are drawn (1 to kGrassTiers; iGrassTiers in PenguLOD.ini). LODs generated before
 		/// the tiers existed have only tier 0, which is always drawn.
 		int  grassTiers = kGrassTiers;
 

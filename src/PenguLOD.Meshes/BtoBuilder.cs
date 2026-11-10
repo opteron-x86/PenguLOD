@@ -1,0 +1,403 @@
+using System.Numerics;
+using PenguLOD.Core.Lod;
+using PenguLOD.Core.World;
+using PenguLOD.Meshes.Nif;
+
+namespace PenguLOD.Meshes;
+
+/// <summary>
+/// Builds one object-LOD block (.bto) in the layout the engine and LODGen use:
+/// <code>
+/// NiNode "obj"
+///  └─ BSMultiBoundNode (one per material chunk)
+///      ├─ BSSubIndexTriShape  (translation = block SW corner, scale = LOD level)
+///      │    ├─ BSLightingShaderProperty → BSShaderTextureSet
+///      │    └─ NiAlphaProperty (if the source used alpha)
+///      └─ BSMultiBound → BSMultiBoundAABB (world-space box)
+/// </code>
+/// Vertices are stored block-local and divided by the level, exactly as LODGen does.
+/// Geometry sharing a material is merged into one shape (one draw call), split only when
+/// a shape would exceed 65,535 vertices or triangles.
+/// </summary>
+public static class BtoBuilder
+{
+    public const string Author = "PenguLOD";
+    private const int MaxIndex = ushort.MaxValue;
+    private const string ObjName = "obj";
+
+    /// <summary>How much deeper LOD8 is pulled than LOD4 (the inset of a mesh path, times this at LOD8).</summary>
+    public const float Lod8InsetFactor = 2f;
+
+    /// <summary>
+    /// The shape name the engine reads the LOD material from: <c>obj</c> normally, <c>objSnow</c>/<c>objAsh</c> for objects
+    /// whose base record has a snow/ash Material, and the <c>HD</c> form when the shape uses full textures instead of LOD
+    /// textures, at LOD4 only: DynDOLOD's documentation says the higher LOD levels use only the non-HD snow shader by default, and its
+    /// output has about 5% of its LOD8 snow shapes and 2% of its LOD16 ones in the HD form, against 20% at LOD4 here before this rule.
+    /// (https://dyndolod.info/Help/Snow-Ash-LOD-Shader: "HD objects are used only at LOD Level 4".)
+    /// </summary>
+    /// <param name="snowMode">0 = DynDOLOD's default (HD at LOD4 only), 1 = never HD (the plain snow shader on every level, so near and far mountains share one look),
+    /// 2 = HD on every full-texture shape at every level.</param>
+    internal static string ShapeNameFor(LodShaderKind kind, LodMaterial m, LodLevel level, int snowMode = 0)
+    {
+        if (kind == LodShaderKind.None) return ObjName;
+        var tex = m.Textures.Count > 0 ? m.Textures[0] : null;
+        bool lodTexture = tex is not null && tex.Replace('/', '\\').TrimStart('\\')
+            .StartsWith("textures\\lod\\", StringComparison.OrdinalIgnoreCase);
+        return ObjName + (kind == LodShaderKind.Snow ? "Snow" : "Ash") + (lodTexture || snowMode == 1 || (snowMode == 0 && level != LodLevel.Lod4) ? "" : "HD");
+    }
+
+    public sealed record Result(byte[] Bytes, int Shapes, int Triangles, int Vertices, int RefsPlaced, int RefsSkipped, int TrianglesCulled = 0,
+        IReadOnlyDictionary<string, (long Triangles, long Vertices)>? ByCategory = null);
+
+    /// <summary>
+    /// Drops triangles that are completely buried: every corner, edge midpoint and the centre must be at least
+    /// <see cref="Margin"/> below the terrain. Points over cells without terrain data always keep the triangle.
+    /// </summary>
+    public sealed class TerrainTest(Func<float, float, float?> heightAt, float margin, Func<float, float, float?>? waterAt = null)
+    {
+        public float Margin { get; } = margin;
+
+        /// <summary>Buried under the terrain, or (when water heights are given) entirely below the water surface, as DynDOLOD drops both.</summary>
+        public bool Buried(Vector3 a, Vector3 b, Vector3 c) =>
+            AllBelow(a, b, c, heightAt) || (waterAt is not null && AllBelow(a, b, c, waterAt));
+
+        private bool AllBelow(Vector3 a, Vector3 b, Vector3 c, Func<float, float, float?> surface) =>
+            Below(a, surface) && Below(b, surface) && Below(c, surface)
+            && Below((a + b) * 0.5f, surface) && Below((b + c) * 0.5f, surface) && Below((c + a) * 0.5f, surface)
+            && Below((a + b + c) / 3f, surface);
+
+        private bool Below(Vector3 p, Func<float, float, float?> surface) => surface(p.X, p.Y) is { } h && p.Z < h - Margin;
+    }
+
+    /// <param name="terrain">Optional buried-triangle test (see <see cref="TerrainTest"/>).</param>
+    /// <param name="brightness">Colour multiplier (1 = unchanged). Applied through vertex colours, which the shader
+    /// multiplies with the diffuse texture, so LOD textures shared with other mods are left alone.</param>
+    /// <param name="categorize">Names the layer a mesh path belongs to (<see cref="LodLayers"/>: objects, grass, tree3d, treecard); null = everything is "objects".
+    /// Each layer other than objects gets its own shapes under a named node, so the SKSE plugin can hide it in game, and feeds the size breakdown.</param>
+    /// <param name="inset">Units a mesh path's geometry is pulled inside its own surface (see <see cref="LodInset"/>), or null for none. Only LOD4 and LOD8 use it.</param>
+    public static Result Build(QuadKey quad, IReadOnlyList<LodReference> refs, Func<string, LodMesh?> meshes, TerrainTest? terrain = null, float brightness = 1f, Func<string, string>? categorize = null, Func<string, float>? inset = null, int snowMode = 0, int snowCover = 0)
+    {
+        var origin = new Vector3(quad.X * CellCoord.CellSize, quad.Y * CellCoord.CellSize, 0);
+        float level = (int)quad.Level;
+        // LOD4 shapes carry one segment per cell (x-major, 4x4) so the engine can hide the cells that are
+        // loaded with full models. Without them the LOD stays visible up close and inside child worlds.
+        bool segmented = quad.Level == LodLevel.Lod4;
+        float inv = 1f / level;
+
+        var chunks = new Dictionary<string, List<Chunk>>(StringComparer.Ordinal);
+        int placed = 0, skipped = 0, culled = 0;
+        var cats = new Dictionary<string, (long Triangles, long Vertices)>(StringComparer.Ordinal);
+
+        foreach (var r in refs)
+        {
+            var path = r.Meshes.For(quad.Level);
+            var mesh = path is null ? null : meshes(LodMeshKey.Make(path, r.TextureVariant));
+            if (mesh is null || mesh.Parts.Count == 0) { skipped++; continue; }
+
+            int segment = 0;
+            if (segmented)
+            {
+                var cell = r.Cell;
+                segment = Math.Clamp(cell.X - quad.X, 0, 3) * 4 + Math.Clamp(cell.Y - quad.Y, 0, 3);
+            }
+            var m = Transforms.Reference(r.Position, r.RotationRadians, r.Scale);
+            var rot = Transforms.RotationOnly(m);
+            placed++;
+            var category = categorize?.Invoke(path!) ?? LodLayers.Objects;
+            float basePull = inset is not null && (int)quad.Level <= LodInset.MaxLevel ? inset(path!) : 0f;
+            // LOD8 sits one more step inside than LOD4: while the engine swaps LOD8 for LOD4 for the real model, all three are drawn,
+            // and the same pull would leave LOD8 and LOD4 on the same surface (z-fighting) with only the full model separated.
+            float pull = basePull * (quad.Level == LodLevel.Lod8 ? Lod8InsetFactor : 1f);
+            bool flatGuard = basePull > 0f && LodInset.IsGenericObject(path!);   // only the generic object inset leaves flat pieces alone
+
+            foreach (var part in mesh.Parts)
+            {
+                cats.TryGetValue(category, out var seen);
+                cats[category] = (seen.Triangles + part.TriangleCount, seen.Vertices + part.VertexCount);
+                if (part.VertexCount > MaxIndex || part.TriangleCount > MaxIndex) continue; // can't happen for valid SSE shapes
+                // A layer other than plain objects never shares a shape with another layer, even with the same material.
+                // The game puts its snow/ash LOD material on shapes by NAME, so those parts get their own shapes.
+                var shapeName = category == LodLayers.Objects ? ShapeNameFor(r.Shader, part.Material, quad.Level, snowMode) : ObjName;
+                var chunkKey = category == LodLayers.Objects ? part.Material.Key : part.Material.Key + "|layer:" + category;
+                // A grass density tier has its own shapes under its own node, so the SKSE plugin can hide it.
+                int tier = category == LodLayers.Grass ? part.Tier : 0;
+                if (tier > 0) chunkKey += "|tier:" + tier;
+                if (shapeName != ObjName) chunkKey += "|shape:" + shapeName;
+                if (!chunks.TryGetValue(chunkKey, out var list))
+                    chunks[chunkKey] = list = [new Chunk(part.Material, segmented, brightness) { Layer = category, ShapeName = shapeName, Tier = tier, SnowCover = snowCover }];
+                var chunk = list[^1];
+                if (chunk.Vertices + part.VertexCount > MaxIndex || chunk.TriangleCount + part.TriangleCount > MaxIndex)
+                    list.Add(chunk = new Chunk(part.Material, segmented, brightness) { Layer = category, ShapeName = shapeName, Tier = tier, SnowCover = snowCover });
+                culled += chunk.Append(part, m, rot, origin, inv, terrain, segment, pull, flatGuard, basePull);
+            }
+        }
+
+        var w = new NifWriter { Author = Author };
+        int objName = w.String(ObjName);
+        var shapeNames = new Dictionary<string, int>(StringComparer.Ordinal) { [ObjName] = objName };
+        int root = w.Reserve("NiNode");
+        var ordered = chunks.OrderBy(kv => kv.Key, StringComparer.Ordinal).SelectMany(kv => kv.Value).Where(c => c.TriangleCount > 0).ToList();
+        var children = new List<int>();
+        int tris = 0, verts = 0;
+
+        foreach (var c in ordered)
+        {
+            int mbNode = w.Reserve("BSMultiBoundNode");
+            int shape = w.Reserve("BSSubIndexTriShape");
+            int shader = w.Reserve("BSLightingShaderProperty");
+            int texSet = w.Reserve("BSShaderTextureSet");
+            int alpha = c.Material.HasAlpha ? w.Reserve("NiAlphaProperty") : -1;
+            int mb = w.Reserve("BSMultiBound");
+            int aabb = w.Reserve("BSMultiBoundAABB");
+            children.Add(mbNode);
+            tris += c.TriangleCount;
+            verts += c.Vertices;
+
+            int layerName = w.String(LodLayers.NodeName(c.Layer, (int)quad.Level, c.Tier));
+            w.Set(mbNode, b =>
+            {
+                NifWriter.WriteObjectNet(b, layerName);
+                NifWriter.WriteAvObject(b, 0xE, Vector3.Zero, 1f);
+                b.Write(1u); b.Write(shape);
+                b.Write(0u);          // effects
+                b.Write(mb);
+                b.Write(1u);          // culling mode
+            });
+            if (!shapeNames.TryGetValue(c.ShapeName, out int shapeName)) shapeNames[c.ShapeName] = shapeName = w.String(c.ShapeName);
+            w.Set(shape, b => c.WriteShape(b, shapeName, origin, level, shader, alpha));
+            w.Set(shader, b => WriteShader(b, c.Material, texSet, c.HasColors));
+            w.Set(texSet, b =>
+            {
+                var slots = ShaderGuard.BakedSlots(c.Material.Textures);
+                b.Write((uint)slots.Length);
+                foreach (var t in slots) NifWriter.WriteSizedString(b, t);
+            });
+            if (alpha >= 0)
+                w.Set(alpha, b =>
+                {
+                    NifWriter.WriteObjectNet(b, -1);
+                    b.Write(c.Material.AlphaFlags);
+                    b.Write(c.Material.AlphaThreshold);
+                });
+            w.Set(mb, b => b.Write(aabb));
+            w.Set(aabb, b =>
+            {
+                var (center, extent) = c.WorldBox(origin, level);
+                b.Write(center.X); b.Write(center.Y); b.Write(center.Z);
+                b.Write(extent.X); b.Write(extent.Y); b.Write(extent.Z);
+            });
+        }
+
+        w.Set(root, b =>
+        {
+            NifWriter.WriteObjectNet(b, objName);
+            NifWriter.WriteAvObject(b, 0xE, Vector3.Zero, 1f);
+            b.Write((uint)children.Count);
+            foreach (var ch in children) b.Write(ch);
+            b.Write(0u); // effects
+        });
+
+        return new Result(w.ToBytes(root), ordered.Count, tris, verts, placed, skipped, culled, cats);
+    }
+
+    internal static void WriteShader(BinaryWriter b, LodMaterial m, int texSet, bool colors)
+    {
+        if (m.RenderEffect is not null) throw new NotSupportedException("Render-only effect materials cannot be written as object LOD lighting shaders.");
+        var pt = m.Passthru;
+        // Shader types with extra per-type data (environment maps, skin, hair...) can't be carried over, so a
+        // passthru shape of such a type is written as the default type; tree LOD models are all default-type.
+        b.Write(0u);                          // shader type: default
+        NifWriter.WriteObjectNet(b, -1);
+        var (flags1, flags2) = ShaderGuard.Safe(m, colors);
+        b.Write(flags1);
+        b.Write(flags2);
+        b.Write(pt?.UvOffsetX ?? 0f); b.Write(pt?.UvOffsetY ?? 0f);   // uv offset
+        b.Write(pt?.UvScaleX ?? 1f); b.Write(pt?.UvScaleY ?? 1f);     // uv scale
+        b.Write(texSet);
+        b.Write(m.EmissiveColor.X); b.Write(m.EmissiveColor.Y); b.Write(m.EmissiveColor.Z);
+        b.Write(m.EmissiveMultiple);
+        b.Write(m.ClampMode);
+        b.Write(pt?.Alpha ?? 1f);             // alpha
+        b.Write(pt?.Refraction ?? 0f);        // refraction
+        b.Write(pt?.Glossiness ?? 1f);        // glossiness (LODGen value)
+        var spec = pt?.SpecularColor ?? Vector3.One;
+        b.Write(spec.X); b.Write(spec.Y); b.Write(spec.Z);   // specular color
+        b.Write(pt?.SpecularStrength ?? 1f);  // specular strength
+        b.Write(pt?.LightingEffect1 ?? 0f); b.Write(pt?.LightingEffect2 ?? 0f); // lighting effects
+    }
+
+    /// <summary>Merged geometry for one material, in block-local, level-scaled coordinates.</summary>
+    /// <summary>Scales the RGB bytes of an RGBA vertex colour (alpha kept).</summary>
+    /// <summary>
+    /// Full snow cover on a snow/ash shape. The HD snow shader reads vertex alpha as its intensity (vanilla meshes carry about 0.4 for light snow
+    /// and 0.5 for heavy snow, mod meshes anything), and vertex colour darkens the rock the snow sits on, so a mountain flagged as snow can come out
+    /// thinly covered. Mode 1 sets alpha to 1; mode 2 also moves the colour 70% of the way to white.
+    /// </summary>
+    internal static uint FullCover(uint rgba, int mode)
+    {
+        if (mode <= 0) return rgba;
+        uint a = 0xFF00_0000u;
+        if (mode == 1) return (rgba & 0x00FF_FFFFu) | a;
+        uint L(uint c) => c + (uint)MathF.Round((255 - c) * 0.7f);
+        return a | (L((rgba >> 16) & 0xFF) << 16) | (L((rgba >> 8) & 0xFF) << 8) | L(rgba & 0xFF);
+    }
+
+    public static uint Scale(uint rgba, float f)
+    {
+        if (f >= 0.999f && f <= 1.001f) return rgba;
+        uint r = (uint)Math.Clamp(MathF.Round((rgba & 0xFF) * f), 0, 255);
+        uint g = (uint)Math.Clamp(MathF.Round(((rgba >> 8) & 0xFF) * f), 0, 255);
+        uint b = (uint)Math.Clamp(MathF.Round(((rgba >> 16) & 0xFF) * f), 0, 255);
+        return (rgba & 0xFF00_0000u) | (b << 16) | (g << 8) | r;
+    }
+
+    private sealed class Chunk(LodMaterial material, bool segmented, float brightness = 1f)
+    {
+        public LodMaterial Material { get; } = material;
+        public string Layer { get; init; } = LodLayers.Objects;
+        public int Tier { get; init; }
+        public string ShapeName { get; init; } = ObjName;
+        public int SnowCover { get; init; }
+        private bool Covered => SnowCover > 0 && (ShapeName.StartsWith("objSnow", StringComparison.Ordinal) || ShapeName.StartsWith("objAsh", StringComparison.Ordinal));
+        private readonly List<Vector3> _pos = [];
+        private readonly List<Vector2> _uv = [];
+        private readonly List<Vector3> _n = [];
+        private readonly List<Vector3> _t = [];
+        private readonly List<Vector3> _b = [];
+        private readonly List<uint> _c = [];
+        private readonly List<ushort>[] _segTris = Enumerable.Range(0, segmented ? 16 : 1).Select(_ => new List<ushort>()).ToArray();
+        private int _indexCount;
+        public bool HasColors { get; private set; }
+
+        public int Vertices => _pos.Count;
+        public int TriangleCount => _indexCount / 3;
+
+        /// <returns>Number of triangles dropped because they were buried under the terrain.</returns>
+        public int Append(LodMeshPart p, Matrix4x4 m, Matrix4x4 rot, Vector3 origin, float inv, TerrainTest? terrain, int segment, float inset = 0f, bool skipFlat = false, float flatDistance = 0f)
+        {
+            var world = new Vector3[p.VertexCount];
+            for (int i = 0; i < world.Length; i++) world[i] = Vector3.Transform(p.Positions[i], m);
+
+            // Decide which triangles survive (on the true surface), then copy only the vertices they use.
+            var keep = new bool[p.TriangleCount];
+            int culled = 0;
+            for (int t = 0; t < keep.Length; t++)
+            {
+                keep[t] = terrain is null || !terrain.Buried(world[p.Triangles[t * 3]], world[p.Triangles[t * 3 + 1]], world[p.Triangles[t * 3 + 2]]);
+                if (!keep[t]) culled++;
+            }
+
+            // Flatness is judged on the part as modelled (scaled, not rotated), so a road on a slope is still recognised as flat, and a
+            // ramp or mound lying on the ground counts as flat too.
+            float flatAt = flatDistance > 0f ? flatDistance : inset, scale = new Vector3(m.M11, m.M12, m.M13).Length();
+            if (inset > 0f && !(skipFlat && (LodInset.IsFlat(p.Positions, flatAt, scale) || LodInset.IsGroundSheet(p.Positions, p.Triangles, flatAt, scale))))
+            {
+                var worldNormals = new Vector3[p.VertexCount];
+                for (int i = 0; i < worldNormals.Length; i++) worldNormals[i] = Transforms.SafeNormalize(Vector3.TransformNormal(p.Normals[i], rot), Vector3.UnitZ);
+                LodInset.Apply(world, worldNormals, inset);
+            }
+
+            var tris = _segTris[segmented ? segment : 0];
+            var remap = new int[p.VertexCount];
+            Array.Fill(remap, -1);
+            for (int t = 0; t < keep.Length; t++)
+            {
+                if (!keep[t]) continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    int i = p.Triangles[t * 3 + k];
+                    if (remap[i] < 0)
+                    {
+                        remap[i] = _pos.Count;
+                        _pos.Add((world[i] - origin) * inv);
+                        _uv.Add(p.UVs[i]);
+                        _n.Add(Transforms.SafeNormalize(Vector3.TransformNormal(p.Normals[i], rot), Vector3.UnitZ));
+                        _t.Add(Transforms.SafeNormalize(Vector3.TransformNormal(p.Tangents[i], rot), Vector3.UnitX));
+                        _b.Add(Transforms.SafeNormalize(Vector3.TransformNormal(p.Bitangents[i], rot), Vector3.UnitY));
+                        _c.Add(Covered ? FullCover(Scale(p.Colors?[i] ?? 0xFFFF_FFFFu, brightness), SnowCover) : Scale(p.Colors?[i] ?? 0xFFFF_FFFFu, brightness));
+                    }
+                    tris.Add((ushort)remap[i]);
+                    _indexCount++;
+                }
+            }
+            if ((p.Colors is not null || Covered || MathF.Abs(brightness - 1f) > 0.001f) && culled < keep.Length) HasColors = true;
+            return culled;
+        }
+
+        public (Vector3 Center, Vector3 Extent) WorldBox(Vector3 origin, float level)
+        {
+            var (min, max) = LocalBounds();
+            var wmin = origin + min * level;
+            var wmax = origin + max * level;
+            return ((wmin + wmax) * 0.5f, (wmax - wmin) * 0.5f);
+        }
+
+        private (Vector3 Min, Vector3 Max) LocalBounds()
+        {
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            foreach (var p in _pos) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+            return (min, max);
+        }
+
+        public void WriteShape(BinaryWriter b, int name, Vector3 origin, float level, int shader, int alpha)
+        {
+            NifWriter.WriteObjectNet(b, name);
+            NifWriter.WriteAvObject(b, 0xE, origin, level);
+
+            var (min, max) = LocalBounds();
+            var center = (min + max) * 0.5f;
+            float radius = 0;
+            foreach (var p in _pos) radius = MathF.Max(radius, Vector3.Distance(center, p));
+            b.Write(center.X); b.Write(center.Y); b.Write(center.Z); b.Write(radius);
+
+            b.Write(-1);      // skin
+            b.Write(shader);
+            b.Write(alpha);
+
+            // Vertex layout: position(12) bitangentX(4) uv(4) normal+bitangentY(4) tangent+bitangentZ(4) [color(4)]
+            ulong attrs = HasColors ? 0x3BUL : 0x1BUL;
+            ulong desc = HasColors
+                ? 0x8UL | (4UL << 8) | (5UL << 16) | (6UL << 20) | (7UL << 24)
+                : 0x7UL | (4UL << 8) | (5UL << 16) | (6UL << 20);
+            desc |= attrs << 44;
+            int vsize = HasColors ? 32 : 28;
+            b.Write(desc);
+            b.Write((ushort)TriangleCount);
+            b.Write((ushort)Vertices);
+            b.Write((uint)(vsize * Vertices + 6 * TriangleCount));
+
+            for (int i = 0; i < _pos.Count; i++)
+            {
+                var p = _pos[i];
+                b.Write(p.X); b.Write(p.Y); b.Write(p.Z);
+                b.Write(_b[i].X);
+                b.Write((Half)_uv[i].X); b.Write((Half)_uv[i].Y);
+                b.Write(Transforms.EncodeByte(_n[i].X)); b.Write(Transforms.EncodeByte(_n[i].Y)); b.Write(Transforms.EncodeByte(_n[i].Z));
+                b.Write(Transforms.EncodeByte(_b[i].Y));
+                b.Write(Transforms.EncodeByte(_t[i].X)); b.Write(Transforms.EncodeByte(_t[i].Y)); b.Write(Transforms.EncodeByte(_t[i].Z));
+                b.Write(Transforms.EncodeByte(_b[i].Z));
+                if (HasColors) b.Write(_c[i]);
+            }
+            foreach (var seg in _segTris)
+                foreach (var t in seg) b.Write(t);
+
+            b.Write(0u);               // particle data size
+
+            // Segments: start index (into the index array) + triangle count. Trailing empty cells are left
+            // out, as LODGen does; empty cells in between get (0, 0).
+            int last = _segTris.Length - 1;
+            while (last > 0 && _segTris[last].Count == 0) last--;
+            b.Write((uint)(last + 1));
+            uint start = 0;
+            for (int k = 0; k <= last; k++)
+            {
+                uint n = (uint)(_segTris[k].Count / 3);
+                b.Write((byte)0);
+                b.Write(n == 0 ? 0u : start);
+                b.Write(n);
+                start += (uint)_segTris[k].Count;
+            }
+        }
+    }
+}

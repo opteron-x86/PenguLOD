@@ -63,7 +63,7 @@ Unrepresentable placements are omitted with a warning identifying the cell. Miss
 models and fallback block sizes are also reported. Format validation does not establish
 visual placement accuracy; inspect the cache in game.
 
-Only validated output is published, with `AnvilLOD.grass.json`, settings, hashes and the
+Only validated output is published, with `PenguLOD.grass.json`, settings, hashes and the
 backend log. A previous owned cache is retained in a sibling `.previous-…` folder.
 Failed or cancelled runs preserve published output. **Cancel job** stops the backend
 and removes its staging files. See [pipeline recovery](PIPELINE.md) for interrupted jobs.

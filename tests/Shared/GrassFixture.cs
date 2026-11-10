@@ -1,7 +1,7 @@
 using System.Text;
-using AnvilLOD.Plugins;
+using PenguLOD.Plugins;
 
-namespace AnvilLOD.Testing;
+namespace PenguLOD.Testing;
 
 public sealed class GrassFixture : IDisposable
 {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Quarantine AnvilLOD's invalid drive-name placeholder folders; preview unless --apply is given."""
+"""Quarantine PenguLOD's invalid drive-name placeholder folders; preview unless --apply is given."""
 
 import argparse
 import hashlib
@@ -33,10 +33,10 @@ def inventory(folder):
         for name in files:
             entry = Path(base) / name
             if not entry.is_file() or entry.stat().st_size != 192:
-                raise ValueError(f"Not a known AnvilLOD placeholder; leaving it alone: {entry}")
+                raise ValueError(f"Not a known PenguLOD placeholder; leaving it alone: {entry}")
             content = entry.read_bytes()
             if entry.suffix.lower() != ".dds" or content != stub_bytes(name.lower().endswith("_n.dds")):
-                raise ValueError(f"Not a known AnvilLOD placeholder; leaving it alone: {entry}")
+                raise ValueError(f"Not a known PenguLOD placeholder; leaving it alone: {entry}")
             hashes[str(entry.relative_to(folder))] = hashlib.sha256(content).hexdigest()
     return hashes
 
@@ -50,8 +50,8 @@ def plan(roots):
             continue
         seen.add(root)
         names = {p.name.casefold() for p in root.iterdir()}
-        if "anvillod.manifest.json" not in names:
-            raise ValueError(f"Not an AnvilLOD output folder (no manifest): {root}")
+        if not names & {"pengulod.manifest.json", "anvillod.manifest.json"}:
+            raise ValueError(f"Not a recognized LOD output folder (no manifest): {root}")
         if names & {"data", "mods", "profiles", "modorganizer.ini", "skyrimse.exe", "skyrim.esm"}:
             raise ValueError(f"Refusing a game or mod manager root: {root}")
         for textures in root.iterdir():
@@ -70,7 +70,7 @@ def plan(roots):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("outputs", type=Path, nargs="+", help="AnvilLOD output or installed output mod folders")
+    parser.add_argument("outputs", type=Path, nargs="+", help="PenguLOD output or installed output mod folders")
     parser.add_argument("--apply", action="store_true", help="back up and remove the verified placeholder folders")
     parser.add_argument("--backup-dir", type=Path,
                         default=Path(__file__).resolve().parents[1] / ".artifacts" / "pglite-path-backups")
@@ -105,7 +105,7 @@ def main():
             raise ValueError(f"Contents changed; leaving them alone: {folder}")
         shutil.rmtree(folder)
     print(f"Backups and original paths: {backup / 'receipt.json'}")
-    print("Restart Skyrim through Fluorine and check PGLite.log. Regenerate with the fixed AnvilLOD build")
+    print("Restart Skyrim through Fluorine and check PGLite.log. Regenerate with the fixed PenguLOD build")
     print("using clean output, then replace the old output mod to correct its baked texture references too.")
 
 

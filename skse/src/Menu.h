@@ -1,10 +1,10 @@
 #pragma once
 
-namespace AnvilLOD::Menu
+namespace PenguLOD::Menu
 {
-	/// Adds AnvilLOD's pages to SKSE Menu Framework (or a drop-in replacement such as ApocryphaRealm Menu
+	/// Adds PenguLOD's pages to SKSE Menu Framework (or a drop-in replacement such as ApocryphaRealm Menu
 	/// Framework, which answers to the same name). Call at kDataLoaded or later: frameworks that load after
-	/// AnvilLOD.dll (SKSE loads plugins alphabetically) aren't there yet in SKSEPluginLoad.
+	/// PenguLOD.dll (SKSE loads plugins alphabetically) aren't there yet in SKSEPluginLoad.
 	/// Does nothing, and logs it, when no menu framework is installed.
 	void Register();
 

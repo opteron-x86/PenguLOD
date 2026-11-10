@@ -5,6 +5,19 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.6.0-alpha.1] - 2026-11-09
+
+- PenguLOD now owns the complete product identity: desktop and CLI projects, generated plugins,
+  runtime data, asset folders, manifests, logs and in-game menus use PenguLOD names.
+- Added a matching PenguLOD SKSE package with separate builds for supported Skyrim runtimes.
+  Generator and runtime share one release version; AnvilLOD credits and source history remain.
+- Preserved settings import, old grass/texture manifest readers and legacy mesh cost reports.
+  The new runtime reads an older output set when no new runtime data is installed.
+- Added upgrade checks that prevent new generation or publication over an AnvilLOD-named output
+  set, detect the old runtime and exclude both generations of generated plugins from source scans.
+- Added an upgrade walkthrough. Existing settings and generated output are not renamed or installed
+  automatically. Use a fresh output set and the matching runtime for the first switch.
+
 ## [0.5.0-alpha.1] - 2026-11-09
 
 - Add saved-output cost reports and comparisons in the desktop and CLI. Count

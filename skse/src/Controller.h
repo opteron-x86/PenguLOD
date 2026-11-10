@@ -3,10 +3,10 @@
 #include <chrono>
 #include "DataFile.h"
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	/// Dynamic LOD: for references whose enable state changes while playing (quest-built or -destroyed places),
-	/// AnvilLOD leaves them out of the static LOD blocks and this controller draws their LOD mesh instead, only
+	/// PenguLOD leaves them out of the static LOD blocks and this controller draws their LOD mesh instead, only
 	/// while the reference is enabled, outside the loaded cells and within range.
 	///
 	/// Grid objects (DynDOLOD's Grid column: water planes, waterfalls, creeks, fires, windmills, ships) have no
@@ -16,7 +16,7 @@ namespace AnvilLOD
 	public:
 		static Controller& Get();
 
-		/// kDataLoaded: read AnvilLOD.dyn and resolve plugin + local FormIDs against the current load order.
+		/// kDataLoaded: read PenguLOD.dyn and resolve plugin + local FormIDs against the current load order.
 		void OnDataLoaded();
 		void ClearCityNoGrass();
 		/// Game loaded / new game: drop everything we attached, it's rebuilt on the next update.
@@ -63,11 +63,11 @@ namespace AnvilLOD
 			bool                           water{ false };
 			bool                           critter{ false };    // a bird or other critter model: drawn only while the animation is on
 			bool                           underside{ false };  // a child worldspace's terrain underside: drawn whenever the player is in `world`
-			bool                           copy{ false };       // a Parent > Child copy (AnvilLOD.copies): drawn while the player is in `world`, inside the loaded cells
+			bool                           copy{ false };       // a Parent > Child copy (PenguLOD.copies): drawn while the player is in `world`, inside the loaded cells
 			bool                           childCell{ false };  // ... and the child worldspace has a cell here
 			bool                           glow{ false };       // a window glow mesh: its emissive multiple follows the hour
 			bool                           standIn{ false };    // a parent-worldspace stand-in for a real object of the city worldspace
-			bool                           nativeBacked{ false };  // a real reference in AnvilLOD.esp draws it in its own worldspace
+			bool                           nativeBacked{ false };  // a real reference in PenguLOD.esp draws it in its own worldspace
 			std::vector<RE::BSShaderProperty*> scrollProps;  // water copies: the shader properties whose texture offset is scrolled
 			std::vector<std::pair<RE::BSLightingShaderProperty*, float>> glowProps;  // shader properties of the drawn clone and their own emissive multiple
 			RE::NiPointer<RE::NiAVObject>  node;
@@ -97,7 +97,7 @@ namespace AnvilLOD
 		RE::NiNode* Template(std::uint32_t a_mesh);
 		static std::int32_t LoadedGridHalf();
 
-		/// A grid object that is a real reference in AnvilLOD.esp: its enable state follows the vanilla reference it stands for.
+		/// A grid object that is a real reference in PenguLOD.esp: its enable state follows the vanilla reference it stands for.
 		struct NativeItem
 		{
 			RE::FormID source{ 0 };
@@ -106,7 +106,7 @@ namespace AnvilLOD
 			bool       opposite{ false };
 			bool       initiallyDisabled{ false };
 			bool       nearOnly{ false };  // only enabled within the near grid distance
-			bool       effects{ false };   // from AnvilLOD Effects.esp (fires, candles, streams): only ever enabled close to the player
+			bool       effects{ false };   // from PenguLOD Effects.esp (fires, candles, streams): only ever enabled close to the player
 			float      x{ 0 };
 			float      y{ 0 };
 		};

@@ -29,26 +29,26 @@ assert p.name=='linux-x64' and p.is_relative_to(dist), 'Package output must be a
 CHECK
 rm -rf -- "$PENGULOD_PACKAGE_DIR"
 mkdir -p "$PENGULOD_PACKAGE_DIR"
-"$DOTNET" publish src/AnvilLOD.Cli/AnvilLOD.Cli.csproj -c Release -r linux-x64 \
+"$DOTNET" publish src/PenguLOD.Cli/PenguLOD.Cli.csproj -c Release -r linux-x64 \
     --self-contained true -o "$PENGULOD_PACKAGE_DIR" --disable-build-servers \
     -m:1 -nr:false -p:UseSharedCompilation=false "${RESTORE_ARGS[@]}"
-"$DOTNET" publish src/AnvilLOD.Desktop/AnvilLOD.Desktop.csproj -c Release -r linux-x64 \
+"$DOTNET" publish src/PenguLOD.Desktop/PenguLOD.Desktop.csproj -c Release -r linux-x64 \
     --self-contained true -o "$PENGULOD_PACKAGE_DIR" --disable-build-servers \
     -m:1 -nr:false -p:UseSharedCompilation=false "${RESTORE_ARGS[@]}"
 cp LICENSE.txt VERSION UPSTREAM_VERSION "$PENGULOD_PACKAGE_DIR"/
 cp assets/pengulod-256.png "$PENGULOD_PACKAGE_DIR"/pengulod.png
-cp tools/run-pengulod.sh tools/run-anvillod.sh tools/install-desktop.sh tools/repair-pglite-paths.py "$PENGULOD_PACKAGE_DIR"/
+cp tools/run-pengulod.sh tools/install-desktop.sh tools/repair-pglite-paths.py "$PENGULOD_PACKAGE_DIR"/
 cp packaging/README-LINUX.md "$PENGULOD_PACKAGE_DIR"/README-LINUX.md
 mkdir -p "$PENGULOD_PACKAGE_DIR/docs"
 # Ship user documentation; contributor and release-maintenance guides stay in source.
-for guide in USER-GUIDE SETTINGS TOOLS REPORTS-AND-OUTPUTS GRASS TEXTURES TERRAIN TREES OBJECTS RESOURCE-PACKS MODEL-SUPPORT MATERIALS SEASONS ATLASES PIPELINE CLI DIAGNOSTICS TROUBLESHOOTING COMPUTE PACKAGING PROVENANCE ROADMAP; do
+for guide in USER-GUIDE UPGRADING SETTINGS TOOLS REPORTS-AND-OUTPUTS GRASS TEXTURES TERRAIN TREES OBJECTS RESOURCE-PACKS MODEL-SUPPORT MATERIALS SEASONS ATLASES PIPELINE CLI DIAGNOSTICS TROUBLESHOOTING COMPUTE PACKAGING PROVENANCE ROADMAP; do
     cp "docs/$guide.md" "$PENGULOD_PACKAGE_DIR/docs/"
 done
 mkdir -p "$PENGULOD_PACKAGE_DIR"/backends/fasterngio
 cp -a .tools/fasterngio-runtime/. "$PENGULOD_PACKAGE_DIR"/backends/fasterngio/
-chmod +x "$PENGULOD_PACKAGE_DIR"/run-pengulod.sh "$PENGULOD_PACKAGE_DIR"/run-anvillod.sh "$PENGULOD_PACKAGE_DIR"/install-desktop.sh
-ANVILLOD_SDK_DIR="$(dirname -- "$(readlink -f "$DOTNET")")" python3 tools/collect-licenses.py
+chmod +x "$PENGULOD_PACKAGE_DIR"/run-pengulod.sh "$PENGULOD_PACKAGE_DIR"/install-desktop.sh
+PENGULOD_SDK_DIR="$(dirname -- "$(readlink -f "$DOTNET")")" python3 tools/collect-licenses.py
 "$PENGULOD_PACKAGE_DIR/PenguLOD" --version
 "$PENGULOD_PACKAGE_DIR/PenguLOD.Desktop" --version
 tar -czf "dist/PenguLOD-$version-linux-x64.tar.gz" -C "$(dirname -- "$PENGULOD_PACKAGE_DIR")" linux-x64
-printf '%s\n' "Desktop: $PENGULOD_PACKAGE_DIR/run-pengulod.sh" "CLI: $PENGULOD_PACKAGE_DIR/PenguLOD" "Archive: $ANVILLOD_ROOT/dist/PenguLOD-$version-linux-x64.tar.gz"
+printf '%s\n' "Desktop: $PENGULOD_PACKAGE_DIR/run-pengulod.sh" "CLI: $PENGULOD_PACKAGE_DIR/PenguLOD" "Archive: $PENGULOD_ROOT/dist/PenguLOD-$version-linux-x64.tar.gz"

@@ -1,8 +1,8 @@
 #pragma once
 
-namespace AnvilLOD
+namespace PenguLOD
 {
-	/// Settings from Data\SKSE\Plugins\AnvilLOD.ini (all optional).
+	/// Settings from Data\SKSE\Plugins\PenguLOD.ini (all optional).
 	struct Settings
 	{
 		bool          enabled{ true };
@@ -16,7 +16,7 @@ namespace AnvilLOD
 		bool          waterPlanes{ true };          // includes meshes with the water shader (lakes, pools, streams)
 		float         nearGridDistance{ 40000.0f }; // "Near LOD" objects
 		float         farGridDistance{ 120000.0f }; // "Far LOD" / "Far Full" objects
-		float         effectsDistance{ 20000.0f };  // fires, candles and streams of AnvilLOD Effects.esp are only enabled this close to the player
+		float         effectsDistance{ 20000.0f };  // fires, candles and streams of PenguLOD Effects.esp are only enabled this close to the player
 		bool          driveSequences{ true };       // play the transform sequences of drawn clones ourselves (windmill blades, water wheels)
 		bool          tickManagers{ false };        // Disabled: clone sequence times can be uninitialized on 1.6.1170. bTickEngineManagers deliberately ignores the legacy bTickManagers key.
 		bool          animate{ false };             // EXPERIMENTAL: keep grid objects animated (bAnimateExperimental)
@@ -25,11 +25,11 @@ namespace AnvilLOD
 		float         waterScrollSpeed{ 0.012f };   // water texture tiles per second
 		float         waterOpacity{ 1.0f };         // multiplies the opacity of the water copies around the walled cities (live, from the menu)
 
-		// Terrain underside of child worldspaces (AnvilLOD.underside), drawn only while the player is in that worldspace
+		// Terrain underside of child worldspaces (PenguLOD.underside), drawn only while the player is in that worldspace
 		bool          undersides{ true };
 		bool          cityGrass{ true };            // real grass in the walled cities' child worldspaces (clears their NoGrass flag when the game loads; needs a restart)
 
-		// Parent > Child copies (AnvilLOD.copies): the objects around Whiterun, Solitude, Windhelm and Riften that their child
+		// Parent > Child copies (PenguLOD.copies): the objects around Whiterun, Solitude, Windhelm and Riften that their child
 		// worldspaces leave out, drawn while the player is in the city and the object is inside the loaded cells
 		// Window glow (DynDOLOD's <model>glow_lod_N.nif meshes), drawn beyond the loaded cells and lit by the hour
 		bool          glowWindows{ true };
@@ -50,6 +50,6 @@ namespace AnvilLOD
 
 		static Settings& Get();
 		void             Load();
-		bool             Save() const;  // writes the [Dynamic] values back to AnvilLOD.ini
+		bool             Save() const;  // writes the [Dynamic] values back to PenguLOD.ini
 	};
 }

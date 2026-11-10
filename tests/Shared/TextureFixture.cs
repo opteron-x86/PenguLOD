@@ -1,18 +1,18 @@
 using System.Numerics;
-using AnvilLOD.Core.World;
-using AnvilLOD.Meshes;
-using AnvilLOD.Meshes.Authoring;
-using AnvilLOD.Plugins;
-using AnvilLOD.Textures;
+using PenguLOD.Core.World;
+using PenguLOD.Meshes;
+using PenguLOD.Meshes.Authoring;
+using PenguLOD.Plugins;
+using PenguLOD.Textures;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 
-namespace AnvilLOD.Testing;
+namespace PenguLOD.Testing;
 
 public sealed class TextureFixture : IDisposable
 {
-    public string Root { get; } = Path.Combine(Path.GetTempPath(), "anvillod-textures-" + Guid.NewGuid().ToString("N"));
+    public string Root { get; } = Path.Combine(Path.GetTempPath(), "pengulod-textures-" + Guid.NewGuid().ToString("N"));
     public string Data => Path.Combine(Root, "Game", "Data");
     public string Output => Path.Combine(Root, "Textures");
     public string Resources => Path.Combine(Root, "DynDOLOD");

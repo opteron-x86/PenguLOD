@@ -8,10 +8,10 @@
 
 #include <Windows.h>
 
-namespace AnvilLOD::Menu
+namespace PenguLOD::Menu
 {
 	// A small client for SKSE Menu Framework's exports (the same names its public consumer header uses:
-	// AddSectionItem plus the cimgui "ig*" functions). Resolved by name at runtime, so AnvilLOD has no link-time
+	// AddSectionItem plus the cimgui "ig*" functions). Resolved by name at runtime, so PenguLOD has no link-time
 	// dependency on the framework and works without it. Every call is null-checked.
 	namespace Smf
 	{
@@ -133,10 +133,10 @@ namespace AnvilLOD::Menu
 			auto& lod = LodDistances::Get();
 			Smf::TextWrapped("LOD, fade and grass distances, applied to the game straight away. The LOD distances are the ones DynDOLOD's "
 							 "MCM changes; values saved in DynDOLOD's MCM file are read at startup, and saving here "
-							 "writes them to SKSE\\Plugins\\AnvilLOD.ini, which wins from then on.");
+							 "writes them to SKSE\\Plugins\\PenguLOD.ini, which wins from then on.");
 			if (lod.DeferringToDynDolod()) {
 				Smf::TextWrapped("DynDOLOD.dll is installed and manages these settings. Changes here last until "
-								 "DynDOLOD applies its own again. Set bOverrideDynDOLOD=1 in AnvilLOD.ini to let AnvilLOD take over.");
+								 "DynDOLOD applies its own again. Set bOverrideDynDOLOD=1 in PenguLOD.ini to let PenguLOD take over.");
 			}
 			Smf::Separator();
 			const char* group = nullptr;
@@ -159,7 +159,7 @@ namespace AnvilLOD::Menu
 				Smf::TextDisabled("    %s", e.help);
 			}
 			Smf::Separator();
-			if (Smf::Button("Save to AnvilLOD.ini")) g_status = lod.SaveToIni() ? "Saved." : "Could not write AnvilLOD.ini (see AnvilLOD.log).";
+			if (Smf::Button("Save to PenguLOD.ini")) g_status = lod.SaveToIni() ? "Saved." : "Could not write PenguLOD.ini (see PenguLOD.log).";
 			Smf::SameLine();
 			if (Smf::Button("Reload from files")) {
 				lod.Apply("menu reload");
@@ -189,7 +189,7 @@ namespace AnvilLOD::Menu
 							 "leave out (DynDOLOD copies them into the city with a plugin). They are drawn while you are in the city, inside the loaded "
 							 "cells. Generate with \"Parent > Child copies\" ticked.");
 			if (c.CopyCount() == 0) {
-				Smf::TextDisabled("No AnvilLOD.copies found.");
+				Smf::TextDisabled("No PenguLOD.copies found.");
 			} else {
 				Smf::Text("Copies: %zu references, %zu drawn now (you are in cell %d, %d)", c.CopyCount(), c.CopiesShown(), static_cast<int>(c.PlayerCellX()), static_cast<int>(c.PlayerCellY()));
 			}
@@ -197,7 +197,7 @@ namespace AnvilLOD::Menu
 			Smf::TextWrapped("Window glow: the glowing windows of farmhouses, inns and forts beyond the loaded cells, lit from dusk to dawn. "
 							 "Generate with \"Window glow\" ticked.");
 			if (c.GlowCount() == 0) {
-				Smf::TextDisabled("No window glow in AnvilLOD.dyn.");
+				Smf::TextDisabled("No window glow in PenguLOD.dyn.");
 			} else {
 				Smf::Text("Glow windows: %zu references, %zu drawn now, glow now %.0f%%", c.GlowCount(), c.GlowShown(), c.GlowFactor() * 100.0f);
 				if (c.GlowShown() == 0 && c.GlowFactor() > 0.001f && s.glowWindows) {
@@ -213,14 +213,14 @@ namespace AnvilLOD::Menu
 			Smf::TextDisabled("    Game hours (24 h clock): the windows brighten between the first two and fade between the last two.");
 			Smf::Separator();
 			Smf::Checkbox("Real grass in the walled cities' surroundings (restart needed)", &s.cityGrass);
-			Smf::TextDisabled("    Whiterun's worldspace switches the real grass off, so the ground around the walls is bare dirt. This turns it back on, as in the open country. Takes effect the next time the game starts; Save to AnvilLOD.ini keeps it.");
+			Smf::TextDisabled("    Whiterun's worldspace switches the real grass off, so the ground around the walls is bare dirt. This turns it back on, as in the open country. Takes effect the next time the game starts; Save to PenguLOD.ini keeps it.");
 			Smf::Checkbox("Draw Parent > Child copies", &s.parentCopies);
 			Smf::Checkbox("Also where the city worldspace has no cell (experimental)", &s.parentCopyAllCells);
 			int extraCells = s.parentCopyExtraCells;
 			if (Smf::SliderInt("Extra cells beyond the loaded ones", &extraCells, 0, 6)) s.parentCopyExtraCells = extraCells;
 			Smf::TextDisabled("    For testing: draw copies further out. If objects still vanish near the walls, raise it until they stay.");
 			Smf::Separator();
-			if (Smf::Button("Save to AnvilLOD.ini##dyn")) g_status = s.Save() ? "Saved." : "Could not write AnvilLOD.ini.";
+			if (Smf::Button("Save to PenguLOD.ini##dyn")) g_status = s.Save() ? "Saved." : "Could not write PenguLOD.ini.";
 			if (!g_status.empty()) Smf::Text("%s", g_status.c_str());
 		}
 
@@ -229,10 +229,10 @@ namespace AnvilLOD::Menu
 			auto& s = Settings::Get();
 			auto& c = Controller::Get();
 			Smf::TextWrapped("Water planes, waterfalls, creeks, fires, windmills and ships: objects DynDOLOD's rules mark with a "
-							 "Grid and no static LOD. AnvilLOD draws them beyond the loaded cells and keeps them animated. "
+							 "Grid and no static LOD. PenguLOD draws them beyond the loaded cells and keeps them animated. "
 							 "Mods' _dyndolod_lod meshes (CS Water Mod, DynDOLOD Resources) are used when present.");
 			if (c.GridCount() == 0) {
-				Smf::TextDisabled("No grid objects in AnvilLOD.dyn - generate with \"Water and animated distant objects\" ticked.");
+				Smf::TextDisabled("No grid objects in PenguLOD.dyn - generate with \"Water and animated distant objects\" ticked.");
 			}
 			Smf::Text("Grid objects: %zu, animated now: %zu", c.GridCount(), c.AnimatedCount());
 			Smf::Separator();
@@ -243,7 +243,7 @@ namespace AnvilLOD::Menu
 			Smf::SliderFloat("Far grid distance", &s.farGridDistance, 20000.0f, 400000.0f, "%.0f");
 			Smf::TextDisabled("    Waterfalls, windmills, water wheels, ships (DynDOLOD \"Far LOD\" / \"Far Full\").");
 			Smf::SliderFloat("Fires, candles and streams distance", &s.effectsDistance, 8192.0f, 60000.0f, "%.0f");
-			Smf::TextDisabled("    The real fires, candles and streams of AnvilLOD Effects.esp are only on this close to you (more crashed the renderer).");
+			Smf::TextDisabled("    The real fires, candles and streams of PenguLOD Effects.esp are only on this close to you (more crashed the renderer).");
 			Smf::Checkbox("Animate them (EXPERIMENTAL - may crash)", &s.animate);
 			Smf::TextDisabled("    Waterfall flow and windmill blades. Takes effect for objects drawn after the change (use Redraw now).");
 			int fps = static_cast<int>(s.animationFps);
@@ -259,18 +259,18 @@ namespace AnvilLOD::Menu
 				g_status = "Redrawing with the current settings.";
 			}
 			Smf::SameLine();
-			if (Smf::Button("Save to AnvilLOD.ini##grid")) g_status = s.Save() ? "Saved." : "Could not write AnvilLOD.ini.";
+			if (Smf::Button("Save to PenguLOD.ini##grid")) g_status = s.Save() ? "Saved." : "Could not write PenguLOD.ini.";
 			if (!g_status.empty()) Smf::Text("%s", g_status.c_str());
 		}
 
 		void __stdcall RenderQualityLayers()
 		{
 			auto& l = Layers::Get();
-			Smf::TextWrapped("Hide parts of the distant landscape to gain frame rate, per LOD level. These are layers AnvilLOD wrote into "
+			Smf::TextWrapped("Hide parts of the distant landscape to gain frame rate, per LOD level. These are layers PenguLOD wrote into "
 							 "the LOD files when you generated. Hiding one saves drawing cost only: memory use and load times are set by what "
 							 "was generated, and a layer that was not generated is not listed.");
 			if (!l.AnyFound()) {
-				Smf::TextDisabled("No AnvilLOD layers found in the loaded LOD yet. Generate with grass or 3D trees on, load a save, and look at the landscape.");
+				Smf::TextDisabled("No PenguLOD layers found in the loaded LOD yet. Generate with grass or 3D trees on, load a save, and look at the landscape.");
 			}
 			Smf::SeparatorText("Presets");
 			if (Smf::Button("Max")) l.Preset(0);
@@ -288,7 +288,7 @@ namespace AnvilLOD::Menu
 						l.grassTiers = tiers;
 						l.Changed();
 					}
-					Smf::TextDisabled("    %d of %d steps: %d%% of the grass you generated, spread evenly over the ground. Needs LOD generated with AnvilLOD 0.2.63 or newer; older LOD has one step and always shows it.",
+					Smf::TextDisabled("    %d of %d steps: %d%% of the grass you generated, spread evenly over the ground. Needs LOD generated with PenguLOD 0.2.63 or newer; older LOD has one step and always shows it.",
 						l.grassTiers, Layers::kGrassTiers, l.grassTiers * 100 / Layers::kGrassTiers);
 				}
 			Smf::SeparatorText("Layers");
@@ -309,7 +309,7 @@ namespace AnvilLOD::Menu
 			Smf::TextDisabled("LOD32 has no layers: the game only draws it on the world map. What it holds is set when you generate "
 								  "(Map objects, Trees on the map), so it is not listed here even when it was generated.");
 			Smf::Separator();
-			if (Smf::Button("Save to AnvilLOD.ini##layers")) g_status = l.Save() ? "Saved." : "Could not write AnvilLOD.ini (see AnvilLOD.log).";
+			if (Smf::Button("Save to PenguLOD.ini##layers")) g_status = l.Save() ? "Saved." : "Could not write PenguLOD.ini (see PenguLOD.log).";
 			if (!g_status.empty()) Smf::Text("%s", g_status.c_str());
 		}
 
@@ -322,7 +322,7 @@ namespace AnvilLOD::Menu
 							 "so grass and 3D trees at the far levels go first. It needs a few seconds under the target before it acts, and waits longer "
 							 "each time a step back up is followed by another step down.");
 			Smf::Separator();
-#if ANVILLOD_RUNTIME_LINE == 14
+#if PENGULOD_RUNTIME_LINE == 14
 			Smf::TextDisabled("Not available in Skyrim VR: the frame rate can't be read there.");
 #else
 			Smf::Checkbox("Adaptive quality", &s.adaptiveQuality);
@@ -345,7 +345,7 @@ namespace AnvilLOD::Menu
 				g_status = "Layers back to Max.";
 			}
 			Smf::SameLine();
-			if (Smf::Button("Save to AnvilLOD.ini##adaptive")) g_status = s.Save() ? "Saved." : "Could not write AnvilLOD.ini.";
+			if (Smf::Button("Save to PenguLOD.ini##adaptive")) g_status = s.Save() ? "Saved." : "Could not write PenguLOD.ini.";
 			if (!g_status.empty()) Smf::Text("%s", g_status.c_str());
 			Smf::TextDisabled("While it is on it takes over the layer checkboxes; turning it off puts them back to Max.");
 #endif
@@ -353,10 +353,10 @@ namespace AnvilLOD::Menu
 
 		void __stdcall RenderAbout()
 		{
-			Smf::Text("AnvilLOD %s", ANVILLOD_VERSION_STRING);
-#if ANVILLOD_RUNTIME_LINE == 17
+			Smf::Text("PenguLOD %s", PENGULOD_VERSION_STRING);
+#if PENGULOD_RUNTIME_LINE == 17
 			Smf::Text("Build: game versions newer than 1.6.1170 (Skyrim 1.7.x)");
-#elif ANVILLOD_RUNTIME_LINE == 14
+#elif PENGULOD_RUNTIME_LINE == 14
 			Smf::Text("Build: Skyrim VR 1.4.15");
 #else
 			Smf::Text("Build: game versions SE 1.5.97 to AE 1.6.1170");
@@ -367,7 +367,7 @@ namespace AnvilLOD::Menu
 				LodDistances::PluginInstalled("SkyrimLODFixes.dll") ? "installed" : "not installed (recommended)");
 			Smf::Text("DynDOLOD.dll: %s", LodDistances::PluginInstalled("DynDOLOD.dll") ? "installed" : "not installed");
 			Smf::Separator();
-			Smf::TextDisabled("Log: Documents\\My Games\\Skyrim Special Edition\\SKSE\\AnvilLOD.log");
+			Smf::TextDisabled("Log: Documents\\My Games\\Skyrim Special Edition\\SKSE\\PenguLOD.log");
 		}
 	}
 
@@ -376,15 +376,15 @@ namespace AnvilLOD::Menu
 	void Register()
 	{
 		if (!Smf::Module()) {
-			logger::info("No SKSE Menu Framework (or compatible) found; the in-game menu is off. Settings are in AnvilLOD.ini.");
+			logger::info("No SKSE Menu Framework (or compatible) found; the in-game menu is off. Settings are in PenguLOD.ini.");
 			return;
 		}
-		const bool ok = Smf::AddSectionItem("AnvilLOD/Distances & Grass", RenderLodDistances)
-					 && Smf::AddSectionItem("AnvilLOD/Dynamic LOD", RenderDynamic)
-					 && Smf::AddSectionItem("AnvilLOD/Quality Layers", RenderQualityLayers)
-					 && Smf::AddSectionItem("AnvilLOD/Water & Animated Objects", RenderGridObjects)
-					 && Smf::AddSectionItem("AnvilLOD/Adaptive Quality", RenderAdaptive)
-					 && Smf::AddSectionItem("AnvilLOD/About", RenderAbout);
-		logger::info("SKSE Menu Framework {:.1f}: {}", Smf::Version(), ok ? "AnvilLOD pages added" : "AddSectionItem not exported, menu off");
+		const bool ok = Smf::AddSectionItem("PenguLOD/Distances & Grass", RenderLodDistances)
+					 && Smf::AddSectionItem("PenguLOD/Dynamic LOD", RenderDynamic)
+					 && Smf::AddSectionItem("PenguLOD/Quality Layers", RenderQualityLayers)
+					 && Smf::AddSectionItem("PenguLOD/Water & Animated Objects", RenderGridObjects)
+					 && Smf::AddSectionItem("PenguLOD/Adaptive Quality", RenderAdaptive)
+					 && Smf::AddSectionItem("PenguLOD/About", RenderAbout);
+		logger::info("SKSE Menu Framework {:.1f}: {}", Smf::Version(), ok ? "PenguLOD pages added" : "AddSectionItem not exported, menu off");
 	}
 }

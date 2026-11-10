@@ -36,7 +36,7 @@ changes that preserve size and timestamps. Retained blocks that disagree with a 
 output hash are rebuilt; a damaged block outside the selected scope stops publication.
 
 Before generation, disable the previously installed **object LOD** mod. The scan excludes
-PenguLOD/AnvilLOD-owned references and terrain support meshes even when previous output is
+PenguLOD/PenguLOD-owned references and terrain support meshes even when previous output is
 enabled, and preflight reports installed output plugins independently of the destination.
 After generation, install and enable the matching texture, terrain and object outputs.
 Generating into a separate folder does not update an installed mod automatically. Purple

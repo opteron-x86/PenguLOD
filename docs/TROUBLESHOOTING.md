@@ -24,10 +24,10 @@ at the same location, time and weather. Follow the [transition checks](DIAGNOSTI
 
 ## No large-reference master in the output
 
-`AnvilLOD.esm` contains additional large-reference lists for Skyrim's full-detail
+`PenguLOD.esm` contains additional large-reference lists for Skyrim's full-detail
 object grid. It is separate from object and tree LOD meshes. The generator omits it
 when large references are disabled or no additional eligible references are found;
-read `AnvilLOD Large References.txt` for the result.
+read `PenguLOD Large References.txt` for the result.
 
 Older builds counted entries from an enabled previous generated master as source data,
 which could cause the replacement master to be omitted. Disable the previous object
@@ -37,8 +37,8 @@ plugins. Replace the installed object output as a complete mod after generation.
 
 ## Trees or grass disappear after a quality comparison
 
-The AnvilLOD runtime's **Quality Layers** controls persist in
-`Data/SKSE/Plugins/AnvilLOD.ini` when saved. Restore the layers used for comparison before
+The PenguLOD runtime's **Quality Layers** controls persist in
+`Data/SKSE/Plugins/PenguLOD.ini` when saved. Restore the layers used for comparison before
 judging new output. Disabling **3D trees → LOD4** hides that near LOD layer without
 substituting billboard cards; the farther card layers start at their own block distances.
 Changing the generator version does not reset these game-side settings.

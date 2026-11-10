@@ -1,13 +1,14 @@
+#include "RuntimePaths.h"
 #include "Controller.h"
 #include "Settings.h"
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	namespace
 	{
 		constexpr float kCellSize = 4096.0f;
 
-		/// Placed-reference rotation R = Rx(-x) * Ry(-y) * Rz(-z) (column vectors), the convention AnvilLOD's
+		/// Placed-reference rotation R = Rx(-x) * Ry(-y) * Rz(-z) (column vectors), the convention PenguLOD's
 		/// static LOD uses and that was verified against LODGen/DynDOLOD output. NiMatrix3 is entry[row][col].
 		RE::NiMatrix3 ReferenceRotation(float a_x, float a_y, float a_z)
 		{
@@ -100,7 +101,7 @@ namespace AnvilLOD
 			}
 			CollectControllers(a_object, a_out);
 			if (auto* geom = a_object->AsGeometry()) {
-#if ANVILLOD_RUNTIME_LINE == 17 || ANVILLOD_RUNTIME_LINE == 14
+#if PENGULOD_RUNTIME_LINE == 17 || PENGULOD_RUNTIME_LINE == 14
 				CollectControllers(geom->GetGeometryRuntimeData().shaderProperty.get(), a_out);
 #else
 				CollectControllers(geom->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get(), a_out);
@@ -273,13 +274,13 @@ namespace AnvilLOD
 		LoadNative();
 	}
 
-	/// AnvilLOD.native, written when the generator turned waterfalls, windmill fans and water wheels into real references in AnvilLOD.esp
+	/// PenguLOD.native, written when the generator turned waterfalls, windmill fans and water wheels into real references in PenguLOD.esp
 	/// (the engine animates real references; a model attached by a plugin it never updates). Their enable state follows the vanilla
 	/// reference they stand for: the job DynDOLOD's script or DLL does for its own references.
 	void Controller::LoadNative()
 	{
 		NativeFile file;
-		if (!file.Read("Data/SKSE/Plugins/AnvilLOD/AnvilLOD.native")) {
+		if (!file.Read(RuntimePaths::DataFile("native"))) {
 			return;
 		}
 		auto* data = RE::TESDataHandler::GetSingleton();
@@ -292,7 +293,7 @@ namespace AnvilLOD
 			item.source = data->LookupFormID(e.sourceLocalId, file.strings[e.sourcePlugin]);
 			item.native = data->LookupFormID(e.nativeLocalId, file.strings[e.nativePlugin]);
 			if (item.native == 0 || item.source == 0) {
-				++missing;  // AnvilLOD.esp is not enabled, or a plugin is gone
+				++missing;  // PenguLOD.esp is not enabled, or a plugin is gone
 				continue;
 			}
 			if (e.parentPlugin != NativeEntry::kNone) {
@@ -302,23 +303,23 @@ namespace AnvilLOD
 			item.initiallyDisabled = (e.flags & NativeEntry::kInitiallyDisabled) != 0;
 			item.nearOnly = (e.flags & NativeEntry::kNear) != 0;
 			// Keep particle effects near the player to avoid overloading the renderer with distant systems.
-			item.effects = file.strings[e.nativePlugin].rfind("AnvilLOD Effects", 0) == 0;
+			item.effects = (file.strings[e.nativePlugin].rfind("PenguLOD Effects", 0) == 0 || file.strings[e.nativePlugin].rfind("AnvilLOD Effects", 0) == 0);
 			item.x = e.x;
 			item.y = e.y;
 			_nearNatives += item.nearOnly ? 1 : 0;
 			_natives.push_back(item);
 		}
-		logger::info("Native grid objects: {} real references in AnvilLOD.esp follow the enable state of their vanilla references ({} of them only within the near grid distance), {} skipped (plugin not in the load order)", _natives.size(), _nearNatives, missing);
+		logger::info("Native grid objects: {} real references in PenguLOD.esp follow the enable state of their vanilla references ({} of them only within the near grid distance), {} skipped (plugin not in the load order)", _natives.size(), _nearNatives, missing);
 	}
 
-	/// AnvilLOD.copies, written by the generator when "Parent > Child copies" is on: the references around Whiterun, Solitude, Windhelm and
+	/// PenguLOD.copies, written by the generator when "Parent > Child copies" is on: the references around Whiterun, Solitude, Windhelm and
 	/// Riften that those walled cities' child worldspaces leave out, so the view over the wall is empty. DynDOLOD puts copies of them into
 	/// the child worldspace with a plugin; here the model is attached at the reference's place while the player is in that worldspace
 	/// and the object is inside the loaded cells (outside them the parent's LOD is drawn).
 	void Controller::LoadCopies()
 	{
 		CopyFile file;
-		if (!file.Read("Data/SKSE/Plugins/AnvilLOD/AnvilLOD.copies")) {
+		if (!file.Read(RuntimePaths::DataFile("copies"))) {
 			return;
 		}
 		auto* data = RE::TESDataHandler::GetSingleton();
@@ -355,13 +356,13 @@ namespace AnvilLOD
 		logger::info("Parent > Child copies: {} references around walled cities, {} skipped: plugin not loaded", _copyCount, missingWorld);
 	}
 
-	/// AnvilLOD.underside, written by the generator: child worldspaces (Markarth, Sovngarde, Deepwood Redoubt, ...) share cell
+	/// PenguLOD.underside, written by the generator: child worldspaces (Markarth, Sovngarde, Deepwood Redoubt, ...) share cell
 	/// coordinates with their parent, so an always-enabled underside reference there is drawn in the parent as a slab.
 	/// DynDOLOD enables such references from a script; here the underside is simply drawn while the player is in that worldspace.
 	/// One line per worldspace: plugin|local FormID (hex)|model relative to Data\meshes|EditorID.
 	void Controller::LoadUndersides()
 	{
-		std::ifstream in("Data/SKSE/Plugins/AnvilLOD/AnvilLOD.underside");
+		std::ifstream in(RuntimePaths::DataFile("underside"));
 		auto*         data = RE::TESDataHandler::GetSingleton();
 		if (!in || !data) {
 			return;
@@ -386,14 +387,14 @@ namespace AnvilLOD
 				start = bar + 1;
 			}
 			if (parts.size() < 3) {
-				logger::warn("AnvilLOD.underside: bad line: {}", line);
+				logger::warn("PenguLOD.underside: bad line: {}", line);
 				continue;
 			}
 			std::uint32_t localId = 0;
 			try {
 				localId = static_cast<std::uint32_t>(std::stoul(parts[1], nullptr, 16));
 			} catch (const std::exception&) {
-				logger::warn("AnvilLOD.underside: bad FormID in line: {}", line);
+				logger::warn("PenguLOD.underside: bad FormID in line: {}", line);
 				continue;
 			}
 			Item item;
@@ -404,7 +405,7 @@ namespace AnvilLOD
 			}
 			_meshes.push_back(parts[2]);
 			item.mesh = static_cast<std::uint32_t>(_meshes.size() - 1);
-			item.pos = RE::NiPoint3(0.0f, 0.0f, -500.0f);  // where DynDOLOD and AnvilLOD.esp place it
+			item.pos = RE::NiPoint3(0.0f, 0.0f, -500.0f);  // where DynDOLOD and PenguLOD.esp place it
 			item.rot = ReferenceRotation(0.0f, 0.0f, 0.0f);
 			item.underside = true;
 			_byWorld[item.world].push_back(_items.size());
@@ -417,7 +418,7 @@ namespace AnvilLOD
 	void Controller::LoadDynamic()
 	{
 		DataFile file;
-		if (!file.Read("Data/SKSE/Plugins/AnvilLOD/AnvilLOD.dyn")) {
+		if (!file.Read(RuntimePaths::DataFile("dyn"))) {
 			return;
 		}
 
@@ -547,7 +548,7 @@ namespace AnvilLOD
 	{
 		void EnableRef(RE::TESObjectREFR* a_ref)
 		{
-#if ANVILLOD_RUNTIME_LINE == 17 || ANVILLOD_RUNTIME_LINE == 14
+#if PENGULOD_RUNTIME_LINE == 17 || PENGULOD_RUNTIME_LINE == 14
 			a_ref->Enable(false);
 #else
 			using func_t = void (*)(RE::TESObjectREFR*, bool);
@@ -616,7 +617,7 @@ namespace AnvilLOD
 		}
 		if (!_root) {
 			_root = RE::NiPointer<RE::NiNode>(RE::NiNode::Create());
-			_root->name = "AnvilLOD Dynamic LOD";
+			_root->name = "PenguLOD Dynamic LOD";
 		}
 		if (_root->parent != tes->objRoot) {
 			if (_root->parent) {
@@ -674,7 +675,7 @@ namespace AnvilLOD
 			return std::abs(a_item.cellX - a_pcx) <= reach && std::abs(a_item.cellY - a_pcy) <= reach;
 		}
 		if (a_item.nativeBacked && a_item.world == a_playerWorld) {
-			return false;  // its real reference draws it here (AnvilLOD.esp); the model is only for other worldspaces, a walled city
+			return false;  // its real reference draws it here (PenguLOD.esp); the model is only for other worldspaces, a walled city
 		}
 		if (a_item.grid ?(!settings.gridObjects || (a_item.water && !settings.waterPlanes)) : !settings.enabled) {
 			return false;
@@ -842,7 +843,7 @@ namespace AnvilLOD
 	{
 		RE::BSLightingShaderProperty* LightingProperty(RE::BSGeometry* a_geom)
 		{
-#if ANVILLOD_RUNTIME_LINE == 17 || ANVILLOD_RUNTIME_LINE == 14
+#if PENGULOD_RUNTIME_LINE == 17 || PENGULOD_RUNTIME_LINE == 14
 			auto* prop = a_geom->GetGeometryRuntimeData().shaderProperty.get();
 #else
 			auto* prop = a_geom->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get();
@@ -1208,7 +1209,7 @@ namespace AnvilLOD
 			auto& item = _items[i];
 			if (_shown.size() >= settings.maxShown) {
 				if (!_capWarned) {
-					logger::warn("Dynamic LOD: reached iMaxShown ({}), the {} farthest objects wanted are not drawn; raise it in the menu or AnvilLOD.ini", settings.maxShown, wanted.size());
+					logger::warn("Dynamic LOD: reached iMaxShown ({}), the {} farthest objects wanted are not drawn; raise it in the menu or PenguLOD.ini", settings.maxShown, wanted.size());
 					_capWarned = true;
 				}
 				return;

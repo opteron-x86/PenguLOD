@@ -14,5 +14,7 @@ a menu entry. Existing settings are imported once; generation outputs stay at th
 - [Dependencies and compatibility](docs/PROVENANCE.md), [license](LICENSE.txt) and [dependency inventory](THIRD-PARTY-PACKAGES.txt)
 
 Official releases target x64 glibc Linux, built on Ubuntu 24.04. Game-side dynamic features
-require the separately installed AnvilLOD SKSE plugin matching your Skyrim runtime.
-PenguLOD's application version and that game-plugin version are independent.
+require the separately installed PenguLOD SKSE plugin matching your Skyrim runtime.
+The generator and game plugin share a release version; select the DLL build for your Skyrim executable.
+
+For output made by earlier versions, read [Upgrading safely](docs/UPGRADING.md) before replacing installed mods.

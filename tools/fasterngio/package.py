@@ -9,7 +9,7 @@ import tarfile
 
 # Exclude local tooling and assistant instructions from corresponding-source archives.
 # Source code, build configuration, patches and license notices remain included.
-excluded_dirs = {'.git', 'build', '.anvillod-headless', '.codex', '.claude', '.agents', '__pycache__'}
+excluded_dirs = {'.git', 'build', '.pengulod-headless', '.codex', '.claude', '.agents', '__pycache__'}
 excluded_files = {'agents.md', 'agents.override.md', 'claude.md', 'claude.local.md', 'gemini.md'}
 
 
@@ -49,10 +49,10 @@ with tarfile.open(runtime / 'FasterNGIO-source.tar.gz', 'w:gz') as tar:
             tar.add(item, 'FasterNGIO/' + item.relative_to(source).as_posix())
     for item in (root / 'tools/fasterngio').rglob('*'):
         if distributable(item):
-            tar.add(item, 'anvillod-build/tools/fasterngio/' + item.relative_to(root / 'tools/fasterngio').as_posix())
-    tar.add(root / 'tools/build-fasterngio.sh', 'anvillod-build/tools/build-fasterngio.sh')
+            tar.add(item, 'pengulod-build/tools/fasterngio/' + item.relative_to(root / 'tools/fasterngio').as_posix())
+    tar.add(root / 'tools/build-fasterngio.sh', 'pengulod-build/tools/build-fasterngio.sh')
     for name in ['tools/build-native-windows.ps1', 'tools/windows-env.ps1', 'tools/windows/vcpkg.json']:
-        tar.add(root / name, 'anvillod-build/' + name)
+        tar.add(root / name, 'pengulod-build/' + name)
 (runtime / 'backend.json').write_text(json.dumps({
     'name': 'FasterNGIO', 'revision': '5a1bff6ad3e44b5b9c4b5acdd0663ae20860ca40',
     'gpu': False, 'source': 'https://github.com/panthuncia/FasterNGIO',

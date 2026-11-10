@@ -1,6 +1,7 @@
+#include "RuntimePaths.h"
 #include "DataFile.h"
 
-namespace AnvilLOD
+namespace PenguLOD
 {
 	namespace
 	{
@@ -49,12 +50,12 @@ namespace AnvilLOD
 
 		std::array<char, 4> magic{};
 		std::uint32_t       version = 0;
-		if (!r.Get(magic) || std::string_view(magic.data(), 4) != "ALCP"sv || !r.Get(version)) {
-			logger::error("{} is not an AnvilLOD copies file", a_path.string());
+		if (!r.Get(magic) || !RuntimePaths::Magic(std::string_view(magic.data(), 4), "PLCP", "ALCP") || !r.Get(version)) {
+			logger::error("{} is not an PenguLOD copies file", a_path.string());
 			return false;
 		}
 		if (version != 1) {
-			logger::error("{} has version {}, this plugin reads version 1 - update the AnvilLOD plugin or regenerate", a_path.string(), version);
+			logger::error("{} has version {}, this plugin reads version 1 - update the PenguLOD plugin or regenerate", a_path.string(), version);
 			return false;
 		}
 
@@ -98,12 +99,12 @@ namespace AnvilLOD
 
 		std::array<char, 4> magic{};
 		std::uint32_t       version = 0;
-		if (!r.Get(magic) || std::string_view(magic.data(), 4) != "ALNV"sv || !r.Get(version)) {
-			logger::error("{} is not an AnvilLOD native file", a_path.string());
+		if (!r.Get(magic) || !RuntimePaths::Magic(std::string_view(magic.data(), 4), "PLNV", "ALNV") || !r.Get(version)) {
+			logger::error("{} is not an PenguLOD native file", a_path.string());
 			return false;
 		}
 		if (version != 1 && version != 2) {
-			logger::error("{} has version {}, this plugin reads versions 1 and 2 - update the AnvilLOD plugin or regenerate", a_path.string(), version);
+			logger::error("{} has version {}, this plugin reads versions 1 and 2 - update the PenguLOD plugin or regenerate", a_path.string(), version);
 			return false;
 		}
 		std::uint32_t count = 0;
@@ -143,7 +144,7 @@ namespace AnvilLOD
 	{
 		std::ifstream in(a_path, std::ios::binary);
 		if (!in) {
-			logger::info("{} not found - no dynamic LOD (generate LOD with AnvilLOD first)", a_path.string());
+			logger::info("{} not found - no dynamic LOD (generate LOD with PenguLOD first)", a_path.string());
 			return false;
 		}
 		std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -151,13 +152,13 @@ namespace AnvilLOD
 
 		std::array<char, 4> magic{};
 		std::uint32_t       version = 0;
-		if (!r.Get(magic) || std::string_view(magic.data(), 4) != "ALDY"sv || !r.Get(version)) {
-			logger::error("{} is not an AnvilLOD dynamic LOD file", a_path.string());
+		if (!r.Get(magic) || !RuntimePaths::Magic(std::string_view(magic.data(), 4), "PLDY", "ALDY") || !r.Get(version)) {
+			logger::error("{} is not an PenguLOD dynamic LOD file", a_path.string());
 			return false;
 		}
 		// Version 2 added grid-object flags; the layout is the same, so version 1 files still load.
 		if (version < 1 || version > 2) {
-			logger::error("{} has version {}, this plugin reads versions 1-2 - update the AnvilLOD plugin or regenerate", a_path.string(), version);
+			logger::error("{} has version {}, this plugin reads versions 1-2 - update the PenguLOD plugin or regenerate", a_path.string(), version);
 			return false;
 		}
 
