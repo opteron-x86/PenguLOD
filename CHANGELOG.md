@@ -5,6 +5,20 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+## [0.6.0-alpha.2] - 2026-11-10
+
+- Replaced the separate Overview and Pipeline screens with Generation Overview:
+  choose stages, set their output folders and run them in order.
+- Moved shared inputs to Game & resources, object/tree/grass LOD options to
+  Object LOD, and scan coverage to Scan results. Stage pages have their own
+  generation action, kept visible at the bottom of the window.
+- Removed slogans and implementation-focused paragraphs. Setting explanations
+  are available as tooltips; object LOD groups can be expanded or searched.
+- Updated the walkthrough and settings reference for the new layout.
+
+Saved settings, quality defaults and generated output remain unchanged. This UI
+update does not require regenerating existing output.
+
 ## [0.6.0-alpha.1] - 2026-11-09
 
 - PenguLOD now owns the complete product identity: desktop and CLI projects, generated plugins,

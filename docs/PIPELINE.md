@@ -1,12 +1,12 @@
 # Persistent generation
 
-The Pipeline page selects grass, textures, terrain/water and object LOD stages. Each stage needs its own output
+Generation Overview selects grass, textures, terrain/water and object LOD stages. Each stage needs its own output
 folder. Run the same selection again to resume after cancellation, failure or an application
 restart. A completed stage is reused only when its settings, input inventory, dependencies
 and every recorded output file still match. Changing a stage invalidates its dependents.
 
 Plugins and configuration files are content hashed. By default, large source assets use
-size and filesystem timestamps; enable **Verify all source asset contents** when sources
+size and filesystem timestamps; enable **Verify all source files** when sources
 may have been replaced while preserving metadata. Published outputs are always content
 hashed before reuse. Generated output folders are excluded from the source inventory.
 

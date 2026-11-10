@@ -14,7 +14,7 @@ public sealed partial class MainWindow
     private readonly TextBox _costAfter = new() { Name = "CostAfter" };
     private readonly TextBox _outputFolders = new() { Name = "OutputFolders", AcceptsReturn = true, MinHeight = 80 };
     private readonly TextBox _packageFolder = new() { Name = "PackageFolder" };
-    private readonly TextBlock _outputSummary = Text("Choose saved output folders. Measuring and verifying do not change them.", true);
+    private readonly TextBlock _outputSummary = Text("No output report yet.", true);
     private readonly DataGrid _costGroups = Table(("World", "World"), ("LOD", "Level"), ("Season", "Season"), ("Layer", "Layer"), ("Triangles", "Triangles"), ("Mesh groups", "MeshGroups"));
     private readonly DataGrid _costBlocks = Table(("Block", "File"), ("Bytes", "Bytes"), ("Triangles", "Triangles"), ("Mesh groups", "MeshGroups"), ("Unavailable", "Unavailable"));
     private readonly DataGrid _settingChanges = Table(("Setting", "Setting"), ("Before", "Before"), ("After", "After"));
@@ -25,18 +25,16 @@ public sealed partial class MainWindow
 
     private Control ReportsPage()
     {
-        _publishOutput = Primary("Publish reviewed package", PublishOutput); _publishOutput.IsEnabled = false;
+        _publishOutput = Help(Primary("Publish reviewed package", PublishOutput), "Applies the reviewed update and keeps a backup of the previous package."); _publishOutput.IsEnabled = false;
         _outputFolders.PropertyChanged -= OutputFieldsChanged; _outputFolders.PropertyChanged += OutputFieldsChanged;
         _packageFolder.PropertyChanged -= OutputFieldsChanged; _packageFolder.PropertyChanged += OutputFieldsChanged;
-        return Scroll(Stack(16, Heading("Reports & outputs", "Measure saved generations, compare their costs, and prepare a verified installation package."),
+        return Scroll(Stack(16, Heading("Reports & outputs"),
             Card("PERFORMANCE REPORTS", Stack(10,
                 BrowseBox("Output folder to measure", _costFolder, false), Button("Measure output", MeasureOutput),
-                BrowseBox("Before report", _costBefore, true), BrowseBox("After report", _costAfter, true), Button("Compare cost reports", CompareOutputCosts),
-                Text("Mesh groups indicate batching cost; they are not measured draw calls. Texture storage is not resident VRAM. Reports include unchanged blocks and compare matching paths only.", true))),
+                BrowseBox("Before report", _costBefore, true), BrowseBox("After report", _costAfter, true), Help(Button("Compare cost reports", CompareOutputCosts), "Compares geometry and texture storage for matching output. These figures do not measure FPS or VRAM use."))),
             Card("OUTPUT MANAGEMENT", Stack(10, Labeled("Stage output folders · one per line", _outputFolders),
                 Button("Add stage output", async () => { if (await Pick(false, "Select generated stage output") is { } p) _outputFolders.Text = ((_outputFolders.Text ?? "").TrimEnd() + "\n" + p).Trim(); }),
                 BrowseBox("Package destination", _packageFolder, false),
-                Text("Select matching texture, terrain, grass and object outputs as needed. Publication replaces complete stages, preserves other stages and keeps a backup. Partial worlds or mismatched shared files require regeneration. Older outputs without receipts can still be measured.", true),
                 Row(Button("Verify output set", VerifyOutputs), Button("Preview package update", PreviewOutputUpdate), _publishOutput))),
             Card("RESULTS", Stack(10, _outputSummary, Button("Export report", ExportOutputReport), _costGroups, _costBlocks, _settingChanges))));
     }

@@ -22,7 +22,7 @@ public sealed partial class MainWindow
     {
         if (_runner.IsRunning) throw new InvalidOperationException("Wait for the active job to finish.");
         if (saveSettings) { GenerationOptions.Validate(snapshot); Save(); }
-        _page.IsEnabled = false; if (_lodActions is not null) _lodActions.IsEnabled = false; _cancel.IsEnabled = true; _progress.IsVisible = true;
+        _page.IsEnabled = false; if (_pageActions is not null) _pageActions.IsEnabled = false; _cancel.IsEnabled = true; _progress.IsVisible = true;
         _watch.Restart(); _status.Text = title; Notice("");
         try
         {
@@ -52,7 +52,7 @@ public sealed partial class MainWindow
         finally
         {
             _watch.Stop(); _elapsed.Text = _watch.Elapsed.ToString(@"hh\:mm\:ss");
-            _page.IsEnabled = true; if (_lodActions is not null) _lodActions.IsEnabled = true; _cancel.IsEnabled = false; _progress.IsVisible = false;
+            _page.IsEnabled = true; if (_pageActions is not null) _pageActions.IsEnabled = true; _cancel.IsEnabled = false; _progress.IsVisible = false;
             if (_closing) { _allowClose = true; Close(); }
         }
     }
@@ -73,13 +73,14 @@ public sealed partial class MainWindow
             {
                 ScanReport.Write(Path.Combine(folder, "scan-report.json"), summary, elapsed);
                 ShowSummary(summary);
+                SelectPage("Scan results");
                 if (summary.Generation is { BlocksFailed: > 0 })
                 { _status.Text = "Generation finished with failed blocks"; Notice("Some blocks failed. Review the report and log before installing this output."); }
                 else if (summary.Grids.Count == 0)
                 { _status.Text = "No matching worldspaces found"; Notice("No LOD settings matched the requested worldspaces. Check the names, game files and archive list."); }
                 else if (summary.Warnings.Count + summary.MissingPlugins.Count > 0 || summary.Stats.SkippedMissingMesh > 0 || summary.Generation?.MeshErrors.Count > 0)
                 { _status.Text = (generate ? "Generation" : "Scan") + " completed with warnings"; Notice("Review the warnings and missing assets in Scan results. Full details are in the run folder."); }
-                else Notice(generate ? "Generation complete. Install the output as a mod and enable any generated plugins." : "Scan complete. Review the worldspaces below, then generate LOD.");
+                else Notice(generate ? "Generation complete. Install the output as a mod and enable any generated plugins." : "Scan complete. Review the worldspaces and any warnings.");
             });
     }
     internal void ShowSummary(ScanSummary s)
@@ -118,7 +119,7 @@ public sealed partial class MainWindow
         if (preset == "Balanced") { Set("preset", "Medium"); Set("grassDensity", .05m); Set("detailedShips", false); }
         if (preset == "Objects")
             foreach (string k in new[] { "trees", "tree3d", "grass", "csGrass", "dynamic", "grid", "nativeGrid", "animatedShips", "renderBillboards" }) Set(k, false);
-        _pages["Generation settings"] = GenerationSettings(); SelectPage("Generation settings"); ScheduleSave();
+        _pages["Object LOD"] = ObjectLodPage(); SelectPage("Object LOD"); ScheduleSave();
         Notice(preset + " preset applied. Source and output paths were kept.");
     }
     private async Task AddInput(string property, bool files)

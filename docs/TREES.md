@@ -1,6 +1,6 @@
 # 3D-tree geometry and coverage
 
-Enable 3D tree LOD in Generation settings. Installed CRC-matched or named LOD models remain
+Enable 3D tree LOD in Object LOD. Installed CRC-matched or named LOD models remain
 preferred. With **Build missing 3D tree models**, trees without an installed model can use
 native reduction of their full model. Missing textures or unsupported geometry retain
 billboard tree LOD and appear in the report.
@@ -41,7 +41,7 @@ to a full source model. Otherwise it attempts native reduction. Reusing an uncha
 mesh is replaced with billboard fallback. A far model cannot be heavier than the selected
 near model. Farther levels use the existing tree-card system and map-tree setting.
 
-Overview's **Tree coverage & cost** table and `scan-report.json` show source model, selected
+The **Scan results → Tree coverage** table and `scan-report.json` show source model, selected
 level, instance count, triangles per model, placed triangles, removed foliage triangles,
 measured maximum coverage loss, material variant, method and fallback reasons.
 Memory figures are geometry estimates before block merging, not elapsed-time predictions

@@ -1,6 +1,6 @@
 # Automatic object LOD
 
-Enable **Build missing object LOD models** under **Generation settings → Automatic object
+Enable **Build missing object LOD models** under **Object LOD → Automatic object
 LOD** to create missing source meshes during a scan or LOD job. This is optional and off
 by default. It uses the native mesh maker; no external executable is required.
 
@@ -30,7 +30,7 @@ textures. Generation does not reproduce animated or view-dependent materials.
 
 ## Reports and recovery
 
-Overview's **Automatic object LOD** table, `scan-report.json` and the generated
+The **Scan results → Automatic object LOD** table, `scan-report.json` and the generated
 `PenguLOD.objects.json` list requested source levels, triangle counts, budgets and fallback
 reasons. Missing source models/textures, unsupported geometry, small models and unmet
 budgets skip the affected level with a warning. Other installed or generated levels remain

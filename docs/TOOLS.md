@@ -44,7 +44,7 @@ so it wins conflicts with the older meshes.
 
 ## Mod author
 
-Mod author finds assets through the game source selected on Overview. Use it to
+Mod author finds assets through the game source selected on Game & resources. Use it to
 fill gaps in a particular mod's LOD resources.
 
 | Setting | What it does |
