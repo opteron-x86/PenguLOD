@@ -194,10 +194,12 @@ public static class GenerationPipeline
 
         OutputSnapshot Record(string id, string folder, OutputSnapshot snapshot, bool complete = true)
         {
-            snapshot = new OutputSnapshot { Files = new(snapshot.Files, StringComparer.Ordinal) };
+            // A Windows lookup can return the requested spelling rather than the directory's casing.
+            // Do not add that same game asset again when collecting on-disk metadata.
+            snapshot = new OutputSnapshot { Files = new(snapshot.Files, StringComparer.OrdinalIgnoreCase) };
             // Include stage reports and logs as owned metadata as well as the generated assets.
             foreach (string relative in OutputFiles.Enumerate(folder, ct))
-                if (relative != OutputSetReceipt.FileName && !relative.Equals("meta.ini", StringComparison.OrdinalIgnoreCase) && !snapshot.Files.ContainsKey(relative))
+                if (!relative.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) && !relative.Equals("meta.ini", StringComparison.OrdinalIgnoreCase) && !snapshot.Files.ContainsKey(relative))
                     snapshot.Files[relative] = OutputSnapshot.HashFile(OutputSnapshot.Resolve(folder, relative), ct);
             return OutputSetReceipt.Record(folder, id, inputs.Fingerprint, snapshot, complete: complete);
         }
