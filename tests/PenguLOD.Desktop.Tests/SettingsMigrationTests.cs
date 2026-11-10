@@ -19,7 +19,7 @@ public sealed class SettingsMigrationTests : IDisposable
     public void ImportsOnceAndPreservesOriginalPathsAndPreferences(string cache)
     {
         var original = new DesktopSettings {
-            Instance = "/mods/Fluorine", Profile = "My profile", WinePrefix = "/wine/pfx",
+            Instance = "/mods/ModOrganizer", Profile = "My profile", WinePrefix = "/wine/pfx",
             OutputFolder = "/output/AnvilLOD", GrassOutput = "/output/GrassCache",
             TextureGenOutput = "/output/AnvilTexGen", CacheFolder = cache,
             UseGeneratedGrass = true, UseGeneratedTextures = true };

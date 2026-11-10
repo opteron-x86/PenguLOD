@@ -68,9 +68,9 @@ These inputs are shared by all generation stages.
 
 | Setting | What it does |
 | --- | --- |
-| Source | **Mod Organizer 2** reads an MO2 or Fluorine instance and its enabled mods. **Data folder / Vortex** reads the deployed game files. |
+| Source | **Mod Organizer 2** reads an MO2 instance and its enabled mods. **Data folder / Vortex** reads the deployed game files. |
 | Game edition | Choose **SE / AE** or **VR**. |
-| MO2 / Fluorine instance | The folder containing `ModOrganizer.ini`. |
+| Mod Organizer 2 instance | The folder containing `ModOrganizer.ini`. |
 | Profile | The profile to read. Blank uses the selected instance profile. **Read profiles** fills the list. |
 | Game / Data folder | For a deployed installation, choose the game folder or its `Data` folder. |
 | plugins.txt | The enabled-plugin list for a deployed installation. An empty file is valid for a vanilla game. |
@@ -190,7 +190,7 @@ them; also regenerate object LOD when its terrain input changes.
 
 | Setting | What it does |
 | --- | --- |
-| Export Community / Bottled Shaders heightmaps | Creates terrain-height textures for Terrain Shadows. On by default. Requires complete rectangular height coverage. Keep these generated DDS files loose when installing. |
+| Export Community Shaders heightmaps | Creates terrain-height textures for Terrain Shadows. On by default. Requires complete rectangular height coverage. Keep these generated DDS files loose when installing. |
 | Maximum heightmap dimension | Caps heightmap resolution. Default `8192`; higher uses more memory and retains finer terrain detail. |
 
 **Generate terrain** runs this stage alone. **Open terrain output** opens its

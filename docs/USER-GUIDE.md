@@ -36,9 +36,9 @@ On Linux, run `linux-x64/run-pengulod.sh`; on Windows, run
 
 On **Game & resources**, choose your game edition and source:
 
-- **Fluorine or Mod Organizer 2:** select **Mod Organizer 2**, browse to the instance
+- **Mod Organizer 2:** select **Mod Organizer 2**, browse to the instance
   containing `ModOrganizer.ini`, click **Read profiles**, and choose your profile.
-  This is the instance folder, not the manager's executable.
+  This is the instance folder, not the manager's executable. Compatible forks use the same source option.
 - **Deployed Data folder or Vortex:** select **Data folder / Vortex**, then choose the
   game/Data folder and its `plugins.txt`. Only mods deployed there are available.
 

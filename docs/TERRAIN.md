@@ -1,8 +1,8 @@
 # Native terrain generation
 
 The Terrain page builds Skyrim SE BTR meshes, diffuse and model-space normal tiles,
-segmented near-distance water, and optional Community/Bottled Shaders heightmaps.
-Select it on Pipeline to generate terrain before object LOD; verified generated terrain
+segmented near-distance water, and optional Community Shaders heightmaps.
+Select it on Generation Overview to generate terrain before object LOD; verified generated terrain
 textures then feed object LOD and underside generation. Use a separate output mod folder.
 
 The generator reads winning LAND heights, quadrant texture layers, alpha weights, vertex

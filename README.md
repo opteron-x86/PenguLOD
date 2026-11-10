@@ -7,9 +7,9 @@
 
 A native Linux and Windows LOD toolkit for Skyrim, built on [CageTV’s AnvilLOD](https://github.com/CageTV/AnvilLOD).
 PenguLOD combines an Avalonia desktop and CLI with native terrain, object, tree and grass LOD,
-texture generation, and offline grass caching. It reads Fluorine/MO2 profiles directly and runs without Wine.
+texture generation, and offline grass caching. It reads Mod Organizer 2 profiles directly and runs without Wine.
 
-**Current version: 0.6.0-alpha.2**.
+**Current version: 0.6.0-alpha.3**.
 The all-in-one pipeline supports grass → textures → terrain → object/tree/grass LOD, with
 verified resume and safe output publication. New terrain and seasonal rendering need broader
 in-game validation; this alpha does not claim full TexGen or DynDOLOD parity.
@@ -51,7 +51,7 @@ Use the [settings reference](docs/SETTINGS.md) to look up an option, or the
 ## Available now
 
 - Avalonia desktop with progress, cancellation, logs, presets and resource controls.
-- Direct Fluorine/MO2 profile reading, including Wine drive mappings; deployed Data-folder support.
+- Direct Mod Organizer 2 profile reading, including Wine drive mappings; deployed Data-folder support.
 - Native terrain/water BTR meshes, source normal detail, PBR colour/AO calibration and terrain-shadow heightmaps.
 - Incremental object LOD, billboard trees, 3D/hybrid models and native tree reduction with
   record texture variants, foliage coverage limits and per-level geometry budgets; grass LOD, occlusion and seasonal terrain/object/tree/grass output.

@@ -105,7 +105,7 @@ def main():
             raise ValueError(f"Contents changed; leaving them alone: {folder}")
         shutil.rmtree(folder)
     print(f"Backups and original paths: {backup / 'receipt.json'}")
-    print("Restart Skyrim through Fluorine and check PGLite.log. Regenerate with the fixed PenguLOD build")
+    print("Restart Skyrim through your mod manager and check PGLite.log. Regenerate with the fixed PenguLOD build")
     print("using clean output, then replace the old output mod to correct its baked texture references too.")
 
 

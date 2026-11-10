@@ -10,7 +10,7 @@
   <url type="homepage">https://github.com/opteron-x86/PenguLOD</url>
   <url type="bugtracker">https://github.com/opteron-x86/PenguLOD/issues</url>
   <description>
-    <p>Generate Skyrim SE, AE and VR LOD from a Data folder or a Fluorine or Mod Organizer profile. Includes a desktop interface and CLI, offline grass caching, texture generation, terrain and water, tree geometry budgets and diagnostics.</p>
+    <p>Generate Skyrim SE, AE and VR LOD from a Data folder or a Mod Organizer 2 profile. Includes a desktop interface and CLI, offline grass caching, texture generation, terrain and water, tree geometry budgets and diagnostics.</p>
     <p>Game and mod assets are required separately. Generated results must be validated in the game before use in a regular playthrough.</p>
   </description>
   <content_rating type="oars-1.1"/>
