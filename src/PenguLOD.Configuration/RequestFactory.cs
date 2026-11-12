@@ -12,7 +12,7 @@ namespace PenguLOD.Desktop.Services;
 public static class RequestFactory
 {
     public static string? Optional(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
-    public static string PathValue(string value, DesktopSettings s) => HostPath.Resolve(value, winePrefix: Optional(s.WinePrefix));
+    public static string PathValue(string value, DesktopSettings s) => HostPath.Resolve(value, relativeTo: s.BaseFolder, winePrefix: Optional(s.WinePrefix));
     public static string RequiredPath(string value, string label, DesktopSettings s)
         => Optional(value) is { } p ? PathValue(p, s) : throw new ArgumentException($"Choose {label} first.");
     public static string[] Lines(string text) => text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -50,7 +50,12 @@ public static class RequestFactory
     public static GenerationPipelineRequest Stages(DesktopSettings s, bool grass = false, bool textures = false, bool terrain = false, bool lod = false) => new(
         grass ? Grass(s) : null, textures ? Textures(s) : null,
         lod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
-        terrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute, s.ExpandOutputScope);
+        terrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute, s.ExpandOutputScope, KeepPrevious(s));
+
+    public static int KeepPrevious(DesktopSettings s) =>
+        s.KeepPreviousOutputs == decimal.Truncate(s.KeepPreviousOutputs) && s.KeepPreviousOutputs is >= 0 and <= PenguLOD.Core.Pipeline.OutputRetention.Maximum
+            ? (int)s.KeepPreviousOutputs
+            : throw new ArgumentException($"Previous outputs to keep must be a whole number from 0 to {PenguLOD.Core.Pipeline.OutputRetention.Maximum}.");
 
     public static IReadOnlyList<GenerationScopeStage> OutputScope(DesktopSettings s)
     {

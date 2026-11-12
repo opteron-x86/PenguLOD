@@ -28,8 +28,12 @@ The preset or request defines the generation. Options that would change it, such
 `--request` instead of being ignored; change the preset in the desktop instead. Run
 options are accepted: `--stages`, `--job-folder`, `--cache-folder`, `--threads`,
 `--report`, `--texture-compute`, `--no-resume`, `--no-preflight`, `--verify-source-contents`,
-`--expand-output-scope`, `--deep-scan`, `--verify-outputs`, `--inspect-asset` and
-`--wine-prefix`. `export-job` also takes `--output` for the request file it writes.
+`--expand-output-scope`, `--deep-scan`, `--verify-outputs`, `--inspect-asset`,
+`--keep-previous` and `--wine-prefix`. `export-job` also takes `--output` for the request
+file it writes.
+
+Relative paths inside a preset are resolved against the preset file's folder, so a preset
+moved together with its outputs keeps working from any current folder.
 
 `--cache-folder`, `--threads`, `--texture-compute Cpu|Auto|Vulkan`, `--no-resume`,
 `--verify-source-contents`, and `--no-preflight` provide explicit overrides. Preset cache
@@ -71,6 +75,16 @@ Use `cost-report`, `compare-costs`, `verify-output`, `plan-update` and
 `plan-generation` reviews the scope needed to update existing stage folders;
 `--expand-output-scope` permits that expansion for a generation run.
 See [Reports and output management](REPORTS-AND-OUTPUTS.md) for commands and limits.
+
+`--keep-previous <n>` (0–100, default 1) sets how many replaced copies of each output
+(`.previous-…` folders) a publication keeps. `clean --input <output folder>` lists previous
+copies beyond the newest `--keep-previous` and unfinished build folders; `--apply` removes
+them. `clean` exits 1 when a folder could not be removed.
+
+```bash
+PenguLOD clean --input "/path/to/PenguLOD Output" --keep-previous 0
+PenguLOD clean --input "/path/to/PenguLOD Output" --keep-previous 0 --apply
+```
 
 `--pbr-waterfalls` controls PBR waterfall model selection independently of
 `--pbr-lod`.

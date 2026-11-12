@@ -106,7 +106,7 @@ public sealed class TrunkTextureTests
         Assert.False(TextureGeneration.Run(request).Published);
         Assert.Equal(before, File.ReadAllText(Path.Combine(f.Output, TextureGenerationManifest.FileName)));
         TextureGenerationManifest.Read(f.Output, true)!.Verify(f.Output);
-        Assert.Empty(Directory.GetDirectories(f.Output, ".texture-build-*"));
+        Assert.Empty(Directory.GetDirectories(f.Root, ".pengulod-build-*"));
     }
 
     [Fact]
@@ -123,7 +123,8 @@ public sealed class TrunkTextureTests
         var result = TextureGeneration.Run(Request(f));
         Assert.False(result.Published);
         Assert.Contains(result.Items, i => i.Status == "Failed" && i.Detail.Contains("Skinned"));
-        Assert.Empty(Directory.GetFiles(f.Output, "*.dds", SearchOption.AllDirectories));
+        // Nothing is published, so the output folder is not created.
+        Assert.False(Directory.Exists(f.Output) && Directory.GetFiles(f.Output, "*.dds", SearchOption.AllDirectories).Length > 0);
     }
 
     [Fact]

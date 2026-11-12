@@ -70,7 +70,7 @@ public sealed class GrassGenerationTests
         f.SetBehavior(behavior);
         Assert.ThrowsAny<Exception>(() => GrassGeneration.Run(f.Request));
         Assert.Equal(before, File.ReadAllText(Path.Combine(f.Output, GrassGenerationManifest.FileName)));
-        Assert.Empty(Directory.EnumerateDirectories(f.Root, ".pengulod-grass-build-*"));
+        Assert.Empty(Directory.EnumerateDirectories(f.Root, ".pengulod-build-*"));
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class GrassGenerationTests
             new Progress(line => { if (line == "FAKE_READY") cancellation.Cancel(); }), cancellation.Token));
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(8));
         GrassGenerationManifest.Read(f.Output, true)!.Verify(f.Output);
-        Assert.Empty(Directory.EnumerateDirectories(f.Root, ".pengulod-grass-build-*"));
+        Assert.Empty(Directory.EnumerateDirectories(f.Root, ".pengulod-build-*"));
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public sealed class GrassGenerationTests
         // Existing-output protection is checked by the cancellable worker under its output lock.
         Assert.Throws<ArgumentException>(() => GrassGeneration.Run(f.Request with { Preview = true, Worldspaces = "Tamriel" }));
         Assert.Equal(manifest, File.ReadAllText(Path.Combine(f.Output, GrassGenerationManifest.FileName)));
-        Assert.Empty(Directory.GetDirectories(f.Root, ".pengulod-grass-build-*"));
+        Assert.Empty(Directory.GetDirectories(f.Root, ".pengulod-build-*"));
         File.AppendAllText(Path.Combine(f.Output, "grass", "Tamrielx0000y0000.cgid"), "changed");
         Assert.Throws<IOException>(() => GrassGeneration.Run(f.Request));
     }

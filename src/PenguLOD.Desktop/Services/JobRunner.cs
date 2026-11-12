@@ -11,6 +11,8 @@ public sealed record JobResult<T>(T? Value, string Folder, TimeSpan Elapsed, Exc
 /// <summary>One job at a time. Cancellation is cooperative; disposal never races a running worker.</summary>
 public sealed class JobRunner
 {
+    /// <summary>Run folders (logs and reports) kept in the cache; older ones are removed when a job starts.</summary>
+    public const int KeepRuns = 30;
     private CancellationTokenSource? _cancellation;
     public bool IsRunning => _cancellation is not null;
     public void Cancel() => _cancellation?.Cancel();
@@ -21,7 +23,9 @@ public sealed class JobRunner
         if (IsRunning) throw new InvalidOperationException("A job is already running.");
         using var cancellation = new CancellationTokenSource();
         _cancellation = cancellation;
-        string folder = Path.Combine(cache, "runs", DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6]);
+        string runs = Path.Combine(cache, "runs");
+        string folder = Path.Combine(runs, DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6]);
+        FolderRetention.Prune(runs, KeepRuns - 1);
         var watch = Stopwatch.StartNew();
         try
         {

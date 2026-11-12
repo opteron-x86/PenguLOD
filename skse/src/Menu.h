@@ -10,4 +10,7 @@ namespace PenguLOD::Menu
 
 	/// The running game version, for the About page (from SKSEPluginLoad).
 	void SetGameVersion(std::string a_version);
+
+	/// The log file actually opened, for the About page.
+	void SetLogPath(std::string a_path);
 }

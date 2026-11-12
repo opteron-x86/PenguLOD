@@ -1,6 +1,8 @@
 #include "IniFile.h"
 #include <cctype>
 #include <fstream>
+#include <map>
+#include <mutex>
 #include "RuntimePaths.h"
 
 namespace PenguLOD::IniFile
@@ -20,6 +22,18 @@ namespace PenguLOD::IniFile
 			const auto b = s.find_last_not_of(" \t\r\n");
 			return s.substr(a, b - a + 1);
 		}
+
+		std::mutex                                                     g_ownLock;
+		std::map<std::string, std::filesystem::file_time_type>        g_ownWrites;
+
+		std::string Key(const std::filesystem::path& a_path) { return Lower(a_path.lexically_normal().generic_string()); }
+	}
+
+	bool IsOwnWrite(const std::filesystem::path& a_path, std::filesystem::file_time_type a_time)
+	{
+		std::scoped_lock lock(g_ownLock);
+		const auto it = g_ownWrites.find(Key(a_path));
+		return it != g_ownWrites.end() && it->second == a_time;
 	}
 
 	bool Write(const std::filesystem::path& a_path, std::string_view a_section, const std::vector<std::pair<std::string, std::string>>& a_values)
@@ -78,9 +92,18 @@ namespace PenguLOD::IniFile
 
 		std::error_code ec;
 		std::filesystem::create_directories(a_path.parent_path(), ec);
-		std::ofstream out(a_path, std::ios::trunc | std::ios::binary);
-		if (!out) return false;
-		for (const auto& l : lines) out << l << "\r\n";
-		return static_cast<bool>(out);
+		{
+			std::ofstream out(a_path, std::ios::trunc | std::ios::binary);
+			if (!out) return false;
+			for (const auto& l : lines) out << l << "\r\n";
+			out.close();
+			if (!out) return false;
+		}
+		const auto written = std::filesystem::last_write_time(a_path, ec);
+		if (!ec) {
+			std::scoped_lock lock(g_ownLock);
+			g_ownWrites[Key(a_path)] = written;
+		}
+		return true;
 	}
 }

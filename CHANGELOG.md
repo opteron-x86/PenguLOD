@@ -5,6 +5,32 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+Visual correctness
+
+- Generated tangents follow the convention of Skyrim meshes and nifly: the NIF tangent
+  runs along V and the bitangent along U. Shapes without stored tangents (most Skyrim LE
+  meshes and some SE ones), tree and hybrid trunk cards, water stand-ins and rendered
+  billboards used the opposite, which mirrored normal-map lighting.
+- Simplified parts keep their shape name, tier and TexGen scale, so automatic object LOD
+  again matches alternate textures and recipes.
+- Seasons of Skyrim INIs are applied in the game's order: `MainFormSwap_<SEASON>.ini`
+  first, then the others in case-sensitive name order. A line for a record that is not in
+  the load order is skipped and reported, as in game; **Strict seasonal swaps**
+  (`--seasons-strict`) restores the stop. Seasons that change nothing get no seasonal files.
+- BC7: blocks whose texels share the same channel sum (red beside green) no longer encode
+  as one flat colour, and opaque blocks decode to alpha 255. The Vulkan encoder matches.
+- Block-compressed output always has a top level that is a multiple of four, which
+  Direct3D 11 requires; authored mips that are not are left unsliced. Recipe tiles of
+  another aspect keep the resolution of their long axis. Opaque copies of sRGB textures
+  stay sRGB.
+
+Regenerate object LOD, tree LOD and textures to pick up these changes: block hashes,
+billboard, hybrid trunk, automatic object, PBR and opaque-copy caches rebuild once. An
+in-game look at normal-mapped billboards and converted Skyrim LE meshes is still
+recommended before a release.
+
+## [0.6.0-alpha.5] - 2026-11-12
+
 Output management and the command line
 
 - Fix output folders becoming unusable after tree LOD was generated without LOD4
@@ -54,29 +80,58 @@ Incremental LOD output is rebuilt once, because archive contents are now identif
 the archive's size and date. Regenerate if you used underside step 4 or have textures
 in legacy X8 format; other settings and output are unchanged.
 
-Visual correctness
+Pipeline state and output ownership
 
-- Generated tangents follow the convention of Skyrim meshes and nifly: the NIF tangent
-  runs along V and the bitangent along U. Shapes without stored tangents (most Skyrim LE
-  meshes and some SE ones), tree and hybrid trunk cards, water stand-ins and rendered
-  billboards used the opposite, which mirrored normal-map lighting.
-- Simplified parts keep their shape name, tier and TexGen scale, so automatic object LOD
-  again matches alternate textures and recipes.
-- Seasons of Skyrim INIs are applied in the game's order: `MainFormSwap_<SEASON>.ini`
-  first, then the others in case-sensitive name order. A line for a record that is not in
-  the load order is skipped and reported, as in game; **Strict seasonal swaps**
-  (`--seasons-strict`) restores the stop. Seasons that change nothing get no seasonal files.
-- BC7: blocks whose texels share the same channel sum (red beside green) no longer encode
-  as one flat colour, and opaque blocks decode to alpha 255. The Vulkan encoder matches.
-- Block-compressed output always has a top level that is a multiple of four, which
-  Direct3D 11 requires; authored mips that are not are left unsliced. Recipe tiles of
-  another aspect keep the resolution of their long axis. Opaque copies of sRGB textures
-  stay sRGB.
+- Grass, textures and terrain publish the same way as object LOD: the output receipt is
+  written with the files and the folder is replaced in one step. An interruption between
+  the two can no longer leave a receipt that blocks the next run.
+- On Linux, publication swaps the old and new folders atomically. Elsewhere, a run that
+  finds only a leftover `.previous-` copy reports how to restore it.
+- `meta.ini` and `SKSE/Plugins/PenguLOD.ini` belong to your installation. Editing them, or
+  the mod manager rewriting them during a run, no longer fails verification, resume or
+  publication, and the installed copies are kept.
+- Separate jobs on one LOD folder (the desktop's stage buttons) no longer treat each other's
+  blocks as damaged. Incremental checks use the hashes the folder's receipt records.
+- A stage that finished publishing is recorded as complete even if you cancel just afterwards.
+- New **Previous outputs to keep** setting and `--keep-previous` option (default 1); older
+  `.previous-` copies are removed after publication. New `PenguLOD clean` command lists and,
+  with `--apply`, removes previous copies and unfinished build folders.
+- Unfinished build folders of an output, outdated terrain tile caches, and old desktop run
+  and analysis folders are removed automatically.
+- Relative paths in a CLI preset resolve against the preset's folder.
+- Texture generation no longer creates an empty output folder when nothing is published.
 
-Regenerate object LOD, tree LOD and textures to pick up these changes: block hashes,
-billboard, hybrid trunk, automatic object, PBR and opaque-copy caches rebuild once. An
-in-game look at normal-mapped billboards and converted Skyrim LE meshes is still
-recommended before a release.
+Existing output is read as before. The first publication after updating may remove
+`.previous-` copies beyond the newest one; set a higher number first to keep more.
+
+Game runtime (SKSE plugin)
+
+- Entering a worldspace no longer loads every dynamic LOD model in one frame. At most
+  `iMaxShowPerUpdate` (default 200) are loaded per update; the nearest come first.
+- At `iMaxShown`, a nearer object replaces the farthest one drawn, so objects next to the
+  player are never the ones missing. Lowering the cap in the menu takes effect at once.
+- Native grid objects in `PenguLOD.esp` are kept in step even when there is no other
+  dynamic LOD to draw.
+- Saving one menu page no longer reloads `PenguLOD.ini` over values changed live on another.
+  External edits are still picked up, and are now read on the game's main thread.
+- Adaptive quality recognises a frame cap (V-sync, a limiter): at the cap counts as
+  headroom, and a target at or above the cap is used just below it. Before, it could step
+  down to the lowest preset and never come back. The menu shows the detected cap.
+- Adaptive quality keeps its preset when the layer settings are reloaded from the file.
+- The quality layer checkboxes appear once LOD blocks load, also after starting from the main
+  menu or an interior, and blocks are rescanned after a worldspace change.
+- Water opacity works with water animation turned off.
+- One settings parser for every section. `no`, `off` and inline comments (`0 ; off`) are
+  read correctly, numbers do not depend on the system locale, and a malformed value is
+  logged and ignored instead of being treated as on.
+- A damaged data file is refused instead of crashing the game while it loads.
+- DynDOLOD.dll counts as present only when it is actually loaded. The About page shows the
+  real log location, and the Dynamic LOD page counts switchable references, grid objects
+  and window glow separately.
+
+The data file format is unchanged: this runtime reads output from earlier generator versions,
+and earlier runtimes read output from this one. New settings files include `iMaxShowPerUpdate`;
+an existing `PenguLOD.ini` uses the default until the key is added.
 
 ## [0.6.0-alpha.4] - 2026-11-10
 

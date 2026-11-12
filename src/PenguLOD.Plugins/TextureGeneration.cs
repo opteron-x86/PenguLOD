@@ -51,7 +51,9 @@ public static partial class TextureGeneration
             throw new ArgumentException("Choose a different output folder for a filtered preview; it must not replace your full texture set.");
     }
 
-    public static TextureGenerationResult Run(TextureGenerationRequest request, IProgress<string>? progress = null, CancellationToken ct = default)
+    /// <param name="beforePublish">Called with the staged folder just before publication, e.g. to write the output receipt.</param>
+    public static TextureGenerationResult Run(TextureGenerationRequest request, IProgress<string>? progress = null, CancellationToken ct = default,
+        Action<string>? beforePublish = null)
     {
         Validate(request); ct.ThrowIfCancellationRequested();
         using var preparationTiming = WorkTiming.Measure("preparation");
@@ -75,16 +77,11 @@ public static partial class TextureGeneration
         if (request.RenderedObjects && !resources.RenderModels("objects").Any())
             throw new InvalidOperationException("Rendered objects need compatible render models. Add a resource folder or enable a mod supplying them in Data/DynDOLOD/Render.");
 
-        Directory.CreateDirectory(request.OutputFolder);
-        string lockPath = Path.Combine(request.OutputFolder, ".PenguLOD.texture.lock");
-        if (new FileInfo(lockPath).LinkTarget is not null) throw new IOException("The texture output lock cannot be a symbolic link.");
-        using var outputLock = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        // Every run regenerates the complete texture set into a staged folder beside the output, then publishes it by
+        // renaming, as the other stages do. The staged output holds the output lock.
+        using var staged = new StagedOutput(request.OutputFolder, seedPrevious: false, progress, ct);
         var previous = TextureGenerationManifest.Read(request.OutputFolder);
-        if (previous is null) new TextureGenerationManifest().Save(request.OutputFolder);
-        string stage = Path.Combine(request.OutputFolder, ".texture-build-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(stage);
-        bool keepStage = false;
-        try
+        string stage = staged.Payload;
         {
             var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var temporary = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -135,68 +132,66 @@ public static partial class TextureGeneration
             string fingerprint = "";
             if (publish)
             {
-                // Preflight every collision and stale file before replacing any published output.
-                foreach (var relative in files.Keys.Union(previous?.Files.Keys.AsEnumerable() ?? [], StringComparer.OrdinalIgnoreCase))
+                // The output is replaced as a whole: generated files must be unchanged, and files we never wrote are kept.
+                foreach (string relative in CheckPreviousOutput(request.OutputFolder, previous, files, ct))
                 {
-                    var target = GamePath.ToFileSystemPath(request.OutputFolder, relative);
-                    if (!HostPath.IsWithin(target, request.OutputFolder) || new FileInfo(target).LinkTarget is not null) throw new IOException("Output path escapes through a symlink: " + target);
-                    if (Directory.Exists(target)) throw new IOException("A directory is occupying an output filename: " + target);
-                    if (File.Exists(target) && (previous is null || !previous.Files.TryGetValue(relative, out var hash)
-                        || Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(target))) != hash))
-                        throw new IOException("An output file was added or changed outside texture generation; choose an empty output folder: " + target);
+                    string target = OutputSnapshot.Resolve(stage, relative);
+                    if (File.Exists(target)) continue;
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    WrittenOutputHashes.Copy(OutputSnapshot.Resolve(request.OutputFolder, relative), target, ct);
                 }
-                var manifest = new TextureGenerationManifest { Source = game.SourceDescription, ModelFilter = request.ModelFilter, GeneratedAt = DateTimeOffset.Now, Files = files, Recipes = request.Stitched ? rules.Program : null, RecipeInputs = recipeInputs };
-                var touched = files.Keys.Union(previous?.Files.Keys.AsEnumerable() ?? [], StringComparer.OrdinalIgnoreCase).ToArray();
-                string backup = Path.Combine(stage, "rollback");
-                foreach (var relative in previous?.Files.Keys.AsEnumerable() ?? [])
-                {
-                    var source = GamePath.ToFileSystemPath(request.OutputFolder, relative);
-                    if (!File.Exists(source)) continue;
-                    var saved = GamePath.ToFileSystemPath(backup, relative);
-                    Directory.CreateDirectory(Path.GetDirectoryName(saved)!); File.Copy(source, saved);
-                }
+                var manifest = new TextureGenerationManifest { Source = game.SourceDescription, ModelFilter = request.ModelFilter, GeneratedAt = DateTimeOffset.Now, Files = files,
+                    Recipes = request.Stitched ? rules.Program : null, RecipeInputs = recipeInputs, Complete = true };
+                manifest.Save(stage); fingerprint = manifest.Fingerprint;
+                foreach (var relative in temporary) { var path = GamePath.ToFileSystemPath(stage, relative); if (File.Exists(path)) File.Delete(path); }
+                var intermediate = GamePath.ToFileSystemPath(stage, "dyndolod-temp");
+                if (Directory.Exists(intermediate)) Directory.Delete(intermediate, recursive: true);
+            }
+            var result = new TextureGenerationResult(request.OutputFolder, publish, files.Count, fingerprint, items, warnings, timer.Elapsed, resources.Report);
+            if (publish)
+            {
+                File.WriteAllText(Path.Combine(stage, ReportFileName), JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
                 ct.ThrowIfCancellationRequested();
-                manifest.Save(request.OutputFolder); // Cancellation is deferred during publication; an interrupted process leaves an incomplete manifest.
-                try
-                {
-                    foreach (var relative in files.Keys)
-                    {
-                        var target = GamePath.ToFileSystemPath(request.OutputFolder, relative);
-                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                        File.Move(GamePath.ToFileSystemPath(stage, relative), target, true);
-                    }
-                    foreach (var stale in previous?.Files.Keys.Except(files.Keys, StringComparer.OrdinalIgnoreCase) ?? [])
-                        File.Delete(GamePath.ToFileSystemPath(request.OutputFolder, stale));
-                    manifest.Complete = true; manifest.Save(request.OutputFolder); fingerprint = manifest.Fingerprint;
-                }
-                catch
-                {
-                    try
-                    {
-                        foreach (var relative in touched)
-                        {
-                            var saved = GamePath.ToFileSystemPath(backup, relative);
-                            var target = GamePath.ToFileSystemPath(request.OutputFolder, relative);
-                            if (File.Exists(saved)) File.Copy(saved, target, true);
-                            else File.Delete(target);
-                        }
-                        (previous ?? new TextureGenerationManifest()).Save(request.OutputFolder);
-                    }
-                    catch (Exception rollback)
-                    {
-                        keepStage = true;
-                        throw new IOException("Publication and rollback failed. Previous files are preserved in " + backup + ". Use a fresh output folder. " + rollback.Message, rollback);
-                    }
-                    throw;
-                }
+                beforePublish?.Invoke(stage);
+                staged.Commit(progress);
                 progress?.Report($"Published {files.Count:N0} texture and billboard files to {request.OutputFolder}.");
             }
             else progress?.Report("Texture output was not published. Review failures; any previous completed output was kept.");
-            var result = new TextureGenerationResult(request.OutputFolder, publish, files.Count, fingerprint, items, warnings, timer.Elapsed, resources.Report);
-            File.WriteAllText(Path.Combine(request.OutputFolder, "PenguLOD.textures-report.json"), JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
             return result;
         }
-        finally { if (!keepStage && Directory.Exists(stage)) Directory.Delete(stage, true); }
+    }
+
+    public const string ReportFileName = "PenguLOD.textures-report.json";
+
+    /// <summary>
+    /// Refuses to replace an output whose generated files were changed since they were written. Returns the files texture
+    /// generation never wrote, which are kept. Our reports, receipts, user-owned files (kept by the staged output) and
+    /// leftovers of older builds are neither checked nor kept.
+    /// </summary>
+    private static List<string> CheckPreviousOutput(string output, TextureGenerationManifest? previous, IReadOnlyDictionary<string, string> generated, CancellationToken ct)
+    {
+        var keep = new List<string>();
+        if (!Directory.Exists(output)) return keep;
+        foreach (string relative in OutputFiles.Enumerate(output, ct))
+        {
+            string name = Path.GetFileName(relative);
+            if (UserOwnedFiles.Contains(relative) || relative.StartsWith(".texture-build-", StringComparison.OrdinalIgnoreCase)
+                || name.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) || name.Equals(".PenguLOD.texture.lock", StringComparison.OrdinalIgnoreCase)
+                || name.Equals(ReportFileName, StringComparison.OrdinalIgnoreCase) || name.Equals(ProductPaths.LegacyFileName(ReportFileName), StringComparison.OrdinalIgnoreCase)
+                || name.Equals(TextureGenerationManifest.FileName, StringComparison.OrdinalIgnoreCase) || name.Equals(ProductPaths.LegacyFileName(TextureGenerationManifest.FileName), StringComparison.OrdinalIgnoreCase))
+                continue;
+            string key = GamePath.Normalize(relative);
+            string target = OutputSnapshot.Resolve(output, relative);
+            if (previous?.Files.TryGetValue(key, out var hash) == true)
+            {
+                if (!OutputSnapshot.HashFile(target, ct).Equals(hash, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("An output file was changed outside texture generation; choose an empty output folder: " + target);
+            }
+            else if (generated.ContainsKey(key))
+                throw new IOException("An output file was added outside texture generation; choose an empty output folder: " + target);
+            else keep.Add(relative);
+        }
+        return keep;
     }
 
     internal sealed record Recipes(TextureRecipeSet Program, List<string> Billboards);

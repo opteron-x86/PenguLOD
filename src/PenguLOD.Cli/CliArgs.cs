@@ -25,7 +25,7 @@ public sealed class CliArgs
         P("settings", true), P("request", true), V("stages", true), P("job-folder", true), P("cache-folder", true),
         V("threads", true), P("report", true), V("texture-compute", true), F("no-resume", true), F("no-preflight", true),
         F("verify-source-contents", true), F("expand-output-scope", true), F("deep-scan", true), F("verify-outputs", true),
-        V("inspect-asset", true), P("wine-prefix", true), F("allow-software"),
+        V("inspect-asset", true), P("wine-prefix", true), V("keep-previous", true), F("allow-software"),
         // Output management.
         P("input"), P("before"), P("after"), P("plan"), P("output"),
         // Game source.

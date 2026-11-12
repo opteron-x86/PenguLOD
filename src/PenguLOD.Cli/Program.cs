@@ -78,6 +78,9 @@ public static partial class Program
           PenguLOD plan-generation --settings <preset.json> --report <scope-plan.json>
                                          Review the scope needed to retain existing worlds and levels.
                                          --expand-output-scope explicitly permits the expanded generation.
+          PenguLOD clean --input <output folder> [--input ...] [--keep-previous <n>] [--apply]
+                                         List previous copies beyond the newest n (default 1) and unfinished build
+                                         folders beside each output. --apply removes them. Run it while no job is running.
 
         Options:
           --pbr-waterfalls      Use full PBR-patched waterfall models independently of --pbr-lod
@@ -87,6 +90,7 @@ public static partial class Program
           --game-ini <path>      Override Skyrim archive settings explicitly
           --cache-folder <path>  Override the generated tree-billboard cache location
           --threads <n>          Worker limit (0 = available processors minus one)
+          --keep-previous <n>    Earlier copies of each output kept beside it after publication, 0-100 (default 1)
           --profile <name>       MO2 profile (default: the instance's selected profile)
           --data <path>          Skyrim Data folder (default: auto-detect / MO2 VFS)
           --plugins <path>       plugins.txt to use (requires --data)
@@ -295,6 +299,7 @@ public static partial class Program
                 "plan-update" => PlanUpdate(options),
                 "publish-update" => PublishUpdate(options),
                 "plan-generation" => PlanGeneration(options),
+                "clean" => RunClean(options),
                 "compute-info" => RunComputeInfo(options),
                 "pipeline" => RunPipeline(options),
                 "grass" => RunPipeline(options,"grass"),
@@ -363,6 +368,7 @@ public static partial class Program
         }
         return request with {Resume=!a.Has("no-resume")&&request.Resume,VerifySourceContents=a.Has("verify-source-contents")||request.VerifySourceContents,
             ExpandOutputScope=a.Has("expand-output-scope")||request.ExpandOutputScope,
+            KeepPrevious=a.Integer("keep-previous",request.KeepPrevious,0,OutputRetention.Maximum),
             Preflight=!a.Has("no-preflight")&&request.Preflight,TextureCompute=a.Get("texture-compute")??request.TextureCompute};
     }
 
@@ -376,7 +382,7 @@ public static partial class Program
 
     private static DesktopSettings LoadStageSettings(string preset, string[]? selected)
     {
-        var settings = SettingsStore.Read(preset);
+        var settings = SettingsStore.ReadPreset(preset);
         if (selected is not null)
         { settings.PipelineGrass = selected.Contains("grass"); settings.PipelineTextures = selected.Contains("textures"); settings.PipelineTerrain = selected.Contains("terrain"); settings.PipelineLod = selected.Contains("lod"); }
         return settings;
@@ -385,14 +391,14 @@ public static partial class Program
     private static string CacheFolder(CliArgs a)
     {
         if(a.Get("cache-folder") is { } explicitCache)return explicitCache;
-        if(a.Get("settings") is { } preset && SettingsStore.Read(preset) is {CacheFolder.Length:>0} settings)
+        if(a.Get("settings") is { } preset && SettingsStore.ReadPreset(preset) is {CacheFolder.Length:>0} settings)
             return RequestFactory.PathValue(settings.CacheFolder,settings);
         return SettingsStore.CacheRoot;
     }
     private static int RunPipeline(CliArgs a,string? stage=null)
     {
         var request=LoadPipelineRequest(a,stage);
-        int threads=a.Has("threads")?a.Integer("threads",0):a.Get("settings") is { } preset?(int)SettingsStore.Read(preset).MaxThreads:0;
+        int threads=a.Has("threads")?a.Integer("threads",0):a.Get("settings") is { } preset?(int)SettingsStore.ReadPreset(preset).MaxThreads:0;
         using var limits=RunLimits.Enter(threads,Cancellation,CacheFolder(a));
         var result=GenerationPipeline.Run(request,CacheFolder(a),new SyncProgress(Console.WriteLine),Cancellation);
         if(a.Get("report") is { } file)
@@ -509,14 +515,15 @@ public static partial class Program
         // Progress<T> posts asynchronously; a synchronous reporter keeps console output ordered.
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
         if (a.Has("request")) req = LoadPipelineRequest(a, "lod").Lod! with { Generate = generate };
-        else if (a.Get("settings") is { } scanPreset) req = RequestFactory.Scan(SettingsStore.Read(scanPreset), generate);
-        int workers = a.Has("threads") ? a.Integer("threads", 0) : a.Get("settings") is { } workerPreset ? (int)SettingsStore.Read(workerPreset).MaxThreads : 0;
+        else if (a.Get("settings") is { } scanPreset) req = RequestFactory.Scan(SettingsStore.ReadPreset(scanPreset), generate);
+        int workers = a.Has("threads") ? a.Integer("threads", 0) : a.Get("settings") is { } workerPreset ? (int)SettingsStore.ReadPreset(workerPreset).MaxThreads : 0;
         using var scanLimits = RunLimits.Enter(workers, Cancellation, CacheFolder(a));
         ScanSummary s;
         string? jobFolder = null;
         if(generate)
         {
-            var generated=GenerationPipeline.Run(new(Lod:req,Resume:!a.Has("no-resume"),VerifySourceContents:a.Has("verify-source-contents"),Preflight:!a.Has("no-preflight"),TextureCompute:a.Get("texture-compute")??"Cpu",ExpandOutputScope:a.Has("expand-output-scope")),
+            var generated=GenerationPipeline.Run(new(Lod:req,Resume:!a.Has("no-resume"),VerifySourceContents:a.Has("verify-source-contents"),Preflight:!a.Has("no-preflight"),TextureCompute:a.Get("texture-compute")??"Cpu",ExpandOutputScope:a.Has("expand-output-scope"),
+                KeepPrevious:a.Integer("keep-previous",OutputRetention.Default,0,OutputRetention.Maximum)),
                 CacheFolder(a),sync,Cancellation);
             Console.WriteLine("Saved job: "+generated.JobFolder);
             jobFolder = generated.JobFolder;

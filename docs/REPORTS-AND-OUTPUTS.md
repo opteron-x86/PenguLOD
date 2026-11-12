@@ -74,7 +74,8 @@ when you want to use managed updates. Keep your working generation as it is.
 3. Click **Preview package update** and review the replacements and any errors.
 4. Click **Publish reviewed package**. Source folders remain unchanged. The new
    package is prepared separately, checked again and moved into place. An existing
-   destination is retained in a sibling `.previous-…` folder.
+   destination is retained in a sibling `.previous-…` folder, up to the number set by
+   **Previous outputs to keep**.
 5. Install the resulting package with your mod manager, replacing its previous
    version. Enable generated plugins and install the separate game plugin if needed.
 
@@ -84,8 +85,22 @@ existing package are also blocked rather than deleted. If a source or destinatio
 changes after preview, create a new plan. Cancellation before publication leaves
 the destination intact.
 
+`meta.ini` (the mod manager's) and `SKSE/Plugins/PenguLOD.ini` (the game plugin's settings)
+belong to the installation. They are not part of a stage's receipt or verification, and edits
+to them never block an update. A package keeps the destination's copies; when the destination
+has none, the first selected stage that has one provides it.
+
 This tool does not activate mods, change load order or modify a game installation
-automatically. The previous package is kept until you choose to remove it.
+automatically.
+
+## Clean up previous copies
+
+Publication leaves the replaced folder beside the output. Unfinished build folders can
+remain if PenguLOD is stopped. Generation removes this output's unfinished builds when it
+starts. To list everything else, run `PenguLOD clean --input <output folder>`; add `--apply`
+to remove it. `--keep-previous <n>` (default 1) keeps the newest copies. Build folders from
+versions before 0.7 cannot be matched to an output and are listed once they are a day old.
+Run `clean` while no generation is running. A desktop button for this is planned.
 
 ## Partial-world generation
 

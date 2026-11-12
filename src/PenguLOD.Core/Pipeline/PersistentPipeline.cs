@@ -35,7 +35,7 @@ public sealed class PipelineJournal
 public sealed class PersistentPipeline : IDisposable
 {
     public static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
-    private readonly List<FileStream> _locks = [];
+    private readonly List<IDisposable> _locks = [];
     private readonly IProgress<string>? _progress;
     private readonly CancellationToken _ct;
     private readonly bool _reuse;
@@ -65,8 +65,9 @@ public sealed class PersistentPipeline : IDisposable
             foreach (var output in stages.Select(p => p.OutputFolder).Order(paths).Distinct(paths))
             {
                 ct.ThrowIfCancellationRequested();
-                var parent = Path.GetDirectoryName(output)!; Directory.CreateDirectory(parent);
-                Lock(Path.Combine(parent, ".pengulod-output-" + OutputSnapshot.HashText(HostPath.ComparisonKey(output))[..24] + ".lock"));
+                // Stages inside this job join the lock; another job, even in this process, is refused.
+                if (OutputLock.HeldHere(output)) throw new IOException("Another generation job is using this output or checkpoint: " + output);
+                _locks.Add(OutputLock.Acquire(output));
             }
             Directory.CreateDirectory(Folder); Lock(Path.Combine(Folder, "job.lock"));
             if (File.Exists(JournalPath))
@@ -101,6 +102,7 @@ public sealed class PersistentPipeline : IDisposable
     {
         if (new FileInfo(file).LinkTarget is not null) throw new IOException("Job lock must not be a symbolic link: " + file);
         try { _locks.Add(new FileStream(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)); }
+
         catch (IOException e) { throw new IOException("Another generation job is using this output or checkpoint: " + file, e); }
     }
 
@@ -142,10 +144,12 @@ public sealed class PersistentPipeline : IDisposable
         using var timing = WorkTiming.Begin(stage.Timings);
         try
         {
-            T result = generate(); _ct.ThrowIfCancellationRequested();
+            T result = generate();
             stage.ProcessingSeconds = processing.Elapsed.TotalSeconds;
             var checkpoint = Stopwatch.StartNew();
-            stage.Output = capture is null ? OutputSnapshot.Capture(stage.Plan.OutputFolder, _progress, _ct) : capture(result);
+            // The stage has published its output. Record it even if cancellation was requested meanwhile, so the next run
+            // can verify and reuse it; cancellation takes effect before the next stage starts.
+            stage.Output = capture is null ? OutputSnapshot.Capture(stage.Plan.OutputFolder, _progress) : capture(result);
             if (stage.Output.Files.Count == 0) throw new InvalidDataException("Cannot checkpoint an empty stage output.");
             stage.Result = JsonSerializer.SerializeToElement(result, Json);
             stage.CheckpointSeconds = checkpoint.Elapsed.TotalSeconds;
@@ -177,7 +181,7 @@ public sealed class PersistentPipeline : IDisposable
         try { File.WriteAllText(temp, JsonSerializer.Serialize(Journal, Json)); File.Move(temp, JournalPath, true); }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
-    public void Dispose() { foreach (var stream in _locks) stream.Dispose(); _locks.Clear(); }
+    public void Dispose() { for (int i = _locks.Count - 1; i >= 0; i--) _locks[i].Dispose(); _locks.Clear(); }
 }
 
 /// <summary>Measured operation durations. Concurrent I/O is reported as summed worker time, never an ETA.</summary>

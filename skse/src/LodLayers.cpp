@@ -1,49 +1,23 @@
 #include "RuntimePaths.h"
 #include "LodLayers.h"
 
+#include "Adaptive.h"
 #include "IniFile.h"
+#include "IniParse.h"
+#include "LayerNames.h"
 
 namespace PenguLOD
 {
 	namespace
 	{
 		constexpr const char* kNames[Layers::kLayerCount] = { "Grass", "3D trees", "Tree cards" };
-		constexpr const char* kKeys[Layers::kLayerCount] = { "grass", "tree3d", "treecard" };
-		constexpr int         kLevels[Layers::kLevelCount] = { 4, 8, 16, 32 };
+		constexpr const auto& kKeys = LayerNames::kKeys;
+		constexpr const auto& kLevels = LayerNames::kLevels;
+		static_assert(std::size(LayerNames::kKeys) == Layers::kLayerCount && std::size(LayerNames::kLevels) == Layers::kLevelCount);
 
 		std::string KeyFor(int a_layer, int a_level) { return std::format("bShow_{}_{}", kKeys[a_layer], kLevels[a_level]); }
 
-		/// "PL:grass:16" -> layer 0, level index 2, tier 0; "PL:grass:16:2" -> the same with tier 2. False for anything else.
-		bool Parse(const char* a_name, int& a_layer, int& a_level, int& a_tier)
-		{
-			if (!a_name || !RuntimePaths::Layer(a_name)) {
-				return false;
-			}
-			const std::string_view rest{ a_name + 3 };
-			const auto             colon = rest.find(':');
-			if (colon == std::string_view::npos) {
-				return false;
-			}
-			a_layer = -1;
-			for (int i = 0; i < Layers::kLayerCount; ++i) {
-				if (rest.substr(0, colon) == kKeys[i]) a_layer = i;
-			}
-			a_level = -1;
-			a_tier = 0;
-			auto lv = rest.substr(colon + 1);
-			if (const auto tc = lv.find(':'); tc != std::string_view::npos) {
-				const auto t = lv.substr(tc + 1);
-				if (t.size() != 1 || t[0] < '0' || t[0] > '9') {
-					return false;
-				}
-				a_tier = t[0] - '0';
-				lv = lv.substr(0, tc);
-			}
-			for (int i = 0; i < Layers::kLevelCount; ++i) {
-				if (lv == std::to_string(kLevels[i])) a_level = i;
-			}
-			return a_layer >= 0 && a_level >= 0;
-		}
+		bool Parse(const char* a_name, int& a_layer, int& a_level, int& a_tier) { return LayerNames::Parse(a_name, a_layer, a_level, a_tier); }
 
 		std::string PathTo(const RE::NiAVObject* a_object)
 		{
@@ -68,32 +42,21 @@ namespace PenguLOD
 
 	void Layers::Load()
 	{
-		std::ifstream in{ RuntimePaths::SettingsRead() };
-		if (!in) {
+		const auto doc = Ini::Document::Read(RuntimePaths::SettingsRead());
+		if (doc.Empty()) {
 			return;
 		}
-		auto trim = [](const std::string& s) {
-			const auto a = s.find_first_not_of(" \t\r\n");
-			if (a == std::string::npos) return std::string{};
-			return s.substr(a, s.find_last_not_of(" \t\r\n") - a + 1);
-		};
-		std::string line;
-		while (std::getline(in, line)) {
-			const auto eq = line.find('=');
-			if (eq == std::string::npos || line.empty() || line[0] == ';' || line[0] == '#' || line[0] == '[') {
-				continue;
-			}
-			const auto key = trim(line.substr(0, eq));
-			const auto value = trim(line.substr(eq + 1));
-			if (_stricmp(key.c_str(), "iGrassTiers") == 0) {
-				grassTiers = std::clamp(std::atoi(value.c_str()), 1, kGrassTiers);
-				continue;
-			}
-			for (int l = 0; l < kLayerCount; ++l) {
-				for (int v = 0; v < kLevelCount; ++v) {
-					if (_stricmp(key.c_str(), KeyFor(l, v).c_str()) == 0) {
-						show[l][v] = value != "0" && _stricmp(value.c_str(), "false") != 0;
-					}
+		// Any section: older settings files used [QualityLayers].
+		if (const auto* v = doc.GetAny("iGrassTiers")) {
+			if (const auto n = Ini::Integer(*v)) grassTiers = static_cast<int>(std::clamp<long long>(*n, 1, kGrassTiers));
+			else logger::warn("PenguLOD.ini: bad value for iGrassTiers: {}", *v);
+		}
+		for (int l = 0; l < kLayerCount; ++l) {
+			for (int v = 0; v < kLevelCount; ++v) {
+				const auto key = KeyFor(l, v);
+				if (const auto* value = doc.GetAny(key)) {
+					if (const auto b = Ini::Bool(*value)) show[l][v] = *b;
+					else logger::warn("PenguLOD.ini: bad value for {}: {}", key, *value);
 				}
 			}
 		}
@@ -109,7 +72,7 @@ namespace PenguLOD
 			}
 		}
 		values.emplace_back("iGrassTiers", std::to_string(grassTiers));
-		return IniFile::Write("Data/SKSE/Plugins/PenguLOD.ini", "Layers", values);
+		return IniFile::Write(RuntimePaths::Settings, "Layers", values);
 	}
 
 	bool Layers::AnyHidden() const
@@ -155,14 +118,23 @@ namespace PenguLOD
 			auto ini = RuntimePaths::SettingsRead();
 			std::error_code             ec;
 			auto                        stamp = std::filesystem::last_write_time(ini, ec);
+			int                         ticks = 0;
 			for (;;) {
 				std::this_thread::sleep_for(500ms);
 				// Editing [Layers] in PenguLOD.ini while the game runs applies within half a second (also how it is tested).
+				// A save from the menu is the plugin's own write: the values in memory are already what was saved.
 				auto current = RuntimePaths::SettingsRead();
 				if (const auto now = std::filesystem::last_write_time(current, ec); !ec && (current != ini || now != stamp)) {
 					ini = current;
 					stamp = now;
-					Load();
+					if (!IniFile::IsOwnWrite(current, now)) {
+						_reload = true;
+						_dirty = true;
+					}
+				}
+				// No layer nodes seen yet (main menu, an interior save): look again every few seconds, so the menu's checkboxes
+				// appear once LOD blocks are loaded even when nothing is hidden.
+				if (!_anyFound && ++ticks % 10 == 0) {
 					_dirty = true;
 				}
 				if (!_dirty && !AnyHidden() && !_appliedHidden) {
@@ -172,6 +144,11 @@ namespace PenguLOD
 					continue;
 				}
 				SKSE::GetTaskInterface()->AddTask([this] {
+					if (_reload.exchange(false)) {
+						// Read on the main thread, where show[][] is used. Adaptive quality, when it has lowered the layers, keeps its preset.
+						Load();
+						Adaptive::Get().Reapply();
+					}
 					Apply();
 					_queued = false;
 				});
