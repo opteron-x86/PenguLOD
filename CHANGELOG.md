@@ -3,7 +3,7 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
-## Unreleased
+## [0.6.0-alpha.5] - 2026-11-12
 
 Output management and the command line
 
