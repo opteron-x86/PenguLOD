@@ -78,6 +78,35 @@ Pipeline state and output ownership
 Existing output is read as before. The first publication after updating may remove
 `.previous-` copies beyond the newest one; set a higher number first to keep more.
 
+Game runtime (SKSE plugin)
+
+- Entering a worldspace no longer loads every dynamic LOD model in one frame. At most
+  `iMaxShowPerUpdate` (default 200) are loaded per update; the nearest come first.
+- At `iMaxShown`, a nearer object replaces the farthest one drawn, so objects next to the
+  player are never the ones missing. Lowering the cap in the menu takes effect at once.
+- Native grid objects in `PenguLOD.esp` are kept in step even when there is no other
+  dynamic LOD to draw.
+- Saving one menu page no longer reloads `PenguLOD.ini` over values changed live on another.
+  External edits are still picked up, and are now read on the game's main thread.
+- Adaptive quality recognises a frame cap (V-sync, a limiter): at the cap counts as
+  headroom, and a target at or above the cap is used just below it. Before, it could step
+  down to the lowest preset and never come back. The menu shows the detected cap.
+- Adaptive quality keeps its preset when the layer settings are reloaded from the file.
+- The quality layer checkboxes appear once LOD blocks load, also after starting from the main
+  menu or an interior, and blocks are rescanned after a worldspace change.
+- Water opacity works with water animation turned off.
+- One settings parser for every section. `no`, `off` and inline comments (`0 ; off`) are
+  read correctly, numbers do not depend on the system locale, and a malformed value is
+  logged and ignored instead of being treated as on.
+- A damaged data file is refused instead of crashing the game while it loads.
+- DynDOLOD.dll counts as present only when it is actually loaded. The About page shows the
+  real log location, and the Dynamic LOD page counts switchable references, grid objects
+  and window glow separately.
+
+The data file format is unchanged: this runtime reads output from earlier generator versions,
+and earlier runtimes read output from this one. New settings files include `iMaxShowPerUpdate`;
+an existing `PenguLOD.ini` uses the default until the key is added.
+
 ## [0.6.0-alpha.4] - 2026-11-10
 
 - Fix Review output scope rejecting older AnvilLOD output before inspecting it.

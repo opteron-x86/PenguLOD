@@ -36,7 +36,7 @@ namespace PenguLOD
 		bool Save() const;
 		/// Starts the background timer that queues Apply() on the main thread.
 		void Start();
-		/// A setting changed: re-apply on the next tick.
+		/// A setting changed, or the player entered another worldspace (other blocks load): re-apply and rescan on the next tick.
 		void Changed() { _dirty = true; }
 		/// 0 = Max (everything), 1 = High, 2 = Medium, 3 = Low.
 		void Preset(int a_preset);
@@ -57,8 +57,9 @@ namespace PenguLOD
 		std::atomic<bool> _dirty{ true };
 		std::atomic<bool> _queued{ false };
 		std::atomic<bool> _running{ false };
-		bool              _appliedHidden{ false };
-		bool              _anyFound{ false };
+		std::atomic<bool> _reload{ false };   // PenguLOD.ini changed outside the plugin: Load() on the main thread
+		std::atomic<bool> _appliedHidden{ false };
+		std::atomic<bool> _anyFound{ false };  // also read by the timer thread
 		bool              _logged{ false };
 		int               _scans{ 0 };
 		RE::NiPointer<RE::NiNode> _lodRoot;  // the engine's "LODRoot" node (found in game: WorldRoot < shadow scene node < LODRoot < LandLOD < ... < obj)

@@ -43,7 +43,8 @@ namespace PenguLOD
 		std::map<std::string, float> Read() const;
 		std::filesystem::file_time_type NewestWrite() const;
 
-		std::atomic_bool                _watching{ false };
-		std::filesystem::file_time_type _lastWrite{};
+		std::atomic_bool                             _watching{ false };
+		std::atomic<std::filesystem::file_time_type> _lastWrite{};  // set on the main thread, read by the watcher thread
+		std::atomic_bool                             _deferring{ false };
 	};
 }

@@ -34,6 +34,7 @@ add_commonlibsse_plugin(${PROJECT_NAME}
         src/Settings.cpp
         src/LodDistances.cpp
         src/IniFile.cpp
+        src/IniParse.cpp
         src/Menu.cpp
         src/LodLayers.cpp
         src/Adaptive.cpp

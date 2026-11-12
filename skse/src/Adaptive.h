@@ -1,5 +1,7 @@
 #pragma once
 
+#include "AdaptivePolicy.h"
+
 namespace PenguLOD
 {
 	/// Adaptive quality: when the frame rate stays below a target for a while, steps the quality layers (grass, 3D trees, tree cards) down one
@@ -17,8 +19,13 @@ namespace PenguLOD
 		void Start();
 		/// Back to the first preset (everything shown) and forget the history.
 		void Reset();
+		/// The quality layers were reloaded from PenguLOD.ini: re-apply the preset adaptive quality had set (main thread).
+		void Reapply();
 
 		float Fps() const { return _fps; }
+		/// A detected frame cap (0 = none), and the target in use, which stays below a cap.
+		float Cap() const { return _cap; }
+		float EffectiveTarget() const { return _target; }
 		int   Level() const { return _level; }
 		bool  Available() const { return _available; }
 		static const char* LevelName(int a_level);
@@ -30,6 +37,8 @@ namespace PenguLOD
 		std::atomic<bool>  _running{ false };
 		std::atomic<bool>  _queued{ false };
 		std::atomic<float> _fps{ 0.0f };
+		std::atomic<float> _cap{ 0.0f };
+		std::atomic<float> _target{ 0.0f };
 		std::atomic<int>   _level{ 0 };
 		std::atomic<bool>  _available{ true };
 
@@ -37,11 +46,7 @@ namespace PenguLOD
 		std::uint32_t                         _lastCount{ 0 };
 		std::chrono::steady_clock::time_point _lastTime{};
 		bool                                  _haveLast{ false };
-		int                                   _lowSeconds{ 0 };
-		int                                   _highSeconds{ 0 };
-		int                                   _sinceChange{ 1000 };
-		int                                   _upHold{ 60 };       // seconds of headroom needed before stepping back up
-		bool                                  _lastWasUp{ false };
+		AdaptivePolicy                        _policy;
 		bool                                  _warned{ false };
 	};
 }
