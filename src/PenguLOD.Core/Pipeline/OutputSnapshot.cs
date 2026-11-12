@@ -39,18 +39,21 @@ public sealed class OutputSnapshot
         int recorded = 0, read = 0;
         var watch = Stopwatch.StartNew();
         var pending = new Stack<string>(); pending.Push(root);
+        RejectLink(root, root);
         while (pending.TryPop(out var dir))
         {
-            ct.ThrowIfCancellationRequested(); RejectLink(root, dir);
+            ct.ThrowIfCancellationRequested();
             foreach (var path in Directory.EnumerateFileSystemEntries(dir))
             {
-                ct.ThrowIfCancellationRequested(); RejectLink(root, path);
+                // Entries are enumerated below the root, so they stay inside it unless one is a link.
+                ct.ThrowIfCancellationRequested(); RejectLinkEntry(path);
                 if (Directory.Exists(path)) { pending.Push(path); continue; }
-                if (Path.GetFileName(path).Equals("meta.ini", StringComparison.OrdinalIgnoreCase)) continue;
+                string relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+                if (UserOwnedFiles.Contains(relative)) continue;
                 string hash;
                 if (WrittenOutputHashes.TryGet(path, out hash)) recorded++;
                 else { hash = HashFile(path, ct); read++; }
-                result.Files.Add(Path.GetRelativePath(root, path).Replace('\\', '/'), hash);
+                result.Files.Add(relative, hash);
                 if (watch.Elapsed.TotalSeconds >= 1)
                 { progress?.Report($"Recording output hashes: {result.Files.Count:N0} files..."); watch.Restart(); }
             }
@@ -81,10 +84,21 @@ public sealed class OutputSnapshot
         if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Contains('\\')
             || relative.Split('/').Any(p => p is "" or "." or ".." || p.Contains(':')))
             throw new InvalidDataException("Invalid checkpoint output path: " + relative);
-        string path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
-        for (string? part = path; part is not null && HostPath.IsWithin(part, root); part = Path.GetDirectoryName(part))
-            RejectLink(root, part);
+        // The relative path has no "." or ".." parts, so it stays below the root unless a component is a link.
+        RejectLinkEntry(root);
+        string path = root;
+        foreach (string part in relative.Split('/'))
+        {
+            path = Path.Combine(path, part);
+            RejectLinkEntry(path);
+        }
         return path;
+    }
+
+    private static void RejectLinkEntry(string path)
+    {
+        FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
+        if (info.LinkTarget is not null) throw new IOException("Stage output contains a symbolic link or escaping path: " + path);
     }
 
     private static void RejectLink(string root, string path)

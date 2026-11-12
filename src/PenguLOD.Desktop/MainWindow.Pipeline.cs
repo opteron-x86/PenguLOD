@@ -31,6 +31,8 @@ public sealed partial class MainWindow
             Check("Check setup before generation", nameof(DesktopSettings.PipelinePreflight)),
             Help(Check("Reuse completed stages", nameof(DesktopSettings.ResumeCompletedStages)), "Completed output is checked before reuse. Changed inputs or settings trigger a rebuild."),
             Help(Check("Keep existing worlds and levels", nameof(DesktopSettings.ExpandOutputScope)), "Expands the run when needed to preserve the existing output's coverage."),
+            Help(Number("Previous outputs to keep", nameof(DesktopSettings.KeepPreviousOutputs), 0, PenguLOD.Core.Pipeline.OutputRetention.Maximum),
+                "Each publication moves the replaced output beside the new one (\".previous-\" folders). Older copies beyond this number are removed. 0 keeps none."),
             Button("Review output scope", ReviewOutputScope),
             Help(Check("Verify all source files", nameof(DesktopSettings.VerifySourceContents)), "Reads every source file instead of checking file sizes and modification times. This can take longer on large mod lists."),
             Button("Export run configuration", ExportPipelineRequest)) },

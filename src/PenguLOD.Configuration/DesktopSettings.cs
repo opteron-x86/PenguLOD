@@ -256,6 +256,9 @@ public sealed class DesktopSettings : ObservableObject
     public bool ResumeCompletedStages { get => _resumeCompletedStages; set => Set(ref _resumeCompletedStages, value); }
     private bool _expandOutputScope;
     public bool ExpandOutputScope { get => _expandOutputScope; set => Set(ref _expandOutputScope, value); }
+    private decimal _keepPreviousOutputs = PenguLOD.Core.Pipeline.OutputRetention.Default;
+    /// <summary>Earlier copies of each output kept beside it after publication (".previous-*"). 0 removes them.</summary>
+    public decimal KeepPreviousOutputs { get => _keepPreviousOutputs; set => Set(ref _keepPreviousOutputs, value); }
     private bool _verifySourceContents;
     public bool VerifySourceContents { get => _verifySourceContents; set => Set(ref _verifySourceContents, value); }
     private bool _pipelineGrass = true;
@@ -265,5 +268,17 @@ public sealed class DesktopSettings : ObservableObject
     private bool _pipelineLod = true;
     public bool PipelineLod { get => _pipelineLod; set => Set(ref _pipelineLod, value); }
 
-    public DesktopSettings Snapshot() => JsonSerializer.Deserialize<DesktopSettings>(JsonSerializer.Serialize(this))!;
+    public DesktopSettings Snapshot()
+    {
+        var copy = JsonSerializer.Deserialize<DesktopSettings>(JsonSerializer.Serialize(this))!;
+        copy.BaseFolder = BaseFolder;
+        return copy;
+    }
+
+    /// <summary>
+    /// Folder that relative paths in an exported preset resolve against: the preset's own folder when read by the CLI.
+    /// Null resolves them against the current folder.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? BaseFolder { get; set; }
 }

@@ -126,7 +126,7 @@ public sealed class TextureGenerationTests
         Assert.False(failed.Published); Assert.True(failed.Errors > 0);
         Assert.Equal(before, File.ReadAllText(Path.Combine(f.Output, TextureGenerationManifest.FileName)));
         TextureGenerationManifest.Read(f.Output, true)!.Verify(f.Output);
-        Assert.Empty(Directory.GetDirectories(f.Output, ".texture-build-*"));
+        Assert.Empty(Directory.GetDirectories(f.Root, ".pengulod-build-*"));
     }
 
     [Fact]
@@ -188,7 +188,8 @@ public sealed class TextureGenerationTests
         TextureFixture.Put(f.Data, @"meshes\trees\testtree.nif", bytes);
         var result = TextureGeneration.Run(f.Request with { Stitched = false, Trees = true });
         Assert.Contains(result.Items, i => i.Kind == "Tree" && i.Status == "Failed" && i.Detail.Contains("Unsupported model shapes"));
-        Assert.Empty(Directory.GetFiles(f.Output, "*.dds", SearchOption.AllDirectories));
+        // Nothing is published, so the output folder is not created.
+        Assert.False(Directory.Exists(f.Output) && Directory.GetFiles(f.Output, "*.dds", SearchOption.AllDirectories).Length > 0);
     }
 
     [Theory]

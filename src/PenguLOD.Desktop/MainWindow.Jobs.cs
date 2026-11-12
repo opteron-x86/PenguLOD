@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PenguLOD.Core.Lod;
 using PenguLOD.Core.Paths;
+using PenguLOD.Core.Pipeline;
 using PenguLOD.Core.Textures;
 using PenguLOD.Core.World;
 using PenguLOD.Desktop.Models;
@@ -193,13 +194,16 @@ public sealed partial class MainWindow
         var s = _settings.Snapshot(); var game = RequestFactory.Game(s);
         if (string.IsNullOrWhiteSpace(s.AuthorPlugin)) throw new ArgumentException("Enter a plugin filename, or * for all trees.");
         if (s.AuthorMinSize < 0 || s.AuthorTreeHeight < 0) throw new ArgumentException("Minimum sizes cannot be negative.");
-        string output = generate ? ToolOutput(s.AuthorOutput, s, []) : Path.Combine(
-            RequestFactory.Optional(s.CacheFolder) is { } c ? RequestFactory.PathValue(c, s) : SettingsStore.CacheRoot, "analysis", Guid.NewGuid().ToString("N"));
+        string analysis = Path.Combine(RequestFactory.Optional(s.CacheFolder) is { } c ? RequestFactory.PathValue(c, s) : SettingsStore.CacheRoot, "analysis");
+        if (!generate) FolderRetention.Prune(analysis, KeepAnalyses - 1);
+        string output = generate ? ToolOutput(s.AuthorOutput, s, []) : Path.Combine(analysis, Guid.NewGuid().ToString("N"));
         return RunJob(generate ? "Asset authoring" : "Asset analysis", s, (p, ct) => ModAuthorTool.Run(new AuthorRequest(game, s.AuthorPlugin.Trim(), output,
             generate && s.AuthorMeshes, generate && s.AuthorBillboards, generate && s.AuthorRules, (float)s.AuthorMinSize, (float)s.AuthorTreeHeight, generate && s.AuthorOverwrite,
             RequestFactory.Optional(s.DynDolodFolder) is { } d ? RequestFactory.PathValue(d, s) : null, TreeStandIns: generate && s.AuthorStandIns, ResourcePacks: RequestFactory.ResourcePaths(s)), p, ct),
             (r, folder, _) => { _resultViews["Mod author"].ItemsSource = r.Items; WriteResult(folder, r); Notice($"{r.Items.Count:N0} models inspected · {r.MeshesWritten:N0} meshes · {r.BillboardsWritten:N0} billboards. Full report: {r.ReportFile}"); });
     }
+    /// <summary>Asset analysis folders kept in the cache.</summary>
+    private const int KeepAnalyses = 10;
     private static void WriteResult<T>(string folder, T result) => File.WriteAllText(Path.Combine(folder, "report.json"), JsonSerializer.Serialize(result, SettingsStore.JsonOptions));
     private static string TextureSignature(DesktopSettings s) => string.Join('\n', s.TextureInputs, s.TextureAllMods, s.Instance, s.Profile, s.WinePrefix, s.GameFolder, s.Mo2GameFolder, s.ModsFolder, s.ProfilesFolder, s.OverwriteFolder);
     private Task ScanTextures()

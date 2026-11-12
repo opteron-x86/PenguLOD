@@ -47,7 +47,9 @@ public static partial class GrassGeneration
         // Full output verification is done by Run under its output lock, with progress and cancellation.
     }
 
-    public static GrassGenerationResult Run(GrassGenerationRequest req, IProgress<string>? progress = null, CancellationToken ct = default)
+    /// <param name="beforePublish">Called with the staged folder just before publication, e.g. to write the output receipt.</param>
+    public static GrassGenerationResult Run(GrassGenerationRequest req, IProgress<string>? progress = null, CancellationToken ct = default,
+        Action<string>? beforePublish = null)
     {
         ct.ThrowIfCancellationRequested();
         using var limits = RunLimits.Enter(req.Threads == 0 ? RunLimits.Parallel().MaxDegreeOfParallelism : req.Threads, ct, RunLimits.CacheDirectory);
@@ -59,84 +61,57 @@ public static partial class GrassGeneration
         var watch = Stopwatch.StartNew();
         using var preparationTiming = WorkTiming.Measure("preparation");
         var output = HostPath.Canonical(req.OutputFolder);
-        var parent = Path.GetDirectoryName(output)!;
-        Directory.CreateDirectory(parent);
-        var lockName = ".pengulod-grass-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(HostPath.ComparisonKey(output))))[..16] + ".lock";
-        var lockPath = Path.Combine(parent, lockName);
-        if (new FileInfo(lockPath).LinkTarget is not null) throw new IOException("Grass lock must not be a symbolic link: " + lockPath);
-        using var guard = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        // The staged output takes the output lock; existing contents are checked under it, before and after the long run.
+        using var staged = new StagedOutput(output, seedPrevious: false, progress, ct);
         GrassGenerationManifest.CheckDestination(output, req.Preview, progress, ct);
-        var work = Path.Combine(parent, ".pengulod-grass-build-" + Guid.NewGuid().ToString("N"));
-        var payload = Path.Combine(work, "output");
+        var payload = staged.Payload;
         var grass = Path.Combine(payload, "grass");
         Directory.CreateDirectory(grass);
-        try
+        var input = PrepareInput(req, Path.Combine(staged.Workspace, "input"), progress, ct);
+        var args = Arguments(req, input, grass);
+        var warnings = new List<string>();
+        if (req.Executable is null) progress?.Report("Bundled FasterNGIO: native CPU BVH collision rejection.");
+        using (var log = new StreamWriter(Path.Combine(payload, "FasterNGIO.log")) { AutoFlush = true })
         {
-            var input = PrepareInput(req, Path.Combine(work, "input"), progress, ct);
-            var args = Arguments(req, input, grass);
-            var warnings = new List<string>();
-            if (req.Executable is null) progress?.Report("Bundled FasterNGIO: native CPU BVH collision rejection.");
-            using (var log = new StreamWriter(Path.Combine(payload, "FasterNGIO.log")) { AutoFlush = true })
+            log.WriteLine("Executable: " + exe);
+            log.WriteLine("Arguments: " + JsonSerializer.Serialize(args));
+            log.WriteLine("Source: " + input.Source);
+            preparationTiming.Dispose();
+            using var generationTiming = WorkTiming.Measure("generation");
+            RunProcess(exe, args, staged.Workspace, line =>
             {
-                log.WriteLine("Executable: " + exe);
-                log.WriteLine("Arguments: " + JsonSerializer.Serialize(args));
-                log.WriteLine("Source: " + input.Source);
-                preparationTiming.Dispose();
-                using var generationTiming = WorkTiming.Measure("generation");
-                RunProcess(exe, args, work, line =>
+                lock (log)
                 {
-                    lock (log)
-                    {
-                        log.WriteLine(line);
-                        if (line.Contains("[warning]", StringComparison.OrdinalIgnoreCase) || line.Contains("[error]", StringComparison.OrdinalIgnoreCase)) warnings.Add(line);
-                    }
-                    progress?.Report(line);
-                }, ct);
-            }
-            ct.ThrowIfCancellationRequested();
-            using var outputTiming = WorkTiming.Measure("output-verification-publication");
-            progress?.Report("Validating grass cache files...");
-            var manifest = GrassGenerationManifest.Create(payload, input.Source, input.LoadOrderFingerprint, req, ct);
-            if (manifest.Files.Count == 0) throw new InvalidOperationException("FasterNGIO produced no cache files. Check the selected worldspace/cells and NGIO settings. Previous output was preserved.");
-            if (manifest.Instances == 0)
-            {
-                const string warning = "The selected area produced only empty grass caches. Check worldspaces, grass models and placement settings before installing this output.";
-                warnings.Add(warning); progress?.Report("WARNING: " + warning);
-            }
-            manifest.Save(payload);
-            File.WriteAllText(Path.Combine(payload, "README-Grass.txt"),
-                $"PenguLOD grass cache — FasterNGIO\nSource: {input.Source}\nWorldspaces: {req.Worldspaces}\n" +
-                (req.Preview ? "SMALL-AREA PREVIEW. This is not a complete grass cache.\n" : "Install this folder as a separate mod. Disable the old grass cache instead of merging files.\n") +
-                "Keep NGIO and Grass Cache Helper NG installed as required by your setup. This output does not change game or NGIO settings.\n" +
-                "Regenerate after changes to grass, landscape, placement settings, or load order. Check the log and inspect grass in game.\n");
-            // Recheck the destination after the potentially long process. Nothing is replaced until
-            // every file is validated. Publication is a directory swap on the same filesystem.
-            ct.ThrowIfCancellationRequested();
-            GrassGenerationManifest.CheckDestination(output, req.Preview, progress, ct);
-            var metadata = Path.Combine(output, "meta.ini");
-            if (File.Exists(metadata)) File.Copy(metadata, Path.Combine(payload, "meta.ini"));
-            string? previous = null;
-            if (Directory.Exists(output))
-            {
-                previous = output + ".previous-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6];
-                Directory.Move(output, previous);
-            }
-            try { Directory.Move(payload, output); }
-            catch
-            {
-                if (previous is not null) Directory.Move(previous, output);
-                throw;
-            }
-            progress?.Report($"Grass cache published: {manifest.Files.Count:N0} files, {manifest.Instances:N0} instances in {watch.Elapsed.TotalSeconds:F1}s.");
-            if (previous is not null) progress?.Report("Previous output retained: " + previous);
-            return new(output, manifest.Files.Count, manifest.Instances, manifest.EmptyFiles, req.Preview, previous, warnings, watch.Elapsed);
+                    log.WriteLine(line);
+                    if (line.Contains("[warning]", StringComparison.OrdinalIgnoreCase) || line.Contains("[error]", StringComparison.OrdinalIgnoreCase)) warnings.Add(line);
+                }
+                progress?.Report(line);
+            }, ct);
         }
-        finally
+        ct.ThrowIfCancellationRequested();
+        using var outputTiming = WorkTiming.Measure("output-verification-publication");
+        progress?.Report("Validating grass cache files...");
+        var manifest = GrassGenerationManifest.Create(payload, input.Source, input.LoadOrderFingerprint, req, ct);
+        if (manifest.Files.Count == 0) throw new InvalidOperationException("FasterNGIO produced no cache files. Check the selected worldspace/cells and NGIO settings. Previous output was preserved.");
+        if (manifest.Instances == 0)
         {
-            // .NET removes file symlinks themselves; it does not delete their targets.
-            try { Directory.Delete(work, recursive: true); }
-            catch (IOException ex) { progress?.Report("Could not remove temporary grass workspace: " + work + ": " + ex.Message); }
+            const string warning = "The selected area produced only empty grass caches. Check worldspaces, grass models and placement settings before installing this output.";
+            warnings.Add(warning); progress?.Report("WARNING: " + warning);
         }
+        manifest.Save(payload);
+        File.WriteAllText(Path.Combine(payload, "README-Grass.txt"),
+            $"PenguLOD grass cache — FasterNGIO\nSource: {input.Source}\nWorldspaces: {req.Worldspaces}\n" +
+            (req.Preview ? "SMALL-AREA PREVIEW. This is not a complete grass cache.\n" : "Install this folder as a separate mod. Disable the old grass cache instead of merging files.\n") +
+            "Keep NGIO and Grass Cache Helper NG installed as required by your setup. This output does not change game or NGIO settings.\n" +
+            "Regenerate after changes to grass, landscape, placement settings, or load order. Check the log and inspect grass in game.\n");
+        // Recheck the destination after the potentially long process. Nothing is replaced until every file is validated.
+        ct.ThrowIfCancellationRequested();
+        GrassGenerationManifest.CheckDestination(output, req.Preview, progress, ct);
+        beforePublish?.Invoke(payload);
+        staged.Commit(progress);
+        progress?.Report($"Grass cache published: {manifest.Files.Count:N0} files, {manifest.Instances:N0} instances in {watch.Elapsed.TotalSeconds:F1}s.");
+        return new(output, manifest.Files.Count, manifest.Instances, manifest.EmptyFiles, req.Preview, staged.PreviousOutput, warnings, watch.Elapsed);
     }
 
     internal static List<string> Arguments(GrassGenerationRequest req, GrassGenerationInput input, string grass)

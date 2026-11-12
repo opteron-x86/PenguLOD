@@ -40,7 +40,7 @@ public sealed class OutputSetReceipt
             throw new InvalidDataException("Invalid output receipt schema.");
         var receipt = json.RootElement.Deserialize<OutputSetReceipt>(PersistentPipeline.Json);
         if (receipt is null || receipt.Schema != 1 || receipt.Stages is null || receipt.Stages.Count == 0
-            || receipt.Stages.Any(s => s is null || s.Id is not ("lod" or "textures" or "terrain" or "grass")
+            || receipt.Stages.Any(s => s is null || !StageIds.IsKnown(s.Id)
                 || s.Scope?.Worlds is null || s.Scope.Levels is null || s.Scope.Bands is null || s.Files is null || s.Files.Count == 0 || s.Dependencies is null)
             || receipt.Stages.Select(s => s.Id).Distinct().Count() != receipt.Stages.Count)
             throw new InvalidDataException("Invalid or unsupported output receipt.");
@@ -49,6 +49,9 @@ public sealed class OutputSetReceipt
             throw new InvalidDataException("Invalid output scope or dependencies.");
         for (int i = 0; i < receipt.Stages.Count; i++)
         {
+            // Receipts from 0.6.0-alpha.4 and earlier also hashed user-owned files such as SKSE/Plugins/PenguLOD.ini.
+            if (receipt.Stages[i].Files.Keys.Any(UserOwnedFiles.Contains))
+                receipt.Stages[i] = receipt.Stages[i] with { Files = receipt.Stages[i].Files.Where(f => !UserOwnedFiles.Contains(f.Key)).ToDictionary(f => f.Key, f => f.Value, StringComparer.Ordinal) };
             var stage = receipt.Stages[i];
             var actualScope = Scope(stage.Files.Keys);
             if (actualScope.Worlds.Except(stage.Scope.Worlds, StringComparer.OrdinalIgnoreCase).Any())
@@ -80,7 +83,7 @@ public sealed class OutputSetReceipt
         IReadOnlyList<OutputDependency>? dependencies = null, bool complete = true, OutputScope? scope = null)
     {
         snapshot = new OutputSnapshot { Files = new(snapshot.Files, StringComparer.Ordinal) };
-        foreach (string key in snapshot.Files.Keys.Where(k => k.Equals(FileName, StringComparison.OrdinalIgnoreCase)).ToArray()) snapshot.Files.Remove(key);
+        foreach (string key in snapshot.Files.Keys.Where(k => k.Equals(FileName, StringComparison.OrdinalIgnoreCase) || UserOwnedFiles.Contains(k)).ToArray()) snapshot.Files.Remove(key);
         var receipt = new OutputSetReceipt { Stages = [new(stage, ProductInfo.Version, sourceFingerprint, DateTimeOffset.UtcNow,
             scope ?? Scope(snapshot.Files.Keys), new(snapshot.Files, StringComparer.Ordinal), dependencies ?? [], complete)] };
         receipt.Write(folder);
@@ -151,7 +154,10 @@ public static class OutputManagement
         if (inputs.Any(root => !string.IsNullOrWhiteSpace(root) && HostPath.IsWithin(path, root)))
             throw new ArgumentException("Save reports and plans outside the source and destination folders, without overwriting input reports.");
     }
-    public static OutputVerification Verify(IEnumerable<string> folders, CancellationToken ct = default)
+    public static OutputVerification Verify(IEnumerable<string> folders, CancellationToken ct = default) => Verify(folders, ct, null);
+
+    /// <param name="hashed">Content hashes already read for a folder (relative path → hash), so a plan reads each file once.</param>
+    private static OutputVerification Verify(IEnumerable<string> folders, CancellationToken ct, IReadOnlyDictionary<string, Dictionary<string, string>>? hashed)
     {
         var findings = new List<OutputFinding>(); int count = 0;
         var all = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -171,13 +177,13 @@ public static class OutputManagement
                     {
                         ct.ThrowIfCancellationRequested();
                         if (!actual.TryGetValue(relative, out var path)) { findings.Add(new("Error", "Missing " + stage.Id + " file: " + relative)); continue; }
-                        string hash = OutputSnapshot.HashFile(OutputSnapshot.Resolve(root, path), ct); count++;
+                        string hash = hashed?.GetValueOrDefault(root)?.GetValueOrDefault(path) ?? OutputSnapshot.HashFile(OutputSnapshot.Resolve(root, path), ct); count++;
                         if (!hash.Equals(expected, StringComparison.OrdinalIgnoreCase)) findings.Add(new("Error", "Changed or stale file: " + relative));
                         if (all.TryGetValue(relative, out var other) && !hash.Equals(other, StringComparison.OrdinalIgnoreCase))
                             findings.Add(new("Error", "Conflicting files across selected outputs: " + relative));
                         all[relative] = hash;
                     }
-                foreach (string file in actual.Keys.Where(p => !owned.ContainsKey(p) && !p.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) && !p.Equals("meta.ini", StringComparison.OrdinalIgnoreCase)))
+                foreach (string file in actual.Keys.Where(p => !owned.ContainsKey(p) && !p.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) && !UserOwnedFiles.Contains(p)))
                     findings.Add(new("Error", "Unowned file; managed updates will not delete or adopt it: " + file));
             }
             catch (Exception e) when (e is IOException or InvalidDataException or JsonException or ArgumentException)
@@ -218,23 +224,28 @@ public static class OutputManagement
         var previous = new List<OutputStage>();
         var stageFolders = new Dictionary<string, string>();
         var inventories = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        OutputSnapshot? destinationSnapshot = null;
+        // Every file of every folder is read once per plan; verification reuses these hashes.
+        var hashed = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+        Dictionary<string, string> Hash(string root)
+        {
+            if (hashed.TryGetValue(root, out var known)) return known;
+            var files = OutputFiles.Enumerate(root, ct).ToDictionary(p => p, p => OutputSnapshot.HashFile(OutputSnapshot.Resolve(root, p), ct), StringComparer.Ordinal);
+            // User-owned files may change at any time (the mod manager rewrites meta.ini); they do not invalidate a plan.
+            inventories[root] = new OutputSnapshot { Files = files.Where(f => !UserOwnedFiles.Contains(f.Key)).ToDictionary(f => f.Key, f => f.Value) }.Digest;
+            return hashed[root] = files;
+        }
+        Dictionary<string, string>? destinationFiles = null;
         try
         {
             OutputFiles.RequireRealPath(plan.Destination);
             if (File.Exists(plan.Destination)) throw new IOException("Package destination is a file, not a folder.");
-            if (Directory.Exists(plan.Destination))
-            {
-                destinationSnapshot = new OutputSnapshot { Files = OutputFiles.Enumerate(plan.Destination, ct)
-                    .ToDictionary(p => p, p => OutputSnapshot.HashFile(OutputSnapshot.Resolve(plan.Destination, p), ct), StringComparer.Ordinal) };
-                inventories[plan.Destination] = destinationSnapshot.Digest;
-            }
+            if (Directory.Exists(plan.Destination)) destinationFiles = Hash(plan.Destination);
             // Existing destinations must be entirely owned. Empty destinations are safe to populate.
-            if (Directory.Exists(plan.Destination) && OutputFiles.Enumerate(plan.Destination, ct).Any(p => !p.Equals("meta.ini", StringComparison.OrdinalIgnoreCase)))
+            if (destinationFiles is not null && destinationFiles.Keys.Any(p => !UserOwnedFiles.Contains(p)))
             {
                 var old = OutputSetReceipt.Read(plan.Destination); previous.AddRange(old.Stages);
                 foreach (var s in old.Stages) stageFolders[s.Id] = plan.Destination;
-                var verify = Verify([plan.Destination], ct);
+                var verify = Verify([plan.Destination], ct, hashed);
                 plan.Errors.AddRange(verify.Findings.Where(f => f.Severity == "Error" && f.Code != "dependency-unselected").Select(f => f.Message));
             }
             var incoming = new List<OutputStage>();
@@ -255,12 +266,12 @@ public static class OutputManagement
                     }
                     plan.Changes.Add($"Replace complete {stage.Id} output: {stage.Files.Count:N0} files; worlds {string.Join(", ", stage.Scope.Worlds)}; levels {string.Join(", ", stage.Scope.Levels)}.");
                 }
-                inventories[root] = OutputSnapshot.Capture(root, ct: ct).Digest;
+                Hash(root);
             }
             plan.Stages = previous.Where(s => incoming.All(n => n.Id != s.Id)).Concat(incoming).OrderBy(s => s.Id, StringComparer.Ordinal).ToList();
             // Verify incoming folders individually; dependencies are checked against the final stage selection below.
             foreach (string root in plan.Sources)
-                plan.Errors.AddRange(Verify([root], ct).Findings.Where(f => f.Severity == "Error" && f.Code != "dependency-unselected").Select(f => f.Message));
+                plan.Errors.AddRange(Verify([root], ct, hashed).Findings.Where(f => f.Severity == "Error" && f.Code != "dependency-unselected").Select(f => f.Message));
             foreach (var stage in plan.Stages)
                 foreach (var dependency in stage.Dependencies)
                 {
@@ -276,14 +287,16 @@ public static class OutputManagement
                     if (old is null) copies.Add(file, new(file, stageFolders[stage.Id], hash));
                     else if (old.Hash != hash) plan.Errors.Add("Stages contain conflicting files: " + file);
                 }
-            // Mod-manager metadata belongs to the destination installation, not an incoming stage.
-            foreach (var file in destinationSnapshot?.Files ?? [])
-                if (file.Key.Equals("meta.ini", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (copies.TryGetValue(file.Key, out var owned) && owned.Hash != file.Value)
-                        plan.Errors.Add("Incoming stage conflicts with the destination's mod-manager metadata: " + file.Key);
-                    else copies[file.Key] = new(file.Key, plan.Destination, file.Value);
-                }
+            // User-owned files (mod-manager metadata, runtime settings) belong to the installation: the destination's copy is
+            // kept; when it has none, the first selected source that has one provides it.
+            foreach (string userOwned in UserOwnedFiles.Paths)
+            {
+                foreach (var key in copies.Keys.Where(k => UserOwnedFiles.Contains(k) && k.Equals(userOwned, StringComparison.OrdinalIgnoreCase)).ToArray()) copies.Remove(key);
+                foreach (string root in plan.Sources.Prepend(plan.Destination))
+                    if ((root == plan.Destination ? destinationFiles : hashed.GetValueOrDefault(root)) is { } files
+                        && files.FirstOrDefault(f => f.Key.Equals(userOwned, StringComparison.OrdinalIgnoreCase)) is { Key: not null } found)
+                    { copies[found.Key] = new(found.Key, root, found.Value); break; }
+            }
             plan.Files = copies.Values.OrderBy(f => f.File, StringComparer.Ordinal).ToList();
             plan.Id = OutputSnapshot.HashText(JsonSerializer.Serialize(new { plan.Destination, plan.Sources, Inventories = inventories }));
         }
@@ -297,10 +310,8 @@ public static class OutputManagement
         if (!reviewed.CanPublish || string.IsNullOrEmpty(reviewed.Id)) throw new InvalidDataException("Review a valid update plan before publishing.");
         OutputFiles.RequireRealPath(reviewed.Destination);
         string destination = HostPath.Canonical(reviewed.Destination);
-        string parent = Path.GetDirectoryName(destination)!; Directory.CreateDirectory(parent);
-        string lockPath = Path.Combine(parent, ".pengulod-output-" + OutputSnapshot.HashText(HostPath.ComparisonKey(destination))[..24] + ".lock");
-        if (new FileInfo(lockPath).LinkTarget is not null) throw new IOException("Output lock must not be a symbolic link.");
-        using var outputLock = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        using var outputLock = OutputLock.Acquire(destination);
         var current = Plan(reviewed.Sources, destination, ct);
         if (!current.CanPublish || reviewed.Id != current.Id) throw new IOException("Output or source changed after planning. Create and review a new plan.");
         using var staged = new StagedOutput(destination, false, progress, ct);
@@ -313,9 +324,12 @@ public static class OutputManagement
             string from = OutputSnapshot.Resolve(file.SourceFolder, Path.GetRelativePath(file.SourceFolder, found).Replace('\\', '/'));
             string to = OutputSnapshot.Resolve(staged.Payload, file.File);
             Directory.CreateDirectory(Path.GetDirectoryName(to)!);
-            // StagedOutput may already have copied the destination's meta.ini.
+            // StagedOutput has already copied the destination's user-owned files; those follow the installed copy.
+            if (UserOwnedFiles.Contains(file.File) && File.Exists(to)) continue;
             if (!File.Exists(to)) WrittenOutputHashes.Copy(from, to, ct);
-            if (OutputSnapshot.HashFile(to, ct) != file.Hash) throw new IOException("Source changed while copying: " + file.File);
+            // The copy recorded the hash of the bytes it wrote; only fall back to reading the file again.
+            string copiedHash = WrittenOutputHashes.TryGet(to, out var recorded) ? recorded : OutputSnapshot.HashFile(to, ct);
+            if (!copiedHash.Equals(file.Hash, StringComparison.OrdinalIgnoreCase)) throw new IOException("Source changed while copying: " + file.File);
             if (++copied % 100 == 0 || copied == current.Files.Count) progress?.Report($"Preparing package: {copied:N0}/{current.Files.Count:N0} files...");
         }
         ct.ThrowIfCancellationRequested();

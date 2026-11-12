@@ -21,10 +21,14 @@ public sealed class WrittenOutputHashes : IDisposable
         _root = HostPath.Canonical(root); _previous = Current.Value; Current.Value = this;
     }
 
-    public static void Record(string path, ReadOnlySpan<byte> bytes)
+    public static void Record(string path, ReadOnlySpan<byte> bytes) => RecordAndHash(path, bytes);
+
+    /// <summary>Hashes bytes just written to <paramref name="path"/>, remembers the hash in the active scope and returns it.</summary>
+    public static string RecordAndHash(string path, ReadOnlySpan<byte> bytes)
     {
-        if (Current.Value is not { _disposed: false } scope || !HostPath.IsWithin(path, scope._root)) return;
-        scope.Remember(path, bytes.Length, Convert.ToHexString(SHA256.HashData(bytes)));
+        string hash = Convert.ToHexString(SHA256.HashData(bytes));
+        if (Current.Value is { _disposed: false } scope && HostPath.IsWithin(path, scope._root)) scope.Remember(path, bytes.Length, hash);
+        return hash;
     }
 
     private void Remember(string path, long length, string hash)

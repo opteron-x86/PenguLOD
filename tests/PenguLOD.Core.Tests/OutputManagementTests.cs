@@ -281,11 +281,15 @@ public sealed class OutputManagementTests : IDisposable
         string metadata = Path.Combine(destination, "meta.ini");
         File.WriteAllText(metadata, "installation metadata");
         var plan = OutputManagement.Plan([source], destination);
+        // The mod manager may rewrite meta.ini at any time; publication keeps the installed copy instead of refusing.
         File.WriteAllText(metadata, "updated installation metadata");
-        Assert.Throws<IOException>(() => OutputManagement.Publish(plan));
-        OutputManagement.Publish(OutputManagement.Plan([source], destination));
+        OutputManagement.Publish(plan);
         Assert.Equal("updated installation metadata", File.ReadAllText(metadata));
         Assert.True(OutputManagement.Verify([destination]).Valid);
+        // Generated files are still guarded: a changed source invalidates the plan.
+        var next = OutputManagement.Plan([source], destination);
+        File.WriteAllText(Path.Combine(source, "PenguLOD.esm"), "changed");
+        Assert.Throws<IOException>(() => OutputManagement.Publish(next));
     }
 
     [Fact]
