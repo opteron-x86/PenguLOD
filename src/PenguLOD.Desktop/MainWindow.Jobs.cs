@@ -60,13 +60,12 @@ public sealed partial class MainWindow
     internal Task RunScan(bool generate)
     {
         var s = _settings.Snapshot();
-        if (generate) return RunPersistentPipeline("LOD generation", s, state => new GenerationPipelineRequest(
-            Lod: RequestFactory.Scan(state, true), Resume: state.ResumeCompletedStages, VerifySourceContents: state.VerifySourceContents));
-        return RunJob(generate ? "LOD generation" : "Load order scan", s,
+        if (generate) return RunPersistentPipeline("LOD generation", s, state => RequestFactory.Stages(state, lod: true));
+        return RunJob("Load order scan", s,
             (progress, ct) =>
             {
                 progress.Report("Checking LOD settings and output paths...");
-                var request = RequestFactory.Scan(s, generate);
+                var request = RequestFactory.Scan(s, false);
                 ct.ThrowIfCancellationRequested();
                 return ScanPipeline.Run(request, progress, ct);
             }, (summary, folder, elapsed) =>
@@ -79,8 +78,8 @@ public sealed partial class MainWindow
                 else if (summary.Grids.Count == 0)
                 { _status.Text = "No matching worldspaces found"; Notice("No LOD settings matched the requested worldspaces. Check the names, game files and archive list."); }
                 else if (summary.Warnings.Count + summary.MissingPlugins.Count > 0 || summary.Stats.SkippedMissingMesh > 0 || summary.Generation?.MeshErrors.Count > 0)
-                { _status.Text = (generate ? "Generation" : "Scan") + " completed with warnings"; Notice("Review the warnings and missing assets in Scan results. Full details are in the run folder."); }
-                else Notice(generate ? "Generation complete. Install the output as a mod and enable any generated plugins." : "Scan complete. Review the worldspaces and any warnings.");
+                { _status.Text = "Scan completed with warnings"; Notice("Review the warnings and missing assets in Scan results. Full details are in the run folder."); }
+                else Notice("Scan complete. Review the worldspaces and any warnings.");
             });
     }
     internal void ShowSummary(ScanSummary s)
@@ -114,8 +113,8 @@ public sealed partial class MainWindow
     }
     private void ApplyPreset(string preset)
     {
-        _settings.Options.Clear();
-        void Set(string key, object value) => _settings.Options[key] = JsonSerializer.SerializeToElement(value);
+        _settings.ResetOptions();
+        void Set(string key, object value) => _settings.SetOption(key, JsonSerializer.SerializeToElement(value));
         if (preset == "Balanced") { Set("preset", "Medium"); Set("grassDensity", .05m); Set("detailedShips", false); }
         if (preset == "Objects")
             foreach (string k in new[] { "trees", "tree3d", "grass", "csGrass", "dynamic", "grid", "nativeGrid", "animatedShips", "renderBillboards" }) Set(k, false);
@@ -150,7 +149,7 @@ public sealed partial class MainWindow
             if (HostPath.IsWithin(output, root) || HostPath.IsWithin(root, output)) throw new ArgumentException("Choose a separate output folder outside the source: " + root);
         }
         // Also protect the configured game and the mod manager's profile files.
-        if (RequestFactory.Optional(s.GameFolder) is { } game)
+        if (RequestFactory.Optional(s.SourceMode == "Mod Organizer 2" ? s.Mo2GameFolder : s.GameFolder) is { } game)
         {
             string path = RequestFactory.PathValue(game, s);
             if (Path.GetFileName(Path.TrimEndingDirectorySeparator(path)).Equals("Data", StringComparison.OrdinalIgnoreCase)) path = Path.GetDirectoryName(path)!;
@@ -202,7 +201,7 @@ public sealed partial class MainWindow
             (r, folder, _) => { _resultViews["Mod author"].ItemsSource = r.Items; WriteResult(folder, r); Notice($"{r.Items.Count:N0} models inspected · {r.MeshesWritten:N0} meshes · {r.BillboardsWritten:N0} billboards. Full report: {r.ReportFile}"); });
     }
     private static void WriteResult<T>(string folder, T result) => File.WriteAllText(Path.Combine(folder, "report.json"), JsonSerializer.Serialize(result, SettingsStore.JsonOptions));
-    private static string TextureSignature(DesktopSettings s) => string.Join('\n', s.TextureInputs, s.TextureAllMods, s.Instance, s.Profile, s.WinePrefix, s.GameFolder, s.ModsFolder, s.ProfilesFolder, s.OverwriteFolder);
+    private static string TextureSignature(DesktopSettings s) => string.Join('\n', s.TextureInputs, s.TextureAllMods, s.Instance, s.Profile, s.WinePrefix, s.GameFolder, s.Mo2GameFolder, s.ModsFolder, s.ProfilesFolder, s.OverwriteFolder);
     private Task ScanTextures()
     {
         var s = _settings.Snapshot();
@@ -267,8 +266,13 @@ public sealed partial class MainWindow
     {
         var found = InstallDiscovery.Find();
         if (found.Count == 0) { Notice("No Skyrim installation was found in Steam's libraries. Choose the game folder on Overview."); return; }
-        var first = found[0]; _settings.GameFolder = first.GameFolder; _settings.WinePrefix = first.Prefix;
+        // Detection fills the Data-folder source. In MO2 mode the instance's own gamePath, its override and an existing
+        // Wine prefix stay as they are.
+        var first = found[0]; _settings.GameFolder = first.GameFolder;
+        bool mo2 = _settings.SourceMode == "Mod Organizer 2";
+        if (!mo2 || string.IsNullOrWhiteSpace(_settings.WinePrefix)) _settings.WinePrefix = first.Prefix;
         if (first.PluginsFile is { } p) _settings.PluginsFile = p;
-        Notice($"Detected {first.GameFolder}" + (found.Count > 1 ? $" ({found.Count} installations found; you can choose another on Overview.)" : ". Review the source paths on Overview."));
+        Notice($"Detected {first.GameFolder}" + (found.Count > 1 ? $" ({found.Count} installations found; you can choose another on Overview.)" : ". Review the source paths on Overview.")
+            + (mo2 ? " It is used when the game source is Data folder; Mod Organizer 2 keeps its own game path." : ""));
     }
 }

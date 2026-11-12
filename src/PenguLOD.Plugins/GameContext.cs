@@ -99,6 +99,9 @@ public sealed class GameContext : IDisposable
     /// <summary>Indexes BSAs (+ loose files) as the game would see them for this source.</summary>
     public AssetIndex BuildAssets(Func<string, bool>? pathFilter = null) => _assetFactory(pathFilter);
 
+    /// <summary>Base masters the game loads without a plugins.txt entry.</summary>
+    internal static IEnumerable<string> ImplicitPluginNames(GameRelease release) => Implicits.Get(release).Listings.Select(k => k.FileName.String);
+
     public static GameContext Open(GameContextOptions o, IProgress<string>? progress = null)
     {
         string? Resolve(string? value) => string.IsNullOrWhiteSpace(value) ? null : HostPath.Resolve(value, winePrefix: o.WinePrefix);
@@ -244,6 +247,9 @@ public sealed class GameContext : IDisposable
             progress?.Report($"Skipping PenguLOD's own output folder as input: {vdi.ExcludedLayer}");
         if (vdi.MissingModFolders > 0)
             warnings.Add($"{vdi.MissingModFolders} enabled mods in modlist.txt have no folder in {instance.ModsFolder}.");
+        foreach (var conflict in vdi.CaseConflicts.Take(20))
+            warnings.Add($"Folders that differ only in case were merged (rename one to avoid ambiguity): {conflict}");
+        if (vdi.CaseConflicts.Count > 20) warnings.Add($"{vdi.CaseConflicts.Count - 20} more mods have folders that differ only in case.");
 
         // Load order with plugin files resolved through the virtual Data folder.
         var release = o.Release;

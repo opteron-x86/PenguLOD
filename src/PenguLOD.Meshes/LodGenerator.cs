@@ -599,6 +599,8 @@ public sealed class LodGenerator
                     if (result.ByCategory is not null)
                         foreach (var (cat, st) in result.ByCategory)
                             breakdown.AddOrUpdate(((int)quad.Level, cat), (st.Triangles, st.Vertices), (_, v) => (v.Item1 + st.Triangles, v.Item2 + st.Vertices));
+                    foreach (var oversized in result.OversizedMeshes ?? [])
+                        _meshErrors.TryAdd(oversized, "A shape has more than 65,535 vertices or triangles; it was left out of LOD.");
                     if (result.Shapes == 0) Interlocked.Increment(ref empty);
                     Interlocked.Increment(ref written);
                     Interlocked.Add(ref tris, result.Triangles);

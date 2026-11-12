@@ -68,8 +68,8 @@ public static class TreeLodGenerator
                 {
                     var vanillaBlocks = assets.EnumeratePaths(GamePath.Join("meshes", "terrain", ws, "trees") + "\\")
                         .Where(p => p.EndsWith(".btt", StringComparison.Ordinal) && GamePath.GetFileName(p).Split('.').Length == 5)
-                        .Select(p => Seasonal(GamePath.GetFileName(p)))
-                        .ToList();
+                        .Select(p => Seasonal(BlockName(ws, GamePath.GetFileName(p))))
+                        .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                     var emptyHash = "empty v" + Version + "|" + string.Join("|", vanillaBlocks.Order(StringComparer.OrdinalIgnoreCase));
                     if (!manifest.Trees.TryGetValue(manifestKey, out var prev) || prev != emptyHash
                         || vanillaBlocks.Any(n => !File.Exists(Path.Combine(treeFolder, n))))
@@ -103,7 +103,7 @@ public static class TreeLodGenerator
             // Vanilla / other mods' .btt files for this worldspace (our own output folder is not an input).
             var foreignBlocks = assets.EnumeratePaths(GamePath.Join("meshes", "terrain", ws, "trees") + "\\")
                 .Where(p => p.EndsWith(".btt", StringComparison.Ordinal) && GamePath.GetFileName(p).Split('.').Length == 5)
-                .Select(p => Seasonal(GamePath.GetFileName(p)))
+                .Select(p => Seasonal(BlockName(ws, GamePath.GetFileName(p))))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var hash = Hash(list, foreignBlocks, assets, brightness);
@@ -203,6 +203,16 @@ public static class TreeLodGenerator
         return new TreeGenerateStats(written, unchanged, types, instances, blocks, empty, deleted, sw.Elapsed, warnings);
     }
 
+    /// <summary>
+    /// A block file name with the worldspace's EditorID casing. Asset paths are lower-cased, while our own blocks use the
+    /// EditorID; on a case-sensitive filesystem the two spellings would otherwise be two files.
+    /// </summary>
+    private static string BlockName(string ws, string fileName)
+    {
+        int dot = fileName.IndexOf('.');
+        return dot > 0 && fileName[..dot].Equals(ws, StringComparison.OrdinalIgnoreCase) ? ws + fileName[dot..] : fileName;
+    }
+
     private static void Write(string path, byte[] bytes)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -229,13 +239,18 @@ public static class TreeLodGenerator
         int n = 0;
         var dir = Path.Combine(outputFolder, "meshes", "terrain", ws, "trees");
         if (Directory.Exists(dir))
-            foreach (var f in Directory.EnumerateFiles(dir, "*.btt"))
+        {
+            var listed = Directory.EnumerateFiles(dir, "*.btt").Select(Path.GetFileName).OfType<string>().ToHashSet(StringComparer.Ordinal);
+            foreach (var name in listed)
             {
-                var pieces = Path.GetFileName(f).Split('.');
+                var pieces = name.Split('.');
                 if (season is null ? pieces.Length != 5 : pieces.Length != 6 || !pieces[^2].Equals(season,StringComparison.OrdinalIgnoreCase)) continue;
-                if (keep is not null && keep.Contains(Path.GetFileName(f))) continue;
-                try { File.Delete(f); n++; } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                // A kept block is matched case-insensitively. A differently cased copy is removed only when the kept spelling
+                // is listed as well, i.e. on a case-sensitive filesystem where they are two files.
+                if (keep is not null && keep.TryGetValue(name, out var kept) && (kept == name || !listed.Contains(kept))) continue;
+                try { File.Delete(Path.Combine(dir, name)); n++; } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
+        }
         if (keep is null)
             foreach (var rel in new[] { Seasonal(TreeLodFiles.ListPath(ws)), Seasonal(TreeLodFiles.AtlasPath(ws)) })
             {

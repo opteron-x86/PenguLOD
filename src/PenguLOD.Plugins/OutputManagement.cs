@@ -47,12 +47,18 @@ public sealed class OutputSetReceipt
         if (receipt.Stages.Any(s => s.Scope.Worlds.Any(string.IsNullOrWhiteSpace) || s.Scope.Levels.Any(l => l is not (4 or 8 or 16 or 32))
             || s.Dependencies.Any(d => d is null || d.Stage is not ("textures" or "grass" or "terrain") || d.Files is null)))
             throw new InvalidDataException("Invalid output scope or dependencies.");
-        foreach (var stage in receipt.Stages)
+        for (int i = 0; i < receipt.Stages.Count; i++)
         {
+            var stage = receipt.Stages[i];
             var actualScope = Scope(stage.Files.Keys);
-            if (actualScope.Worlds.Except(stage.Scope.Worlds, StringComparer.OrdinalIgnoreCase).Any()
-                || actualScope.Bands.Except(stage.Scope.Bands, StringComparer.OrdinalIgnoreCase).Any())
+            if (actualScope.Worlds.Except(stage.Scope.Worlds, StringComparer.OrdinalIgnoreCase).Any())
                 throw new InvalidDataException("Output receipt scope does not cover its files.");
+            if (!actualScope.Bands.Except(stage.Scope.Bands, StringComparer.OrdinalIgnoreCase).Any()) continue;
+            // Receipts from 0.6.0-alpha.4 and earlier omitted the LOD4 band of tree blocks when LOD4 was not selected.
+            var untreed = Scope(stage.Files.Keys.Where(k => !IsTreeBlock(k)));
+            if (stage.Id != "lod" || untreed.Bands.Except(stage.Scope.Bands, StringComparer.OrdinalIgnoreCase).Any())
+                throw new InvalidDataException("Output receipt scope does not cover its files.");
+            receipt.Stages[i] = stage with { Scope = Union(stage.Scope, actualScope) };
         }
         foreach (var files in receipt.Stages.Select(s => s.Files).Concat(receipt.Stages.SelectMany(s => s.Dependencies).Select(d => d.Files)))
         {
@@ -81,6 +87,19 @@ public sealed class OutputSetReceipt
         string receiptFile = ReceiptPath(folder);
         snapshot.Files.Add(Path.GetRelativePath(folder, receiptFile).Replace('\\', '/'), OutputSnapshot.HashFile(receiptFile));
         return snapshot;
+    }
+
+    public static OutputScope Union(OutputScope a, OutputScope b) => new(
+        a.Worlds.Concat(b.Worlds).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+        a.Levels.Concat(b.Levels).Distinct().Order().ToArray(),
+        a.Bands.Concat(b.Bands).Select(x => x.ToLowerInvariant()).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>Tree LOD blocks: meshes/terrain/&lt;world&gt;/trees/&lt;world&gt;.4.x.y.btt.</summary>
+    private static bool IsTreeBlock(string path)
+    {
+        string[] parts = path.Replace('\\', '/').Split('/');
+        return parts.Length == 5 && parts[3].Equals("trees", StringComparison.OrdinalIgnoreCase)
+            && parts[4].EndsWith(".btt", StringComparison.OrdinalIgnoreCase);
     }
 
     public static OutputScope Scope(IEnumerable<string> files)
@@ -180,7 +199,12 @@ public static class OutputManagement
 
     public static OutputUpdatePlan Plan(IEnumerable<string> sources, string destination, CancellationToken ct = default)
     {
-        var plan = new OutputUpdatePlan { Destination = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination)), Sources = sources.Select(p => Path.TrimEndingDirectorySeparator(Path.GetFullPath(p))).Distinct().Order(StringComparer.Ordinal).ToArray() };
+        // Folders are compared and identified by their canonical location, so a plan made through a symlinked parent
+        // matches the re-plan done at publication. The folders themselves must not be links.
+        string[] sourceList = sources.ToArray();
+        try { OutputFiles.RequireRealPath(destination); foreach (string source in sourceList) OutputFiles.RequireRealPath(source); }
+        catch (IOException e) { return new OutputUpdatePlan { Destination = Path.GetFullPath(destination), Errors = [e.Message] }; }
+        var plan = new OutputUpdatePlan { Destination = HostPath.Canonical(destination), Sources = sourceList.Select(HostPath.Canonical).Distinct().Order(StringComparer.Ordinal).ToArray() };
         if (PenguLOD.Core.Paths.ProductPaths.HasLegacyOutput(plan.Destination))
         {
             plan.Errors.Add("This destination contains AnvilLOD-named output. Publish the PenguLOD replacement to a new folder and keep the previous set for rollback.");

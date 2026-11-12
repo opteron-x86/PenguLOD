@@ -222,8 +222,8 @@ public class LodMeshMakerTests : IDisposable
         var output = Path.Combine(mod, "meshes", "made");
         var r = LodMeshMaker.Run(new LodMakerRequest([mod], output, "G"));
         var again = LodMeshMaker.Run(new LodMakerRequest([mod], output, "G"));
-        Assert.Equal(1, r.Items.Count);
-        Assert.Equal(1, again.Items.Count);
+        Assert.Single(r.Items);
+        Assert.Single(again.Items);
     }
 
     [Fact]

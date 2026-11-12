@@ -67,6 +67,19 @@ public static class DdsFile
         throw new NotSupportedException($"DDS pixel format ({bitCount}-bit, flags 0x{pfFlags:X}) is not supported.");
     }
 
+    /// <summary>
+    /// False for formats whose fourth channel is padding: 24-bit RGB, DXGI B8G8R8X8, and legacy 32-bit files without the
+    /// alpha-pixels flag or alpha mask (X8R8G8B8 often stores zero there).
+    /// </summary>
+    public static bool HasAlpha(ReadOnlySpan<byte> file, Info info)
+    {
+        if (!info.Uncompressed) return true;
+        if (info.BitsPerPixel == 24 || info.DxgiFormat == 88) return false;
+        if (info.DataOffset != 4 + HeaderSize) return true;
+        uint pfFlags = BinaryPrimitives.ReadUInt32LittleEndian(file[80..]), aMask = BinaryPrimitives.ReadUInt32LittleEndian(file[104..]);
+        return (pfFlags & 1) != 0 && aMask != 0;
+    }
+
     /// <summary>Decodes the top mip level to RGBA8.</summary>
     public static (byte[] Rgba, int Width, int Height, Info Info) DecodeTopMip(byte[] file)
     {
@@ -105,21 +118,34 @@ public static class DdsFile
                 }
                 return (expanded, info.Width, info.Height, info);
             }
-            var rgba = data[..(info.Width * info.Height * 4)].ToArray();
+            long bytes = (long)info.Width * info.Height * 4;
+            if (bytes > data.Length) throw new InvalidDataException($"Truncated texture: {info.Width}x{info.Height} needs {bytes:N0} bytes, the file has {data.Length:N0}.");
+            var rgba = data[..(int)bytes].ToArray();
             if (info.Bgra)
                 for (int i = 0; i < rgba.Length; i += 4) (rgba[i], rgba[i + 2]) = (rgba[i + 2], rgba[i]);
-            if (info.DxgiFormat == 88) // BGRX: no alpha
+            if (!HasAlpha(file, info)) // BGRX and legacy X8 formats: the fourth byte is padding
                 for (int i = 3; i < rgba.Length; i += 4) rgba[i] = 255;
             return (rgba, info.Width, info.Height, info);
         }
         return (BcDecoder.DecodeImage(data, info.Width, info.Height, info.Format), info.Width, info.Height, info);
     }
 
+    /// <summary>Throws <see cref="InvalidDataException"/> when the file is too short to hold its top mip.</summary>
+    public static void RequireTopMip(byte[] file, Info info)
+    {
+        long bytes = info.Uncompressed
+            ? (long)info.Width * info.Height * (info.BitsPerPixel / 8)
+            : (long)((info.Width + 3) / 4) * ((info.Height + 3) / 4) * info.Format.BlockBytes();
+        if (info.DataOffset + bytes > file.Length)
+            throw new InvalidDataException($"Truncated texture: the top mip needs {bytes:N0} bytes, the file has {file.Length - info.DataOffset:N0}.");
+    }
+
     /// <summary>The raw blocks of the top mip of a block-compressed file.</summary>
     public static ReadOnlySpan<byte> TopMipBlocks(byte[] file, Info info)
     {
-        int bytes = ((info.Width + 3) / 4) * ((info.Height + 3) / 4) * info.Format.BlockBytes();
-        return file.AsSpan(info.DataOffset, bytes);
+        long bytes = (long)((info.Width + 3) / 4) * ((info.Height + 3) / 4) * info.Format.BlockBytes();
+        if (info.DataOffset + bytes > file.Length) throw new InvalidDataException($"Truncated texture: the top mip needs {bytes:N0} bytes.");
+        return file.AsSpan(info.DataOffset, (int)bytes);
     }
 
     /// <summary>Writes a BC7 DDS (DX10 header). <paramref name="mips"/> are the compressed levels, largest first.</summary>

@@ -102,8 +102,18 @@ public static partial class GrassGeneration
         // do not turn implicit masters into explicit entries (that would activate their plugin INIs).
         HashSet<string> explicitPlugins;
         if (profile is not null) explicitPlugins = new(profile.ExplicitlyEnabled, StringComparer.OrdinalIgnoreCase);
-        else explicitPlugins = File.ReadLines(req.Game.PluginsTxt!).Select(l => l.Trim()).Where(l => l.StartsWith('*'))
-            .Select(l => l[1..].Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        else if (req.Game.PluginsTxt is { } pluginsTxt)
+            explicitPlugins = File.ReadLines(pluginsTxt).Select(l => l.Trim()).Where(l => l.StartsWith('*'))
+                .Select(l => l[1..].Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        else
+        {
+            // Data-folder mode with the game's own plugins.txt: every enabled plugin except base masters and Creation Club
+            // content, which FasterNGIO adds itself.
+            var implicitPlugins = GameContext.ImplicitPluginNames(req.Game.Release)
+                .Concat(ccc is not null ? File.ReadLines(ccc).Select(l => l.Trim()) : []).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            explicitPlugins = game.LoadOrder.ListedOrder.Where(l => l.Enabled).Select(l => l.ModKey.FileName.String)
+                .Where(n => !implicitPlugins.Contains(n)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
         var pluginFile = Path.Combine(work, "plugins.txt");
         File.WriteAllLines(pluginFile, game.LoadOrder.ListedOrder.Where(l => l.Enabled && explicitPlugins.Contains(l.ModKey.FileName.String))
             .Select(l => "*" + l.ModKey.FileName.String), new UTF8Encoding(false));

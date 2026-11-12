@@ -43,12 +43,28 @@ public sealed class SettingsStore
     }
     public static DesktopSettings Read(string file)
     {
-        var settings = JsonSerializer.Deserialize<DesktopSettings>(File.ReadAllText(file)) ?? throw new InvalidDataException("The settings file is empty.");
+        string text = File.ReadAllText(file);
+        var settings = JsonSerializer.Deserialize<DesktopSettings>(text) ?? throw new InvalidDataException("The settings file is empty.");
+        MigrateMo2GameFolder(settings, text);
         if (settings.SchemaVersion != 1) throw new InvalidDataException($"Unsupported settings version: {settings.SchemaVersion}.");
         if (settings.Options is null) throw new InvalidDataException("The preset options are missing.");
+        GenerationOptions.RepairLegacyValues(settings);
         GenerationOptions.Validate(settings);
         return settings;
     }
+    /// <summary>
+    /// Settings saved before Mo2GameFolder existed used GameFolder for both the Data-folder path and the MO2 game-folder
+    /// override. In MO2 mode that value was the override, so it moves there; Data-folder presets are unchanged.
+    /// </summary>
+    internal static void MigrateMo2GameFolder(DesktopSettings settings, string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object
+            || document.RootElement.EnumerateObject().Any(p => p.NameEquals(nameof(DesktopSettings.Mo2GameFolder)))) return;
+        if (settings.SourceMode != "Mod Organizer 2" || string.IsNullOrWhiteSpace(settings.GameFolder)) return;
+        settings.Mo2GameFolder = settings.GameFolder; settings.GameFolder = "";
+    }
+
     public void Save(DesktopSettings settings) => Write(FilePath, settings);
     public static void Write(string file, DesktopSettings settings) => Write(file, settings, overwrite: true);
     private static void Write(string file, DesktopSettings settings, bool overwrite)

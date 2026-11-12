@@ -75,6 +75,33 @@ public static class GamePath
         return Path.Exists(current) ? current : null;
     }
 
+    /// <summary>
+    /// Every existing path matching <paramref name="dataRelativePath"/> case-insensitively, in ordinal order. A mod on a
+    /// case-sensitive filesystem can hold both "meshes" and "Meshes"; the game sees them as one folder.
+    /// </summary>
+    public static IReadOnlyList<string> ResolveAllExisting(string root, string dataRelativePath)
+    {
+        var relative = ToHostPath(dataRelativePath);
+        if (Path.IsPathRooted(relative)) throw new ArgumentException("Expected a Data-relative path.", nameof(dataRelativePath));
+        var parts = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Any(p => p is "." or "..")) throw new ArgumentException("A game path must stay inside its root.", nameof(dataRelativePath));
+        IReadOnlyList<string> current = [root];
+        foreach (var part in parts)
+        {
+            var next = new List<string>();
+            foreach (var dir in current)
+            {
+                if (!Directory.Exists(dir)) continue;
+                next.AddRange(Directory.EnumerateFileSystemEntries(dir)
+                    .Where(p => string.Equals(Path.GetFileName(p), part, StringComparison.OrdinalIgnoreCase)));
+            }
+            if (next.Count == 0) return [];
+            next.Sort(StringComparer.Ordinal);
+            current = next;
+        }
+        return current;
+    }
+
     /// <summary>Lower-cased, backslash-separated, no leading "data\" — the form used as a cache/index key.</summary>
     public static string Normalize(string path)
     {

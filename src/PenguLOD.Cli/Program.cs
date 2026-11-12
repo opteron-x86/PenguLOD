@@ -12,7 +12,7 @@ namespace PenguLOD.Cli;
 public static partial class Program
 {
     private static CancellationToken Cancellation;
-    private const string Usage = """
+    internal const string Usage = """
         PenguLOD — native Linux and Windows LOD generator for Skyrim SE/AE
 
         Usage:
@@ -38,6 +38,7 @@ public static partial class Program
                                          into their own folder. Options: --no-meshes --no-billboards --no-rules
                                          --min-size <units, default 400> --min-tree-height <units, default 256>
                                          --overwrite (replace files already in --author-out)
+                                         --tree-stand-ins (trees whose model exists nowhere use the closest existing tree)
                                          --budget recommended|off|<LOD0,LOD1,LOD2> triangle budget for the LOD meshes (default
                                          recommended, by model size; see lodmaker)
 
@@ -94,7 +95,8 @@ public static partial class Program
                                  folder or Documents). It is created if missing and, if it is PenguLOD's own (empty, or holds its
                                  manifest or log), emptied before every generate so old files never mix with new ones
           --keep-output          Don't empty the output folder first: update it in place (only changed blocks are rewritten)
-          --report <file.json>   Write a JSON report (default: PenguLOD.scan.json next to the exe)
+          --report <file.json>   Write a JSON report (scan default: PenguLOD.scan.json in the current folder;
+                                 generate saves scan-report.json in the job folder)
           --resources <path>     Additional resource-only folder; repeat in priority order (later wins)
           --dyndolod <path>      Optional primary resource folder (legacy option; enabled mod resources override it)
           --preset <name>        low | medium | high (default high): which rule preset to use
@@ -196,7 +198,7 @@ public static partial class Program
           --underside            Build the terrain underside for volumetric lighting mods (DVLaSS, EVLaS, Community
                                  Shaders sky sync): meshes\Terrain\<ws>\<ws>_Underside.nif plus PenguLOD.esp
                                  (flagged ESL, no plugin slot). Enable the ESM; load it after plugins that edit worldspaces
-          --underside-detail <n> LAND vertices per underside quad: 4, 8, 16 (default), 32, 64 or 128. Smaller is finer and heavier
+          --underside-detail <n> LAND vertices per underside quad: 8, 16 (default), 32, 64 or 128. Smaller is finer and heavier
           --no-enable-parented   Exclude every reference with an enable parent (by default only
                                  parented refs that start disabled are left out)
 
@@ -241,7 +243,7 @@ public static partial class Program
         if (!a.Has("underside"))
             throw new CliArgException("--underside-detail only applies together with --underside.");
         if (!int.TryParse(v, out var step) || !PenguLOD.Core.World.UndersideMesher.IsValidStep(step))
-            throw new CliArgException($"--underside-detail must be 4, 8, 16, 32, 64 or 128 (got '{v}').");
+            throw new CliArgException($"--underside-detail must be 8, 16, 32, 64 or 128 (got '{v}').");
         return step;
     }
 
@@ -249,14 +251,13 @@ public static partial class Program
     {
         if (!a.Has("tree-3d"))
         {
-            if (a.Has("tree-foliage-target") || a.Has("hybrid-trees") || a.Has("tree-trunk-size") || a.Has("tree-trunk-units") || a.Has("tree-3d-lod8") || a.Has("tree-3d-by-name") || a.Has("tree-3d-crc-only") || a.Has("tree-3d-own-lod") || a.Has("tree-3d-dyndolod-first") || a.Has("no-native-trees") || a.Has("no-map-trees") || a.Has("tree-near-budget") || a.Has("tree-far-budget") || a.Has("tree-near-error") || a.Has("tree-far-error"))
-                throw new CliArgException("--tree-3d-lod8, --tree-3d-by-name, --tree-3d-crc-only and --tree-3d-dyndolod-first only apply together with --tree-3d.");
+            if (a.Has("tree-foliage-target") || a.Has("hybrid-trees") || a.Has("tree-trunk-size") || a.Has("tree-trunk-units") || a.Has("tree-3d-lod8") || a.Has("tree-3d-crc-only") || a.Has("tree-3d-dyndolod-first") || a.Has("no-native-trees") || a.Has("no-map-trees") || a.Has("tree-near-budget") || a.Has("tree-far-budget") || a.Has("tree-near-error") || a.Has("tree-far-error"))
+                throw new CliArgException("--tree-3d-lod8, --tree-3d-crc-only, --tree-3d-dyndolod-first, --hybrid-trees, --no-native-trees, --no-map-trees "
+                    + "and the --tree-trunk-*, --tree-foliage-target, --tree-*-budget and --tree-*-error options only apply together with --tree-3d.");
             return null;
         }
-        int Budget(string key, int fallback) => a.Get(key) is { } value && int.TryParse(value, System.Globalization.NumberStyles.Integer,
-            System.Globalization.CultureInfo.InvariantCulture, out int result) ? result : a.Has(key) ? throw new CliArgException("Invalid --" + key) : fallback;
-        float Error(string key, float fallback) => a.Get(key) is { } value && float.TryParse(value, System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float result) ? result : a.Has(key) ? throw new CliArgException("Invalid --" + key) : fallback;
+        int Budget(string key, int fallback) => a.Integer(key, fallback);
+        float Error(string key, float fallback) => a.Number(key, fallback, float.MinValue, float.MaxValue);
         var settings = new Tree3DSettings(Enabled: true, Lod8: a.Has("tree-3d-lod8"), PlainNameFallback: !a.Has("tree-3d-crc-only"),
             MapTrees: !a.Has("no-map-trees"), PreferNamedLod: !a.Has("tree-3d-dyndolod-first"), NearTriangleBudget: Budget("tree-near-budget", 4000),
             FarTriangleBudget: Budget("tree-far-budget", 1600), NearMaxError: Error("tree-near-error", 4), FarMaxError: Error("tree-far-error", 24), GenerateMissing: !a.Has("no-native-trees"),
@@ -335,9 +336,10 @@ public static partial class Program
         return report.CanGenerate ? 0 : 1;
     }
 
-    private static GenerationPipelineRequest LoadPipelineRequest(CliArgs a, string? stage = null)
+    private static GenerationPipelineRequest LoadPipelineRequest(CliArgs a, string? stage = null, params string[] alsoAllowed)
     {
         if (a.Has("request") == a.Has("settings")) throw new CliArgException("Choose exactly one of --request or --settings.");
+        a.RejectIgnoredWithPreset(alsoAllowed);
         var selected = SelectedStages(a, stage);
         GenerationPipelineRequest request;
         if(a.Get("settings") is { } preset)
@@ -388,7 +390,7 @@ public static partial class Program
     private static int RunPipeline(CliArgs a,string? stage=null)
     {
         var request=LoadPipelineRequest(a,stage);
-        int threads=a.Has("threads")?int.Parse(a.Get("threads")!):a.Get("settings") is { } preset?(int)SettingsStore.Read(preset).MaxThreads:0;
+        int threads=a.Has("threads")?a.Integer("threads",0):a.Get("settings") is { } preset?(int)SettingsStore.Read(preset).MaxThreads:0;
         using var limits=RunLimits.Enter(threads,Cancellation,CacheFolder(a));
         var result=GenerationPipeline.Run(request,CacheFolder(a),new SyncProgress(Console.WriteLine),Cancellation);
         if(a.Get("report") is { } file)
@@ -401,7 +403,7 @@ public static partial class Program
     }
     private static int ExportJob(CliArgs a)
     {
-        var request=LoadPipelineRequest(a);
+        var request=LoadPipelineRequest(a,null,"output");
         string file=a.Get("output")??throw new CliArgException("--output <request.json> is required.");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
         File.WriteAllText(file,JsonSerializer.Serialize(request,PersistentPipeline.Json));
@@ -418,11 +420,14 @@ public static partial class Program
     private static int RunScan(CliArgs a, bool generate)
     {
         var total = Stopwatch.StartNew();
+        a.RejectIgnoredWithPreset();
         var gameOptions = a.Get("mo2") is { } mo2Folder
             ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2Folder, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"))
             : new GameContextOptions(a.Get("data"), a.Get("plugins"), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"));
-        int ObjectInt(string key, int fallback) => a.Get(key) is not { } text ? fallback : int.TryParse(text, out var value) ? value : throw new CliArgException("Invalid --" + key);
-        float ObjectFloat(string key, float fallback) => a.Get(key) is not { } text ? fallback : float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : throw new CliArgException("Invalid --" + key);
+        int ObjectInt(string key, int fallback) => a.Integer(key, fallback);
+        float ObjectFloat(string key, float fallback) => a.Number(key, fallback, float.MinValue, float.MaxValue);
+        string Choice(string key, string fallback, params string[] allowed) => a.Get(key)?.ToLowerInvariant() is not { } value ? fallback
+            : allowed.Contains(value) ? value : throw new CliArgException($"--{key} must be {string.Join(", ", allowed[..^1])} or {allowed[^1]} (got '{a.Get(key)}').");
         var outputFolder = a.Get("output") ?? (generate ? OutputFolder.DefaultFolder(gameOptions) : null);
         if (generate && a.Get("output") is null) Console.WriteLine($"No --output given: using {outputFolder}");
 
@@ -460,7 +465,7 @@ public static partial class Program
             PbrLod: a.Has("pbr-lod"),
             LargeReferences: a.Has("large-refs"),
             LargeRefsEsl: !a.Has("large-refs-no-esl"),
-            PbrLodBrightness: (a.Get("pbr-lod-brightness") is { } pb && float.TryParse(pb, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pbp) ? Math.Clamp(pbp, 10f, 150f) : 100f) / 100f,
+            PbrLodBrightness: a.Number("pbr-lod-brightness", 100f, 10f, 150f) / 100f,
             PbrLodSize: PbrLodSizeFromArgs(a),
             UndersideStep: UndersideStepFromArgs(a),
             SkseDll: (a.Get("skse-dll") ?? "auto").ToLowerInvariant() switch
@@ -472,42 +477,46 @@ public static partial class Program
                 "none" or "separate" => SkseDllChoice.None,
                 var v => throw new CliArgException($"--skse-dll must be auto, 1170, 17, vr or none (got '{v}')."),
             },
-            EslRange: a.Get("esl-range") is { } er && int.TryParse(er, out var erv) && erv is 2048 or 4096 ? erv : 0,
+            EslRange: Choice("esl-range", "auto", "auto", "2048", "4096") is "auto" ? 0 : int.Parse(a.Get("esl-range")!, System.Globalization.CultureInfo.InvariantCulture),
             DetailedShips: !a.Has("no-detailed-ships"),
             AnimatedShips: !a.Has("no-animated-ships"),
             CsGrassLod: !a.Has("no-cs-grass"),
-            IceInset: a.Get("ice-inset") is { } ii && float.TryParse(ii, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var iip) ? Math.Clamp(iip, 0f, 64f) : PenguLOD.Meshes.LodInset.DefaultIce,
+            IceInset: a.Number("ice-inset", PenguLOD.Meshes.LodInset.DefaultIce, 0f, 64f),
             MountainFit: !a.Has("no-mountain-fit"),
-            MountainInset: a.Get("mountain-inset") is { } mi && float.TryParse(mi, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mip) ? Math.Clamp(mip, 0f, 64f) : 12f,
-            Occlusion: a.Has("occlusion") ? new PenguLOD.Core.Occlusion.OcclusionSettings(Clearance: a.Get("occlusion-clearance") is { } oc && float.TryParse(oc, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv) ? Math.Max(0f, ocv) : 3072f, ParentClearance: a.Get("occlusion-clearance") is { } oc2 && float.TryParse(oc2, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ocv2) ? Math.Max(0f, ocv2) : 3072f) : null,
+            MountainInset: a.Number("mountain-inset", 12f, 0f, 64f),
+            Occlusion: a.Has("occlusion") ? new PenguLOD.Core.Occlusion.OcclusionSettings(Clearance: a.Number("occlusion-clearance", 3072f, 0f, 1_000_000f),
+                ParentClearance: a.Number("occlusion-clearance", 3072f, 0f, 1_000_000f))
+                : a.Has("occlusion-clearance") ? throw new CliArgException("--occlusion-clearance only applies together with --occlusion.") : null,
             OcclusionFolder: a.Get("occlusion-folder"), ObjectAtlas: a.Has("object-atlas"),
             OptimizeObjectTextures: a.Has("optimize-object-textures"),
-            ObjectTextureSize: a.Get("object-texture-size") is { } textureSize && int.TryParse(textureSize, out var ts) ? ts : a.Has("object-texture-size") ? throw new CliArgException("Invalid --object-texture-size.") : 1024,
+            ObjectTextureSize: a.Integer("object-texture-size", 1024),
             AutomaticObjects: new PenguLOD.Plugins.Authoring.AutomaticObjectSettings(a.Has("auto-objects"), ObjectInt("object-near-budget", 2500), ObjectInt("object-middle-budget", 1000), ObjectInt("object-far-budget", 400), ObjectFloat("object-min-size", 128), ObjectFloat("object-detail", 1)),
-            AtlasCellSize: a.Get("atlas-cell") is { } cell && int.TryParse(cell,out var size) ? size : a.Has("atlas-cell") ? throw new CliArgException("Invalid --atlas-cell.") : 256,
+            AtlasCellSize: a.Integer("atlas-cell", 256),
             MapObjectLevel: a.Get("map-objects")?.ToLowerInvariant() switch { null or "auto" => -2, "rules" => -1, "0" => 0, "1" => 1, "2" => 2, var bad => throw new CliArgException($"--map-objects must be auto, rules, 0, 1 or 2 (got '{bad}').") },
-            SnowCover: a.Get("snow-cover") switch { "off" => 0, "bright" => 2, _ => 1 },
-            SnowShaderMode: a.Get("snow-shader") switch { "plain" => 1, "hd" => 2, _ => 0 },
-            ObjectInset: a.Get("object-inset") is { } oi && float.TryParse(oi, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var oip) ? Math.Clamp(oip, 0f, 64f) : 0f,
-            ObjectBrightness: (a.Get("object-brightness") is { } ob && float.TryParse(ob, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var obp) ? Math.Clamp(obp, 10f, 110f) : 100f) / 100f,
-            TreeBrightness: (a.Get("tree-brightness") is { } tb && float.TryParse(tb, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tbp) ? tbp : 100f) / 100f,
-            GrassDensity: (a.Get("grass-density") is { } gd && float.TryParse(gd, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pct) ? pct : 8f) / 100f,
+            SnowCover: Choice("snow-cover", "full", "off", "full", "bright") switch { "off" => 0, "bright" => 2, _ => 1 },
+            SnowShaderMode: Choice("snow-shader", "auto", "auto", "plain", "hd") switch { "plain" => 1, "hd" => 2, _ => 0 },
+            ObjectInset: a.Number("object-inset", 0f, 0f, 64f),
+            ObjectBrightness: a.Number("object-brightness", 100f, 10f, 110f) / 100f,
+            TreeBrightness: a.Number("tree-brightness", 100f, 10f, 110f) / 100f,
+            GrassDensity: a.Number("grass-density", 8f, 1f, 100f) / 100f,
             WaterStandIns: a.Has("water-standins"),
-            GrassTop: (a.Get("grass-top") is { } gt && float.TryParse(gt, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var gtp) ? Math.Clamp(gtp, 20f, 120f) : 85f) / 100f,
-            GrassBottom: (a.Get("grass-bottom") is { } gb && float.TryParse(gb, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var gbp) ? Math.Clamp(gbp, 10f, 120f) : 50f) / 100f);
+            GrassTop: a.Number("grass-top", 85f, 20f, 120f) / 100f,
+            GrassBottom: a.Number("grass-bottom", 50f, 10f, 120f) / 100f);
 
         // Progress<T> posts asynchronously; a synchronous reporter keeps console output ordered.
         var sync = new SyncProgress(m => Console.WriteLine($"[{total.Elapsed:mm\\:ss\\.f}] {m}"));
         if (a.Has("request")) req = LoadPipelineRequest(a, "lod").Lod! with { Generate = generate };
         else if (a.Get("settings") is { } scanPreset) req = RequestFactory.Scan(SettingsStore.Read(scanPreset), generate);
-        int workers = a.Has("threads") ? int.Parse(a.Get("threads")!) : a.Get("settings") is { } workerPreset ? (int)SettingsStore.Read(workerPreset).MaxThreads : 0;
+        int workers = a.Has("threads") ? a.Integer("threads", 0) : a.Get("settings") is { } workerPreset ? (int)SettingsStore.Read(workerPreset).MaxThreads : 0;
         using var scanLimits = RunLimits.Enter(workers, Cancellation, CacheFolder(a));
         ScanSummary s;
+        string? jobFolder = null;
         if(generate)
         {
             var generated=GenerationPipeline.Run(new(Lod:req,Resume:!a.Has("no-resume"),VerifySourceContents:a.Has("verify-source-contents"),Preflight:!a.Has("no-preflight"),TextureCompute:a.Get("texture-compute")??"Cpu",ExpandOutputScope:a.Has("expand-output-scope")),
                 CacheFolder(a),sync,Cancellation);
             Console.WriteLine("Saved job: "+generated.JobFolder);
+            jobFolder = generated.JobFolder;
             if(!generated.Success)return Fail(generated.Error!);
             if(generated.Lod is null){Console.WriteLine("Reused verified LOD output.");return 0;}
             s=generated.Lod;
@@ -545,17 +554,25 @@ public static partial class Program
         }
         foreach (var w in s.Warnings) Console.WriteLine($"WARNING: {w}");
 
-        var reportPath = a.Get("report") ?? Path.Combine(AppContext.BaseDirectory, "PenguLOD.scan.json");
-        ScanReport.Write(reportPath, s, total.Elapsed);
-        Console.WriteLine($"Report: {reportPath}");
-        return s.Generation is { BlocksFailed: > 0 } || s.Grids.Count == 0 ? 1 : 0;
+        int exit = s.Generation is { BlocksFailed: > 0 } || s.Grids.Count == 0 ? 1 : 0;
+        // Generation already saved scan-report.json in its job folder. The default scan report goes to the current folder:
+        // the application folder is read-only in an AppImage.
+        if (a.Get("report") is null && jobFolder is not null) { Console.WriteLine($"Report: {Path.Combine(jobFolder, "scan-report.json")}"); return exit; }
+        var reportPath = a.Get("report") ?? Path.Combine(Environment.CurrentDirectory, "PenguLOD.scan.json");
+        try { ScanReport.Write(reportPath, s, total.Elapsed); Console.WriteLine($"Report: {reportPath}"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (a.Has("report")) throw;
+            Console.Error.WriteLine($"WARNING: could not write the scan report to {reportPath}: {e.Message} Use --report <file> to choose a location.");
+        }
+        return exit;
     }
 
     private static int RunAuthor(CliArgs a)
     {
         var plugin = a.Get("plugin") ?? throw new CliArgException("author needs --plugin <file name>, e.g. --plugin \"The Archwood.esp\".");
         var output = a.Get("author-out") ?? throw new CliArgException("author needs --author-out <folder> (a new, separate mod folder).");
-        float F(string key, float def) => a.Get(key) is { } v && float.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f) ? f : def;
+        float F(string key, float def) => a.Number(key, def, 0f, 1_000_000f);
         var total = Stopwatch.StartNew();
         var req = new PenguLOD.Plugins.Authoring.AuthorRequest(
             a.Get("mo2") is { } mo2
@@ -656,7 +673,7 @@ public static partial class Program
         }
         else output = a.Get("output") ?? throw new CliArgException("lodmaker needs --output <folder> (or --mo2 <instance> --new-mod <name>).");
 
-        float F(string key, float def) => a.Get(key) is { } v && float.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f) ? f : def;
+        float F(string key, float def) => a.Number(key, def, 0f, 1_000_000f);
         IReadOnlyList<int>? levels = null;
         if (a.Get("levels") is { } lv)
         {
@@ -664,8 +681,7 @@ public static partial class Program
             if (parsed.Count == 0 || parsed.Any(n => n is < 0 or > 2)) throw new CliArgException($"--levels must be a list of 0, 1 and 2 (got '{lv}').");
             levels = parsed;
         }
-        var detail = F("detail", 1f);
-        if (!(detail >= 0.1f && detail <= 10f)) throw new CliArgException("--detail must be between 0.1 and 10.");
+        var detail = a.Number("detail", 1f, 0.1f, 10f);
         var group = a.Get("group") ?? Path.GetFileName(Path.TrimEndingDirectorySeparator(output));
         var (budget, custom) = ParseBudget(a.Get("budget"));
 

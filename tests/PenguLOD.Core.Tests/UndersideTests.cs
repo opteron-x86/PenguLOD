@@ -108,4 +108,26 @@ public class UndersideTests
         Assert.Equal("Terrain\\TestWorld\\TestWorld_Underside.nif", UndersideBuilder.ModelPath(Ws));
         Assert.Null(UndersideBuilder.Build(Ws, []));
     }
+
+    [Fact]
+    public void FinestStepFitsOneSixteenBitShapePerBlock()
+    {
+        Assert.False(UndersideMesher.IsValidStep(4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => UndersideMesher.Build(Hills(), Ws, 0, 0, step: 4));
+        var shape = UndersideMesher.Build(Hills(), Ws, 0, 0, step: 8)!;
+        Assert.InRange(shape.Positions.Length, 1, ushort.MaxValue);
+        Assert.InRange(shape.TriangleCount, 1, ushort.MaxValue);
+        Assert.NotNull(UndersideBuilder.Build(Ws, [shape]));
+    }
+
+    [Fact]
+    public void AuthoredShapesOverTheSseLimitAreRejectedNotWrapped()
+    {
+        int n = ushort.MaxValue + 1;
+        var part = new LodMeshPart { Name = "huge", Material = PenguLOD.Testing.TextureFixture.Card("x", @"textures\x.dds").Material,
+            Positions = new Vector3[n], UVs = new Vector2[n], Normals = new Vector3[n], Tangents = new Vector3[n], Bitangents = new Vector3[n],
+            Triangles = new ushort[3] };
+        var e = Assert.Throws<InvalidDataException>(() => PenguLOD.Meshes.Authoring.LodNifWriter.Write("PL:objects:4", [part]));
+        Assert.Contains("65,535", e.Message);
+    }
 }

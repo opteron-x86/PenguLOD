@@ -271,7 +271,8 @@ public static class UndersidePluginWriter
             if (File.Exists(legacy)) File.Delete(legacy);
         }
         // An ESL holds 2,048 records (FormIDs 0x800 to 0xFFF). Fires, candles and the rest of the effects go over that: then it is a plain ESP.
-        bool small = esp.EnumerateMajorRecords().Count(r => r.FormKey.ModKey == esp.ModKey) <= (largeEsl ? 4096 : EslRecordLimit);
+        // With the large range new FormIDs start at 0x001 (0x000 is unused), so 4,095 records fit.
+        bool small = esp.EnumerateMajorRecords().Count(r => r.FormKey.ModKey == esp.ModKey) <= (largeEsl ? 4095 : EslRecordLimit);
         esp.IsSmallMaster = small;
         var order = game.LoadOrder.ListedOrder.Select(l => l.ModKey).Where(k => k != esp.ModKey).ToList();
         esp.WriteToBinary(espPath, new BinaryWriteParameters

@@ -167,8 +167,9 @@ public static partial class GrassGeneration
         if (!process.Start()) throw new IOException("Could not start FasterNGIO.");
         using var registration = ct.Register(() =>
         {
+            // Kill can race with the process exiting, or fail for a child it may not signal; cancellation must not throw here.
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { }
+            catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException) { }
         });
         var tail = new Queue<string>();
         async Task Pump(StreamReader reader)

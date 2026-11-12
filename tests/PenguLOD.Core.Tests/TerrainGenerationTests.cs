@@ -31,15 +31,15 @@ public sealed class TerrainGenerationTests
         var result=TerrainTileBuilder.Build(new("Test",(LodLevel)level,-4,-4),(x,y)=>x*.1f+y*.2f,(x,y)=>x==-4&&y==-4?64:null);
         var mesh=NifGeometryReader.Read("terrain.btr",result.Bytes,passthru:true,includeUnshaded:true);
         Assert.Empty(mesh.Warnings);Assert.Equal(2,mesh.Parts.Count);Assert.Equal(1,result.WaterCells);
-        var land=Assert.Single(mesh.Parts.Where(p=>p.Name=="land"));
+        var land=Assert.Single(mesh.Parts,p=>p.Name=="land");
         Assert.Equal(18u,land.Material.Passthru!.ShaderType);Assert.Equal(0x80401000u,land.Material.ShaderFlags1);
         Assert.Equal(new Vector2(0,1),land.UVs[0]);Assert.Equal(new Vector2(1,0),land.UVs[129*129-1]);
-        var water=Assert.Single(mesh.Parts.Where(p=>ReferenceEquals(p.Material,NifGeometryReader.UnshadedMaterial)));
+        var water=Assert.Single(mesh.Parts,p=>ReferenceEquals(p.Material,NifGeometryReader.UnshadedMaterial));
         Assert.All(water.Positions,p=>Assert.Equal(64,p.Z));
         var nif=NifFile.Read(result.Bytes);
         if(level==4)
         {
-            var block=Assert.Single(nif.Blocks.Where(b=>b.Type=="BSSubIndexTriShape"));
+            var block=Assert.Single(nif.Blocks,b=>b.Type=="BSSubIndexTriShape");
             int start=block.Offset+block.Size-(4+16*9);Assert.Equal(16,BinaryPrimitives.ReadInt32LittleEndian(result.Bytes.AsSpan(start,4)));
             var segments=Enumerable.Range(0,16).Select(i=>BinaryPrimitives.ReadUInt32LittleEndian(result.Bytes.AsSpan(start+4+i*9+5,4))).ToArray();
             Assert.Equal(2u,segments[0]);Assert.All(segments.Skip(1),n=>Assert.Equal(0u,n));

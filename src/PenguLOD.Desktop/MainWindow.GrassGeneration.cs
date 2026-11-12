@@ -37,9 +37,6 @@ public sealed partial class MainWindow
     {
         var snapshot = _settings.Snapshot();
         return RunPersistentPipeline(thenTexturesAndLod ? "Grass, textures and LOD" : "Grass caching", snapshot,
-            s => new GenerationPipelineRequest(RequestFactory.Grass(s),
-                thenTexturesAndLod ? RequestFactory.Textures(s) : null,
-                thenTexturesAndLod ? RequestFactory.Scan(s, true) : null,
-                s.ResumeCompletedStages, s.VerifySourceContents));
+            s => RequestFactory.Stages(s, grass: true, textures: thenTexturesAndLod, lod: thenTexturesAndLod));
     }
 }

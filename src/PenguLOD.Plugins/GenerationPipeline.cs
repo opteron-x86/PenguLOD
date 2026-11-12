@@ -156,10 +156,13 @@ public static class GenerationPipeline
                     AddDependency("grass", lod.GeneratedGrassFolder);
                     AddDependency("textures", lod.GeneratedTextureFolder);
                     AddDependency("terrain", lod.GeneratedTerrainFolder);
-                    // Record completed scope even when all blocks in a selected band became empty.
+                    // Record completed scope even when all blocks in a selected band became empty. Tree LOD is always
+                    // written at LOD4, so bands present in the output are included even when that level was not selected.
                     var worlds = summary.Grids.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray();
-                    var levels = (lod.Levels ?? PenguLOD.Core.World.LodLevels.All).Select(l => (int)l).Order().ToArray();
-                    var completedScope = new OutputScope(worlds, levels, worlds.SelectMany(w => levels.Select(l => w.ToLowerInvariant() + ":" + l)).Order(StringComparer.Ordinal).ToArray());
+                    var levels = PenguLOD.Core.World.LodLevels.Selected(lod.Levels).Select(l => (int)l).Order().ToArray();
+                    var completedScope = OutputSetReceipt.Union(
+                        new OutputScope(worlds, levels, worlds.SelectMany(w => levels.Select(l => w.ToLowerInvariant() + ":" + l)).Order(StringComparer.Ordinal).ToArray()),
+                        OutputSetReceipt.Scope(output.Files.Keys));
                     output = OutputSetReceipt.Record(staged.Payload, "lod", inputs.Fingerprint, output, dependencies, scope: completedScope);
                     staged.Commit(progress);
                     return new LodStageReceipt(lod.OutputFolder!, output.Files.Count, summary.Generation?.BlocksWritten ?? 0,

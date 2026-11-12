@@ -9,9 +9,13 @@ public static class BcDecoder
     /// <summary>Decodes a whole compressed surface into an RGBA8 image (width × height × 4 bytes).</summary>
     public static byte[] DecodeImage(ReadOnlySpan<byte> data, int width, int height, BcFormat format)
     {
+        if (format == BcFormat.None) throw new ArgumentException("Not a block-compressed format.", nameof(format));
         int bw = (width + 3) / 4, bh = (height + 3) / 4;
         int blockBytes = format.BlockBytes();
-        var image = new byte[width * height * 4];
+        // Mod textures are untrusted: a short payload is a damaged file, not a programming error.
+        if ((long)bw * bh * blockBytes > data.Length)
+            throw new InvalidDataException($"Truncated texture: {width}x{height} {format} needs {(long)bw * bh * blockBytes:N0} bytes, the file has {data.Length:N0}.");
+        var image = new byte[checked(width * height * 4)];
         Span<byte> block = stackalloc byte[64];
 
         for (int by = 0; by < bh; by++)

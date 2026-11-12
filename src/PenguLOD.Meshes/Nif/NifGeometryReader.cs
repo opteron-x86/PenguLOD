@@ -65,6 +65,14 @@ public static partial class NifGeometryReader
     /// Geometry corruption and unsupported opaque materials still reject the model. Texture/tree rendering stays strict.</param>
     public static LodMesh Read(string path, byte[] data, bool passthru = false, bool waterAsLit = false, bool includeTexGenPlane = false, bool includeUnshaded = false, bool renderEffects = false, bool staticObjectLod = false)
     {
+        // Counts and offsets come from untrusted mod files; every malformed-file failure surfaces as InvalidDataException.
+        try { return ReadCore(path, data, passthru, waterAsLit, includeTexGenPlane, includeUnshaded, renderEffects, staticObjectLod); }
+        catch (Exception e) when (e is OverflowException or ArgumentOutOfRangeException or IndexOutOfRangeException or EndOfStreamException)
+        { throw new InvalidDataException($"Malformed NIF {path}: {e.Message}", e); }
+    }
+
+    private static LodMesh ReadCore(string path, byte[] data, bool passthru, bool waterAsLit, bool includeTexGenPlane, bool includeUnshaded, bool renderEffects, bool staticObjectLod)
+    {
         var nif = NifFile.Read(data);
         var parts = new List<LodMeshPart>();
         var warnings = new List<string>();

@@ -17,7 +17,7 @@ public class ObjectAtlasTests
         var red=TextureImages.Decode(TextureFixture.Solid(240,8,8));var green=TextureImages.Decode(TextureFixture.Solid(8,240,8));
         var entries=new[]{new ObjectTextureAtlas.Input("red",red,null,false,0),new ObjectTextureAtlas.Input("green",green,null,false,0)};
         var result=ObjectTextureAtlas.Build(entries,64,128);var reverse=ObjectTextureAtlas.Build(entries.Reverse().ToArray(),64,128);
-        Assert.Equal(result.Pages[0].Diffuse,reverse.Pages[0].Diffuse);Assert.Equal(1,result.Pages.Count);
+        Assert.Equal(result.Pages[0].Diffuse,reverse.Pages[0].Diffuse);Assert.Single(result.Pages);
         var pixels=TextureImages.Decode(result.Pages[0].Diffuse);
         foreach(var (key,place) in result.Placements)
         {

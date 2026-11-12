@@ -59,9 +59,7 @@ public sealed partial class MainWindow
     {
         var snapshot = _settings.Snapshot();
         return RunPersistentPipeline(thenLod ? "Textures and LOD" : "Texture generation", snapshot,
-            s => new GenerationPipelineRequest(Textures: RequestFactory.Textures(s),
-                Lod: thenLod ? RequestFactory.Scan(s, true) : null,
-                Resume: s.ResumeCompletedStages, VerifySourceContents: s.VerifySourceContents));
+            s => RequestFactory.Stages(s, textures: true, lod: thenLod));
     }
 
     private void PreviewGeneratedTexture()

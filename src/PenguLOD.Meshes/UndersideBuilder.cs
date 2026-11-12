@@ -134,8 +134,8 @@ public static class UndersideBuilder
         const ulong desc = 0x0000_3000_0000_0405UL;
         const int vsize = 20;
         b.Write(desc);
-        b.Write((ushort)mesh.TriangleCount);
-        b.Write((ushort)local.Length);
+        b.Write(checked((ushort)mesh.TriangleCount));
+        b.Write(checked((ushort)local.Length));
         b.Write((uint)(vsize * local.Length + 6 * mesh.TriangleCount));
 
         // UVs run across the block: u west to east, v north to south.

@@ -82,6 +82,9 @@ public static class LodNifWriter
         desc |= attrs << 44;
         int vsize = colors ? 32 : 28;
         b.Write(desc);
+        if (p.TriangleCount > ushort.MaxValue || p.VertexCount > ushort.MaxValue)
+            throw new InvalidDataException($"Shape {p.Name ?? "(unnamed)"} has {p.VertexCount:N0} vertices and {p.TriangleCount:N0} triangles; "
+                + "a Skyrim SE shape holds at most 65,535 of each. Use a triangle budget or reduce the model.");
         b.Write((ushort)p.TriangleCount);
         b.Write((ushort)p.VertexCount);
         b.Write((uint)(vsize * p.VertexCount + 6 * p.TriangleCount));

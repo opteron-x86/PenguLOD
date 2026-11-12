@@ -47,9 +47,11 @@ public static class LargeReferenceStage
         if (excludedPlugins > 0)
             progress?.Report($"Large references: ignoring {excludedPlugins} previous generated plugin(s); rebuilding a replacement from source plugins.");
 
-        // ESM-flagged plugins (an ESL-flagged ESM counts). Only they can define or override a large reference.
+        // Master plugins: ESM-flagged ones (an ESL-flagged ESM counts) and, as the game treats them, every .esm and .esl
+        // file whatever its header says. Only they can define or override a large reference.
         var master = sourceOrder
-            .Where(l => l.Mod is { } m && m.ModHeader.Flags.HasFlag(SkyrimModHeader.HeaderFlag.Master))
+            .Where(l => l.ModKey.Type is ModType.Master or ModType.Light
+                || l.Mod is { } m && m.ModHeader.Flags.HasFlag(SkyrimModHeader.HeaderFlag.Master))
             .Select(l => l.ModKey).ToHashSet();
 
         float minSize = LargeReferenceRules.DefaultMinSize;
@@ -160,10 +162,10 @@ public static class LargeReferenceStage
             {
                 var bad = written.ModHeader.MasterReferences.Select(m => m.Master).Where(m => !master.Contains(m)).Select(m => m.FileName.String).ToList();
                 if (bad.Count > 0)
-                    warn($"Large references: {FileName} needs {string.Join(", ", bad)}, which {(bad.Count == 1 ? "isn't" : "aren't")} flagged ESM. "
+                    warn($"Large references: {FileName} needs {string.Join(", ", bad)}, which {(bad.Count == 1 ? "isn't a master" : "aren't masters")} (neither .esm/.esl nor flagged ESM). "
                          + "The load order may refuse it or sort it after them; flag them ESM or leave this option off.");
                 else
-                    progress?.Report($"Large references: all {written.ModHeader.MasterReferences.Count} masters of {FileName} are ESM-flagged.");
+                    progress?.Report($"Large references: all {written.ModHeader.MasterReferences.Count} masters of {FileName} are masters.");
             }
             progress?.Report($"Large references: {total:N0} references listed in {FileName} ("
                              + (flagEsl ? "flagged ESM and ESL: it takes no plugin slot" : "a normal ESM: it takes a plugin slot") + "). Enable it after your other ESMs.");

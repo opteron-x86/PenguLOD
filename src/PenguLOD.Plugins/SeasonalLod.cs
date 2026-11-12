@@ -121,7 +121,7 @@ public static class SeasonalLod
 
         Replacement ReplacementFor(FormKey key)
         {
-            game.LinkCache.TryResolve(key,out var record);
+            game.LinkCache.TryResolveAny(key,out var record);
             var model=(record as IModeledGetter)?.Model;
             string? variantId=null;
             if(textureVariants is not null && model is {File.IsNull:false})
@@ -183,7 +183,7 @@ public static class SeasonalLod
     /// <summary>LOD meshes for a (swap) base object, the same way the scanner resolves them.</summary>
     private static LodMeshSet? MeshesFor(GameContext game, LodMeshResolver resolver, FormKey fk)
     {
-        if (!game.LinkCache.TryResolve(fk, out var rec)) return null;
+        if (!game.LinkCache.TryResolveAny(fk, out var rec)) return null;
         if (rec is not (IStaticGetter or IMoveableStaticGetter or IActivatorGetter or IFurnitureGetter or IDoorGetter or IContainerGetter)) return null;
         var model = (rec as IModeledGetter)?.Model?.File;
         if (model is null || model.IsNull) return null;

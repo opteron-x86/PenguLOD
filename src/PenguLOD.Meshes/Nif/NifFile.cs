@@ -32,6 +32,13 @@ public sealed class NifFile
 
     public static NifFile Read(byte[] data)
     {
+        try { return ReadCore(data); }
+        catch (Exception e) when (e is OverflowException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+        { throw new InvalidDataException("Malformed NIF header: " + e.Message, e); }
+    }
+
+    private static NifFile ReadCore(byte[] data)
+    {
         var r = new NifSpanReader(data, 0);
 
         int nl = Array.IndexOf(data, (byte)'\n');
@@ -63,7 +70,7 @@ public sealed class NifFile
         var types = new string[numTypes];
         for (int i = 0; i < numTypes; i++) types[i] = r.SizedString();
 
-        r.Require(checked((int)numBlocks * 6));
+        r.RequireItems(numBlocks, 6);
         var typeIndex = new ushort[numBlocks];
         for (int i = 0; i < numBlocks; i++) typeIndex[i] = r.U16();
         var sizes = new uint[numBlocks];
@@ -71,12 +78,12 @@ public sealed class NifFile
 
         uint numStrings = r.U32();
         r.U32(); // max string length
-        r.Require(checked((int)numStrings * 4));
+        r.RequireItems(numStrings, 4);
         var strings = new List<string>((int)numStrings);
         for (int i = 0; i < numStrings; i++) strings.Add(r.SizedString());
 
         uint numGroups = r.U32();
-        r.Skip(checked((int)numGroups * 4));
+        r.RequireItems(numGroups, 4); r.Skip((int)numGroups * 4);
 
         var blocks = new List<NifBlock>((int)numBlocks);
         int pos = r.Position;
@@ -94,7 +101,7 @@ public sealed class NifFile
         if (r.Remaining >= 4)
         {
             uint numRoots = r.U32();
-            r.Require(checked((int)numRoots * 4));
+            r.RequireItems(numRoots, 4);
             for (int i = 0; i < numRoots; i++) roots.Add(r.I32());
         }
         if (roots.Count == 0 && blocks.Count > 0) roots.Add(0);
@@ -137,6 +144,12 @@ public struct NifSpanReader
     public readonly void Require(int count)
     {
         if (count < 0 || count > Remaining) throw new InvalidDataException("NIF block is truncated or has an invalid count.");
+    }
+
+    /// <summary>Checks that <paramref name="count"/> items of <paramref name="size"/> bytes remain, without overflowing for absurd counts.</summary>
+    public readonly void RequireItems(uint count, int size)
+    {
+        if ((long)count * size > Remaining) throw new InvalidDataException("NIF block is truncated or has an invalid count.");
     }
 
     public byte U8() { Require(1); return _d[_position++]; }

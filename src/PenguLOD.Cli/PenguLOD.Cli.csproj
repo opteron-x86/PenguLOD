@@ -10,5 +10,6 @@
     <ProjectReference Include="../PenguLOD.Configuration/PenguLOD.Configuration.csproj" />
     <ProjectReference Include="..\PenguLOD.Core\PenguLOD.Core.csproj" />
     <ProjectReference Include="..\PenguLOD.Plugins\PenguLOD.Plugins.csproj" />
+    <InternalsVisibleTo Include="PenguLOD.Core.Tests" />
   </ItemGroup>
 </Project>

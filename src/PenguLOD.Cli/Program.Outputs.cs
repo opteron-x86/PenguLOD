@@ -52,6 +52,7 @@ public static partial class Program
     private static int PlanGeneration(CliArgs a)
     {
         if (a.Has("request") == a.Has("settings")) throw new CliArgException("Choose exactly one of --request or --settings.");
+        a.RejectIgnoredWithPreset();
         object report; string summary; IEnumerable<string> outputs;
         if (a.Get("settings") is { } preset)
         {

@@ -3,16 +3,44 @@ using System.Text.Json;
 namespace PenguLOD.Desktop.Models;
 
 public sealed record OptionSpec(string Key, string Group, string Label, string Help, object Default,
-    decimal Min = 0, decimal Max = 100, string[]? Choices = null);
-
-public sealed class OptionValue(OptionSpec spec, DesktopSettings settings, Action changed) : ObservableObject
+    decimal Min = 0, decimal Max = 100, string[]? Choices = null)
 {
-    public OptionSpec Spec => spec;
+    /// <summary>Numeric options that generation reads as whole numbers (counts, budgets and coded modes).</summary>
+    public bool Whole => GenerationOptions.WholeNumbers.Contains(Key);
+}
+
+public sealed class OptionValue : ObservableObject
+{
+    private readonly OptionSpec _spec;
+    private readonly DesktopSettings _settings;
+    private readonly Action _changed;
+
+    public OptionValue(OptionSpec spec, DesktopSettings settings, Action changed)
+    {
+        _spec = spec; _settings = settings; _changed = changed;
+        // Several controls can show one option (Seasons appears on two pages), and presets reset all of them.
+        // The subscription is weak so rebuilt pages do not keep their old adapters alive.
+        var self = new WeakReference<OptionValue>(this);
+        Action<string>? handler = null;
+        handler = key =>
+        {
+            if (!self.TryGetTarget(out var value)) { settings.OptionChanged -= handler; return; }
+            if (key == "*" || key == spec.Key) value.Refresh();
+        };
+        settings.OptionChanged += handler;
+    }
+
+    public OptionSpec Spec => _spec;
     public bool Flag { get => Read<bool>(); set => Write(value); }
-    public decimal Number { get => Read<decimal>(); set => Write(value); }
+    public decimal Number { get => Read<decimal>(); set => Write(_spec.Whole ? decimal.Round(value, MidpointRounding.AwayFromZero) : value); }
     public string Choice { get => Read<string>(); set => Write(value); }
-    private T Read<T>() => settings.Options.TryGetValue(spec.Key, out var v) ? v.Deserialize<T>()! : JsonSerializer.SerializeToElement(spec.Default).Deserialize<T>()!;
-    private void Write<T>(T value) { settings.Options[spec.Key] = JsonSerializer.SerializeToElement(value); Changed(); changed(); }
+    private T Read<T>() => _settings.Options.TryGetValue(_spec.Key, out var v) ? v.Deserialize<T>()! : JsonSerializer.SerializeToElement(_spec.Default).Deserialize<T>()!;
+    private void Write<T>(T value)
+    {
+        var element = JsonSerializer.SerializeToElement(value);
+        if (_settings.Options.TryGetValue(_spec.Key, out var current) && JsonElement.DeepEquals(current, element)) return;
+        _settings.SetOption(_spec.Key, element); _changed();
+    }
 }
 
 public static class GenerationOptions
@@ -97,7 +125,7 @@ public static class GenerationOptions
         new("pbrSize", "PBR & terrain", "PBR texture size", "Maximum side length of converted textures.", "512", Choices: ["128", "256", "512", "1024", "2048"]),
         new("pbrWaterfalls", "PBR & terrain", "PBR waterfalls", "Use the full model when a waterfall is PBR-patched.", false),
         new("underside", "PBR & terrain", "Terrain underside", "Add an underside mesh for volumetric lighting. This does not generate terrain LOD.", false),
-        new("undersideStep", "PBR & terrain", "Underside sample step", "Smaller steps produce more geometry.", "16", Choices: ["4", "8", "16", "32", "64", "128"]),
+        new("undersideStep", "PBR & terrain", "Underside sample step", "Smaller steps produce more geometry.", "16", Choices: ["8", "16", "32", "64", "128"]),
         new("occlusion", "Occlusion", "Generate Occlusion.esp", "Calculate visibility with the built-in CPU solver.", false),
         new("occRadius", "Occlusion", "Visibility radius (cells)", "Maximum distance considered visible.", 100m, 1, 256),
         new("occClearance", "Occlusion", "Block clearance", "Larger values hide fewer blocks behind terrain.", 3072m, 0, 16384),
@@ -109,10 +137,36 @@ public static class GenerationOptions
         new("occEyes", "Occlusion", "Observer sample points", "0 tries every observer sample.", 0m, 0, 16)
     ];
 
+    public static readonly IReadOnlySet<string> WholeNumbers = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "autoObjectNear", "autoObjectMiddle", "autoObjectFar", "mapLevel", "snowMode", "snowCover", "treeNearBudget", "treeFarBudget",
+        "occRadius", "occSamples", "occParentTargets", "occBlockTargets", "occEyes",
+    };
+
     public static T Get<T>(DesktopSettings settings, string key)
     {
         var spec = All.Single(o => o.Key == key);
         return (settings.Options.TryGetValue(key, out var value) ? value : JsonSerializer.SerializeToElement(spec.Default)).Deserialize<T>()!;
+    }
+
+    /// <summary>
+    /// Repairs values that earlier builds could save but generation rejects: fractional values of whole-number options
+    /// (the desktop stepped some by 0.05) and underside step 4.
+    /// </summary>
+    public static bool RepairLegacyValues(DesktopSettings settings)
+    {
+        bool changed = false;
+        // Underside step 4 overflowed the 16-bit mesh counts; 8 is the finest valid detail.
+        if (settings.Options.TryGetValue("undersideStep", out var step) && step.ValueKind == JsonValueKind.String && step.GetString() == "4")
+        { settings.Options["undersideStep"] = JsonSerializer.SerializeToElement("8"); changed = true; }
+        foreach (var spec in All.Where(o => o.Whole))
+        {
+            if (!settings.Options.TryGetValue(spec.Key, out var element) || element.ValueKind != JsonValueKind.Number) continue;
+            decimal value = element.GetDecimal(), rounded = decimal.Round(value, MidpointRounding.AwayFromZero);
+            if (rounded == value) continue;
+            settings.Options[spec.Key] = JsonSerializer.SerializeToElement(rounded); changed = true;
+        }
+        return changed;
     }
 
     public static void Validate(DesktopSettings settings)
@@ -126,6 +180,7 @@ public static class GenerationOptions
                 {
                     var value = Get<decimal>(settings, spec.Key);
                     if (value < spec.Min || value > spec.Max) throw new ArgumentException($"must be between {spec.Min} and {spec.Max}");
+                    if (spec.Whole && value != decimal.Truncate(value)) throw new ArgumentException("must be a whole number");
                 }
                 else if (!spec.Choices!.Contains(Get<string>(settings, spec.Key))) throw new ArgumentException("has an unknown choice");
             }

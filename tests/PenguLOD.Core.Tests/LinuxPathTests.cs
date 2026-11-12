@@ -1,3 +1,4 @@
+using PenguLOD.Core.Incremental;
 using PenguLOD.Core.Lod;
 using PenguLOD.Core.Pipeline;
 using PenguLOD.Core.World;
@@ -120,6 +121,59 @@ public sealed class LinuxPathTests : IDisposable
         Assert.Null(index.FindLoose(@"meshes\architecture\hidden.nif"));
         Assert.Equal(2, index.LooseFileCount);
         Assert.Equal(0, index.MissingModFolders);
+    }
+
+    [Fact]
+    public void MO2_merges_folders_that_differ_only_in_case_within_one_mod()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        Write("master", "Game", "Data", "Skyrim.esm");
+        Write("+Mixed\n", "Profiles", "Default", "modlist.txt");
+        Write("", "Profiles", "Default", "plugins.txt");
+        var lower = Write("a", "Mods", "Mixed", "meshes", "a.nif");
+        var upper = Write("b", "Mods", "Mixed", "Meshes", "b.nif");
+        var shouting = Write("c", "Mods", "Mixed", "MESHES", "c.nif");
+        Write("t1", "Mods", "Mixed", "Textures", "x.dds");
+        var later = Write("t2", "Mods", "Mixed", "textures", "x.dds"); // "textures" sorts after "Textures"
+        var instance = Mo2Instance.Open(_root, new Mo2Locations(Path.Combine(_root, "Game"), Path.Combine(_root, "Mods"), Path.Combine(_root, "Profiles")));
+        var index = VirtualDataIndex.Build(instance.OpenProfile("Default"), ["meshes"]);
+        Assert.Equal(lower, index.ResolveLoose(@"meshes\a.nif"));
+        Assert.Equal(upper, index.ResolveLoose(@"meshes\b.nif"));
+        Assert.Equal(shouting, index.ResolveLoose(@"meshes\c.nif"));
+        Assert.Contains(index.CaseConflicts, c => c.Contains("Mixed") && c.Contains("MESHES") && c.Contains("meshes"));
+        // Outside the indexed roots the same rule applies: the last case variant in ordinal order wins.
+        Assert.Equal(later, index.FindLoose(@"textures\x.dds"));
+    }
+
+    [Fact]
+    public void Data_folder_merges_case_variant_folders_and_archives()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var data = Path.Combine(_root, "Data");
+        var a = Write("a", "Data", "meshes", "a.nif"); var b = Write("b", "Data", "Meshes", "b.nif");
+        Write("", "Data", "Foo.bsa"); Write("", "Data", "foo.bsa");
+        Assert.Equal(2, GamePath.ResolveAllExisting(data, "MESHES").Count);
+        var selected = SkyrimArchives.Select(GameRelease.SkyrimSE, Directory.EnumerateFiles(data), [], ["foo.bsa"]);
+        Assert.Single(selected);
+        var assets = AssetIndex.Build(GameRelease.SkyrimSE, data);
+        Assert.Equal([@"meshes\a.nif", @"meshes\b.nif"], assets.EnumeratePaths(@"meshes\").Order(StringComparer.Ordinal).ToArray());
+        Assert.True(assets.Exists(@"meshes\b.nif"));
+    }
+
+    [Fact]
+    public void Tree_blocks_use_one_spelling_when_foreign_names_are_lower_case()
+    {
+        // Asset paths come back lower-cased; our own blocks use the EditorID. An older run left a lower-case empty block.
+        var output = Path.Combine(_root, "out");
+        var old = Write("old", "out", "meshes", "terrain", "FixtureWorld", "trees", "fixtureworld.4.0.0.btt");
+        var foreign = Write("vanilla", "Data", "meshes", "terrain", "fixtureworld", "trees", "fixtureworld.4.0.0.btt");
+        var assets = AssetIndex.Create(GameRelease.SkyrimSE, [], prefix => prefix.StartsWith(@"meshes\terrain\fixtureworld\trees\", StringComparison.Ordinal)
+            ? [@"meshes\terrain\fixtureworld\trees\fixtureworld.4.0.0.btt"] : [],
+            key => key == @"meshes\terrain\fixtureworld\trees\fixtureworld.4.0.0.btt" ? new FileInfo(foreign) : null);
+        var grids = new Dictionary<string, LodGrid> { { "FixtureWorld", new("FixtureWorld", new(-4, -4, 4, 4, 4)) } };
+        TreeLodGenerator.Generate(grids, [], assets, output, new BuildManifest(), objectLodWorlds: new HashSet<string> { "FixtureWorld" });
+        var names = Directory.GetFiles(Path.GetDirectoryName(old)!, "*.btt").Select(p => Path.GetFileName(p)).ToArray();
+        Assert.Equal(["FixtureWorld.4.0.0.btt"], names);
     }
 
     [Fact]

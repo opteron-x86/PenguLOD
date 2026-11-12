@@ -45,6 +45,13 @@ public static partial class GrassCache
 
     public static IReadOnlyList<GrassCacheType> Read(ReadOnlySpan<byte> d)
     {
+        // Every truncation inside a record surfaces as a malformed cache, not as a range error from the span reads.
+        try { return ReadCore(d); }
+        catch (ArgumentOutOfRangeException e) { throw new InvalidDataException("Truncated grass cache.", e); }
+    }
+
+    private static IReadOnlyList<GrassCacheType> ReadCore(ReadOnlySpan<byte> d)
+    {
         var types = new List<GrassCacheType>();
         int p = 0;
         uint typeCount = U32(d, ref p);
@@ -67,7 +74,7 @@ public static partial class GrassCache
                 p += 16; // extent xyz + unknown
                 int count = (int)U32(d, ref p);
                 int halves = (int)U32(d, ref p);
-                if (halves < 6 || (long)p + (long)count * halves * 2 > d.Length) throw new InvalidDataException("Bad instance block.");
+                if (count < 0 || halves < 6 || (long)p + (long)count * halves * 2 > d.Length) throw new InvalidDataException("Bad instance block.");
                 instances.EnsureCapacity(instances.Count + count);
                 for (int i = 0; i < count; i++)
                 {

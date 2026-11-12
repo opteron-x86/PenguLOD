@@ -46,8 +46,9 @@ public static class BtoBuilder
         return ObjName + (kind == LodShaderKind.Snow ? "Snow" : "Ash") + (lodTexture || snowMode == 1 || (snowMode == 0 && level != LodLevel.Lod4) ? "" : "HD");
     }
 
+    /// <param name="OversizedMeshes">LOD meshes with a part over 65,535 vertices or triangles. Those parts are left out.</param>
     public sealed record Result(byte[] Bytes, int Shapes, int Triangles, int Vertices, int RefsPlaced, int RefsSkipped, int TrianglesCulled = 0,
-        IReadOnlyDictionary<string, (long Triangles, long Vertices)>? ByCategory = null);
+        IReadOnlyDictionary<string, (long Triangles, long Vertices)>? ByCategory = null, IReadOnlyCollection<string>? OversizedMeshes = null);
 
     /// <summary>
     /// Drops triangles that are completely buried: every corner, edge midpoint and the centre must be at least
@@ -87,6 +88,7 @@ public static class BtoBuilder
         var chunks = new Dictionary<string, List<Chunk>>(StringComparer.Ordinal);
         int placed = 0, skipped = 0, culled = 0;
         var cats = new Dictionary<string, (long Triangles, long Vertices)>(StringComparer.Ordinal);
+        var oversized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var r in refs)
         {
@@ -114,7 +116,8 @@ public static class BtoBuilder
             {
                 cats.TryGetValue(category, out var seen);
                 cats[category] = (seen.Triangles + part.TriangleCount, seen.Vertices + part.VertexCount);
-                if (part.VertexCount > MaxIndex || part.TriangleCount > MaxIndex) continue; // can't happen for valid SSE shapes
+                // A single SSE shape cannot exceed this, but strips and skin partitions are read without a cap.
+                if (part.VertexCount > MaxIndex || part.TriangleCount > MaxIndex) { oversized.Add(path!); continue; }
                 // A layer other than plain objects never shares a shape with another layer, even with the same material.
                 // The game puts its snow/ash LOD material on shapes by NAME, so those parts get their own shapes.
                 var shapeName = category == LodLayers.Objects ? ShapeNameFor(r.Shader, part.Material, quad.Level, snowMode) : ObjName;
@@ -197,7 +200,7 @@ public static class BtoBuilder
             b.Write(0u); // effects
         });
 
-        return new Result(w.ToBytes(root), ordered.Count, tris, verts, placed, skipped, culled, cats);
+        return new Result(w.ToBytes(root), ordered.Count, tris, verts, placed, skipped, culled, cats, oversized);
     }
 
     internal static void WriteShader(BinaryWriter b, LodMaterial m, int texSet, bool colors)

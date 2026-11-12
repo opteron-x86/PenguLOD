@@ -52,6 +52,7 @@ public sealed class TreeAtlasBuilder
             try
             {
                 var info = DdsFile.ReadInfo(inp.DdsFile);
+                DdsFile.RequireTopMip(inp.DdsFile, info);
                 items.Add(new Item { Key = inp.Key, File = inp.DdsFile, Info = info, W = info.Width, H = info.Height });
             }
             catch (Exception ex) when (ex is InvalidDataException or NotSupportedException)

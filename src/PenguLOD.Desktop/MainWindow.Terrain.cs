@@ -34,6 +34,5 @@ public sealed partial class MainWindow
             Number("Maximum heightmap dimension", nameof(DesktopSettings.TerrainHeightmapSize), 128, 16384, 128))),
         Card("Results", Stack(12, _terrainSummary, _terrainResults))));
 
-    internal Task RunTerrain() => RunPersistentPipeline("Terrain generation", _settings.Snapshot(), s => new GenerationPipelineRequest(
-        Resume: s.ResumeCompletedStages, VerifySourceContents: s.VerifySourceContents, Terrain: RequestFactory.Terrain(s)));
+    internal Task RunTerrain() => RunPersistentPipeline("Terrain generation", _settings.Snapshot(), s => RequestFactory.Stages(s, terrain: true));
 }

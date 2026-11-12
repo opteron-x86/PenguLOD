@@ -25,6 +25,8 @@ public sealed class VirtualDataIndex
     public TimeSpan BuildTime { get; }
     public int MissingModFolders { get; }
     public string? ExcludedLayer { get; private init; }
+    /// <summary>Mods with folders that differ only in case ("meshes" and "Meshes"), as "mod: folder, folder". Their files are merged.</summary>
+    public IReadOnlyList<string> CaseConflicts { get; private init; } = [];
     private IReadOnlyList<string> _indexedRoots = [];
 
     private VirtualDataIndex(IReadOnlyList<string> layers, Dictionary<string, string> root,
@@ -62,12 +64,12 @@ public sealed class VirtualDataIndex
         if (Directory.Exists(inst.OverwriteFolder)) layers.Add(inst.OverwriteFolder);
 
         // Enumerate every layer in parallel, then merge in priority order.
-        var perLayer = new (List<KeyValuePair<string, string>> Root, List<KeyValuePair<string, string>> Loose)[layers.Count];
+        var perLayer = new (List<KeyValuePair<string, string>> Root, List<KeyValuePair<string, string>> Loose, List<string> Conflicts)[layers.Count];
         Parallel.For(0, layers.Count, RunLimits.Parallel(), i => perLayer[i] = ScanLayer(layers[i], looseRoots, inst.SkipDirectories));
 
         var root = new Dictionary<string, string>(StringComparer.Ordinal);
         var loose = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (r, l) in perLayer)
+        foreach (var (r, l, _) in perLayer)
         {
             foreach (var kv in r) root[kv.Key] = kv.Value;
             foreach (var kv in l) loose[kv.Key] = kv.Value;
@@ -76,13 +78,15 @@ public sealed class VirtualDataIndex
         return new VirtualDataIndex(layers, root, loose, sw.Elapsed, missing)
         {
             ExcludedLayer = excluded,
+            CaseConflicts = perLayer.SelectMany(p => p.Conflicts).ToArray(),
             _indexedRoots = looseRoots.Select(r => r.Replace('/', '\\').Trim('\\').ToLowerInvariant() + "\\").ToList(),
         };
     }
 
-    private static (List<KeyValuePair<string, string>>, List<KeyValuePair<string, string>>) ScanLayer(
+    private static (List<KeyValuePair<string, string>>, List<KeyValuePair<string, string>>, List<string>) ScanLayer(
         string layer, IReadOnlyCollection<string> looseRoots, IReadOnlySet<string> skipDirs)
     {
+        var conflicts = new List<string>();
         var root = new List<KeyValuePair<string, string>>();
         var loose = new List<KeyValuePair<string, string>>();
         var options = new EnumerationOptions
@@ -104,14 +108,18 @@ public sealed class VirtualDataIndex
             foreach (var root0 in looseRoots)
             {
                 var rel = root0.Replace('/', '\\').Trim('\\').ToLowerInvariant();
-                var dir = GamePath.ResolveExisting(layer, rel);
-                if (dir is not null && Directory.Exists(dir)) WalkLoose(dir, rel, loose, skipDirs);
+                // Folders that differ only in case are merged, as the game sees one folder. Within the layer, files of
+                // a later folder in ordinal order replace those of an earlier one.
+                var dirs = GamePath.ResolveAllExisting(layer, rel).Where(Directory.Exists).ToArray();
+                if (dirs.Length > 1)
+                    conflicts.Add($"{Path.GetFileName(Path.TrimEndingDirectorySeparator(layer))}: {string.Join(", ", dirs.Select(d => Path.GetRelativePath(layer, d)))}");
+                foreach (var dir in dirs) WalkLoose(dir, rel, loose, skipDirs);
             }
         }
         catch (DirectoryNotFoundException) { }
         catch (UnauthorizedAccessException) { }
 
-        return (root, loose);
+        return (root, loose, conflicts);
     }
 
     private static void WalkLoose(string dir, string relPrefix, List<KeyValuePair<string, string>> into, IReadOnlySet<string> skipDirs)
@@ -168,8 +176,9 @@ public sealed class VirtualDataIndex
             if (key.StartsWith(r, StringComparison.Ordinal)) return null;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            var full = GamePath.ResolveExisting(Layers[i], key);
-            if (full is not null && File.Exists(full) && !File.Exists(full + ".mohidden")) return full;
+            // Same rule as the index: of case variants within one layer, the last in ordinal order wins.
+            var full = GamePath.ResolveAllExisting(Layers[i], key).LastOrDefault(File.Exists);
+            if (full is not null && !File.Exists(full + ".mohidden")) return full;
         }
         return null;
     }

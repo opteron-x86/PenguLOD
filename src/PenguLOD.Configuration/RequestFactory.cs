@@ -32,17 +32,25 @@ public static class RequestFactory
         if (mo2 && Optional(s.Instance) is null) throw new ArgumentException("Choose the Mod Organizer 2 instance folder.");
         if (!mo2 && Optional(s.GameFolder) is null) throw new ArgumentException("Choose the game or Data folder.");
         if (!mo2 && Optional(s.PluginsFile) is null) throw new ArgumentException("Choose plugins.txt. An empty file is valid for a vanilla game.");
-        return new GameContextOptions(Release: s.Edition == "VR" ? Mutagen.Bethesda.GameRelease.SkyrimVR : Mutagen.Bethesda.GameRelease.SkyrimSE, DataFolder: P(s.GameFolder), PluginsTxt: P(s.PluginsFile),
+        return new GameContextOptions(Release: s.Edition == "VR" ? Mutagen.Bethesda.GameRelease.SkyrimVR : Mutagen.Bethesda.GameRelease.SkyrimSE,
+            DataFolder: mo2 ? null : P(s.GameFolder), PluginsTxt: mo2 ? null : P(s.PluginsFile),
             Mode: mo2 ? GameSourceMode.Mo2Instance : GameSourceMode.DataFolder,
             Mo2InstanceFolder: P(s.Instance), Mo2Profile: Optional(s.Profile),
-            Mo2Locations: new Mo2Locations(P(s.GameFolder), P(s.ModsFolder), P(s.ProfilesFolder), P(s.OverwriteFolder), P(s.WinePrefix)),
+            Mo2Locations: new Mo2Locations(P(s.Mo2GameFolder), P(s.ModsFolder), P(s.ProfilesFolder), P(s.OverwriteFolder), P(s.WinePrefix)),
             GameIniPath: P(s.GameIni), WinePrefix: P(s.WinePrefix));
     }
 
-    public static GenerationPipelineRequest Pipeline(DesktopSettings s) => new(
-        s.PipelineGrass ? Grass(s) : null, s.PipelineTextures ? Textures(s) : null,
-        s.PipelineLod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
-        s.PipelineTerrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute, s.ExpandOutputScope);
+    public static GenerationPipelineRequest Pipeline(DesktopSettings s) =>
+        Stages(s, s.PipelineGrass, s.PipelineTextures, s.PipelineTerrain, s.PipelineLod);
+
+    /// <summary>
+    /// A pipeline request for the chosen stages. Every generation button uses this, so run settings (resume, source
+    /// verification, setup check, texture compute, scope expansion) apply the same way to single stages and the full pipeline.
+    /// </summary>
+    public static GenerationPipelineRequest Stages(DesktopSettings s, bool grass = false, bool textures = false, bool terrain = false, bool lod = false) => new(
+        grass ? Grass(s) : null, textures ? Textures(s) : null,
+        lod ? Scan(s, true) : null, s.ResumeCompletedStages, s.VerifySourceContents,
+        terrain ? Terrain(s) : null, s.PipelinePreflight, s.TextureCompute, s.ExpandOutputScope);
 
     public static IReadOnlyList<GenerationScopeStage> OutputScope(DesktopSettings s)
     {
@@ -130,6 +138,7 @@ public static class RequestFactory
         float F(string k) => (float)GenerationOptions.Get<decimal>(s, k);
         int I(string k)
         {
+            if (!GenerationOptions.WholeNumbers.Contains(k)) throw new InvalidOperationException($"Option {k} is not declared as a whole number.");
             decimal value = GenerationOptions.Get<decimal>(s, k);
             if (value != decimal.Truncate(value)) throw new ArgumentException($"{GenerationOptions.All.Single(o => o.Key == k).Label} must be a whole number.");
             return (int)value;
