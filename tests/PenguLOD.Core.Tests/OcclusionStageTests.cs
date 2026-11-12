@@ -49,7 +49,8 @@ public class OcclusionStageTests
         }
         File.WriteAllText(f.Plugins, "*ModA.esp\n*" + OcclusionStage.FileName + "\n");
 
-        var game = GameContext.Open(f.Game);
+        // Disposed before the fixture: Windows cannot delete plugins that are still open.
+        using var game = GameContext.Open(f.Game);
         var terrain = TerrainReader.Read(game, ["FixtureWorld"]);
         var grids = new Dictionary<string, LodGrid> { { "FixtureWorld", new("FixtureWorld", new(-64, -64, 128, 4, 32)) } };
         string folder = Path.Combine(f.Root, "occlusion");
