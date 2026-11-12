@@ -29,6 +29,9 @@ namespace PenguLOD
 		std::size_t WorldCount() const { return _byWorld.size(); }
 		std::size_t GridCount() const { return _gridCount; }
 		std::size_t CopyCount() const { return _copyCount; }
+		std::size_t UndersideCount() const { return _undersideCount; }
+		/// References a quest switches on and off: PenguLOD.dyn entries that are neither grid objects nor window glow.
+		std::size_t SwitchableCount() const { return _switchableCount; }
 		std::size_t GlowCount() const { return _glowCount; }
 		std::size_t GlowShown() const { return _glowShown; }
 		std::size_t CopiesShown() const { return _copiesShown; }
@@ -67,7 +70,6 @@ namespace PenguLOD
 			bool                           childCell{ false };  // ... and the child worldspace has a cell here
 			bool                           glow{ false };       // a window glow mesh: its emissive multiple follows the hour
 			bool                           standIn{ false };    // a parent-worldspace stand-in for a real object of the city worldspace
-			bool                           nativeBacked{ false };  // a real reference in PenguLOD.esp draws it in its own worldspace
 			std::vector<RE::BSShaderProperty*> scrollProps;  // water copies: the shader properties whose texture offset is scrolled
 			std::vector<std::pair<RE::BSLightingShaderProperty*, float>> glowProps;  // shader properties of the drawn clone and their own emissive multiple
 			RE::NiPointer<RE::NiAVObject>  node;
@@ -137,6 +139,9 @@ namespace PenguLOD
 		std::chrono::steady_clock::time_point                       _holdUntil{};
 		std::size_t                                                 _gridCount{ 0 };
 		std::size_t                                                 _copyCount{ 0 };
+		std::size_t                                                 _undersideCount{ 0 };
+		std::size_t                                                 _switchableCount{ 0 };
+		RE::FormID                                                  _lastWorld{ 0 };  // main thread: the worldspace of the last update
 		std::size_t                                                 _glowCount{ 0 };
 		std::atomic<std::size_t>                                    _copiesShown{ 0 };
 		std::atomic<std::size_t>                                    _glowShown{ 0 };  // window glow items drawn now

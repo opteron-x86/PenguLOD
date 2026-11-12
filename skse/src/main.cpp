@@ -15,6 +15,7 @@ namespace
 			return;
 		}
 		auto path = *dir / "PenguLOD.log";
+		PenguLOD::Menu::SetLogPath(path.string());
 		auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), true);
 		auto log = std::make_shared<spdlog::logger>("global", std::move(sink));
 		log->set_level(spdlog::level::info);

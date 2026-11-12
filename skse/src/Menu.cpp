@@ -127,6 +127,7 @@ namespace PenguLOD::Menu
 	{
 		std::string g_status;       // last save result, shown under the buttons
 		std::string g_gameVersion;  // from SKSEPluginLoad
+		std::string g_logPath;      // where the log was opened (SE, AE, VR and GOG use different folders)
 
 		void __stdcall RenderLodDistances()
 		{
@@ -175,12 +176,15 @@ namespace PenguLOD::Menu
 			auto& c = Controller::Get();
 			Smf::TextWrapped("Dynamic LOD draws the LOD of references that quests switch on and off (Helgen Reborn's "
 							 "town, for example), only while they're enabled.");
-			Smf::Text("Switchable references: %zu, grid objects: %zu (in %zu worldspaces); %zu drawn now", c.ItemCount() - c.GridCount(), c.GridCount(), c.WorldCount(), c.ShownCount());
+			Smf::Text("Switchable references: %zu, grid objects: %zu, window glow: %zu (in %zu worldspaces); %zu objects drawn now", c.SwitchableCount(), c.GridCount(), c.GlowCount(), c.WorldCount(), c.ShownCount());
 			Smf::Separator();
 			Smf::Checkbox("Enabled", &s.enabled);
 			Smf::SliderFloat("Max distance", &s.maxDistance, 20000.0f, 400000.0f, "%.0f");
 			int maxShown = static_cast<int>(s.maxShown);
 			if (Smf::SliderInt("Max objects drawn", &maxShown, 100, 20000)) s.maxShown = static_cast<std::uint32_t>(maxShown);
+			int perUpdate = static_cast<int>(s.maxShowPerUpdate);
+			if (Smf::SliderInt("Objects loaded per update", &perUpdate, 10, 2000)) s.maxShowPerUpdate = static_cast<std::uint32_t>(perUpdate);
+			Smf::TextDisabled("    Lower values spread the work of entering a worldspace over more updates (less of a hitch, slower fill-in).");
 			int interval = static_cast<int>(s.updateIntervalMs);
 			if (Smf::SliderInt("Update interval (ms)", &interval, 100, 5000)) s.updateIntervalMs = static_cast<std::uint32_t>(interval);
 			Smf::Checkbox("Verbose log", &s.verboseLog);
@@ -335,8 +339,11 @@ namespace PenguLOD::Menu
 				Smf::TextDisabled("The frame rate can't be read in this game: adaptive quality does nothing.");
 			} else {
 				Smf::Text("Frame rate now: %.0f", a.Fps());
+				if (a.Cap() > 0.0f) {
+					Smf::TextDisabled("    A frame cap at about %.0f was detected: at the cap counts as headroom, and the target used is %.0f.", a.Cap(), a.EffectiveTarget());
+				}
 				Smf::Text("Quality now: %s", Adaptive::LevelName(a.Level()));
-				if (s.adaptiveQuality && a.Level() >= s.adaptiveFloor && a.Level() > 0 && a.Fps() < static_cast<float>(s.adaptiveTargetFps)) {
+				if (s.adaptiveQuality && a.Level() >= s.adaptiveFloor && a.Level() > 0 && a.Fps() < (a.EffectiveTarget() > 0.0f ? a.EffectiveTarget() : static_cast<float>(s.adaptiveTargetFps))) {
 					Smf::TextDisabled("    The game runs below the target even at the lowest step allowed: lower the target, or turn this off.");
 				}
 			}
@@ -363,15 +370,18 @@ namespace PenguLOD::Menu
 #endif
 			Smf::Text("Game version: %s", g_gameVersion.c_str());
 			Smf::Separator();
-			Smf::Text("LOD Refresh Bug Fix (SkyrimLODFixes.dll): %s",
-				LodDistances::PluginInstalled("SkyrimLODFixes.dll") ? "installed" : "not installed (recommended)");
-			Smf::Text("DynDOLOD.dll: %s", LodDistances::PluginInstalled("DynDOLOD.dll") ? "installed" : "not installed");
+			// The page is drawn every frame; installed plugins do not change while the game runs.
+			static const bool lodFixes = LodDistances::PluginInstalled("SkyrimLODFixes.dll");
+			static const bool dynDolod = LodDistances::PluginInstalled("DynDOLOD.dll");
+			Smf::Text("LOD Refresh Bug Fix (SkyrimLODFixes.dll): %s", lodFixes ? "installed" : "not installed (recommended)");
+			Smf::Text("DynDOLOD.dll: %s", dynDolod ? "installed" : "not installed");
 			Smf::Separator();
-			Smf::TextDisabled("Log: Documents\\My Games\\Skyrim Special Edition\\SKSE\\PenguLOD.log");
+			Smf::TextDisabled("Log: %s", g_logPath.empty() ? "PenguLOD.log in the SKSE log folder" : g_logPath.c_str());
 		}
 	}
 
 	void SetGameVersion(std::string a_version) { g_gameVersion = std::move(a_version); }
+	void SetLogPath(std::string a_path) { g_logPath = std::move(a_path); }
 
 	void Register()
 	{
