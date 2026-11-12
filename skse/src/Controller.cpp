@@ -1199,6 +1199,9 @@ namespace PenguLOD
 					continue;
 				}
 				glowWanted += item.glow ? 1 : 0;
+				if (_failedMeshes.contains(item.mesh)) {
+					continue;  // a model that could not be loaded must not use up the per-update budget every update
+				}
 				const float dx = item.pos.x - pos.x, dy = item.pos.y - pos.y;
 				wanted.push_back({ dx * dx + dy * dy, i });
 			}
