@@ -420,7 +420,7 @@ public sealed class DesktopTests : IDisposable
             Assert.Equal(manifest, File.ReadAllText(Path.Combine(fixture.Output, GrassGenerationManifest.FileName)));
             Assert.False(File.Exists(Path.Combine(fixture.Textures.Output, TextureGenerationManifest.FileName)));
             Assert.False(Directory.Exists(window.Settings.OutputFolder));
-            Assert.Empty(Directory.GetDirectories(fixture.Root, ".pengulod-grass-build-*"));
+            Assert.Empty(Directory.GetDirectories(fixture.Root, ".pengulod-build-*"));
         }
         finally
         {

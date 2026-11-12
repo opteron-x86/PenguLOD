@@ -7,7 +7,8 @@ using PenguLOD.Core.Pipeline;
 namespace PenguLOD.Plugins;
 
 public sealed record GenerationPipelineRequest(GrassGenerationRequest? Grass = null, TextureGenerationRequest? Textures = null,
-    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false, TerrainGenerationRequest? Terrain = null, bool Preflight = true, string TextureCompute = "Cpu", bool ExpandOutputScope = false);
+    ScanRequest? Lod = null, bool Resume = true, bool VerifySourceContents = false, TerrainGenerationRequest? Terrain = null, bool Preflight = true, string TextureCompute = "Cpu", bool ExpandOutputScope = false,
+    int KeepPrevious = OutputRetention.Default);
 public sealed record LodStageReceipt(string OutputFolder, int Files, int BlocksWritten, int BlocksUnchanged,
     long Triangles, IReadOnlyList<string> Warnings, string? PreviousOutput);
 public sealed record GenerationPipelineResult(string JobFolder, PipelineInputSnapshot Inputs, PipelineJournal Journal,
@@ -30,6 +31,7 @@ public static class GenerationPipeline
             progress?.Report(scope.Summary()); request = scope.Request;
         }
         using var compute = PenguLOD.Textures.TextureCompute.Enter(request.TextureCompute, progress);
+        using var retention = OutputRetention.Enter(request.KeepPrevious);
         var source = request.Grass?.Game ?? request.Textures?.Game ?? request.Lod?.Game ?? request.Terrain?.Game
             ?? throw new ArgumentException("Select at least one pipeline stage.");
         GenerationDestination.ValidateCache(source,cache);
@@ -41,11 +43,11 @@ public static class GenerationPipeline
             {
                 var previous = OutputSetReceipt.Read(output);
                 if (previous.Stages.Count != 1) throw new InvalidDataException("Generate into separate stage folders, not a combined installation package.");
-                string expectedStage = output == request.Grass?.OutputFolder ? "grass" : output == request.Textures?.OutputFolder ? "textures" : output == request.Terrain?.OutputFolder ? "terrain" : "lod";
+                string expectedStage = output == request.Grass?.OutputFolder ? StageIds.Grass : output == request.Textures?.OutputFolder ? StageIds.Textures : output == request.Terrain?.OutputFolder ? StageIds.Terrain : StageIds.Lod;
                 if (previous.Stages[0].Id != expectedStage) throw new InvalidDataException("This folder belongs to a different generation stage. Choose a separate output folder.");
                 var owned = previous.Stages[0].Files.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var unknown = OutputFiles.Enumerate(output, ct).FirstOrDefault(p => !owned.Contains(p)
-                    && !p.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) && !p.Equals("meta.ini", StringComparison.OrdinalIgnoreCase));
+                    && !p.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) && !UserOwnedFiles.Contains(p));
                 if (unknown is not null) throw new InvalidDataException("Existing output contains an unowned file: " + unknown + ". Choose a separate generation folder.");
             }
             ResourceCatalog.ValidateFolders(request.Textures?.DynDolodFolder, request.Textures?.ResourcePacks, output);
@@ -73,10 +75,10 @@ public static class GenerationPipeline
         if (lod is { OutputFolder: null }) throw new ArgumentException("Choose a LOD output folder.");
         if (terrain is not null) TerrainGeneration.Validate(terrain);
         var plan = new List<PipelineStagePlan>();
-        if (grass is not null) plan.Add(new("grass", "Grass cache", grass.OutputFolder, []));
-        if (textures is not null) plan.Add(new("textures", "Textures", textures.OutputFolder, []));
-        if (terrain is not null) plan.Add(new("terrain", "Terrain and water", terrain.OutputFolder, []));
-        if (lod is not null) plan.Add(new("lod", "LOD", lod.OutputFolder!, plan.Select(p => p.Id).ToArray()));
+        if (grass is not null) plan.Add(new(StageIds.Grass, "Grass cache", grass.OutputFolder, []));
+        if (textures is not null) plan.Add(new(StageIds.Textures, "Textures", textures.OutputFolder, []));
+        if (terrain is not null) plan.Add(new(StageIds.Terrain, "Terrain and water", terrain.OutputFolder, []));
+        if (lod is not null) plan.Add(new(StageIds.Lod, "LOD", lod.OutputFolder!, plan.Select(p => p.Id).ToArray()));
         using var job = new PersistentPipeline(cache, plan, request.Resume, progress, ct);
         var inputs = PipelineInputs.Capture(source, outputs, [], request.VerifySourceContents, progress, ct);
         File.WriteAllText(Path.Combine(job.Folder, "inputs.json"), JsonSerializer.Serialize(inputs, PersistentPipeline.Json));
@@ -98,38 +100,45 @@ public static class GenerationPipeline
             }
             if (grass is not null)
             {
-                active = "grass";
-                grassResult = job.Run("grass", Fingerprint(grass, grass.Executable ?? GrassGeneration.BundledExecutable, grass.NgioConfig), () => GrassGeneration.Run(grass, progress, ct), r =>
+                active = StageIds.Grass;
+                // Each stage writes its receipt into the staged folder, so the receipt is published together with the files.
+                OutputSnapshot? grassOutput = null;
+                grassResult = job.Run(StageIds.Grass, Fingerprint(grass, grass.Executable ?? GrassGeneration.BundledExecutable, grass.NgioConfig), () => GrassGeneration.Run(grass, progress, ct, payload =>
                 {
-                    var manifest = GrassGenerationManifest.Read(r.OutputFolder, requireFull: !r.Preview)!;
-                    return Record("grass", r.OutputFolder, ManifestSnapshot(r.OutputFolder, GrassGenerationManifest.FileName, manifest.Files, ct), !r.Preview);
-                });
+                    var manifest = GrassGenerationManifest.Read(payload, requireFull: !grass.Preview)!;
+                    grassOutput = Record(StageIds.Grass, payload, ManifestSnapshot(payload, GrassGenerationManifest.FileName, manifest.Files, ct), !grass.Preview);
+                }), _ => grassOutput!);
             }
             if (textures is not null)
             {
-                active = "textures";
-                textureResult = job.Run("textures", Fingerprint(textures, ResourceCatalog.ExternalFiles(textures.DynDolodFolder, textures.ResourcePacks).ToArray()), () =>
+                active = StageIds.Textures;
+                OutputSnapshot? textureOutput = null;
+                textureResult = job.Run(StageIds.Textures, Fingerprint(textures, ResourceCatalog.ExternalFiles(textures.DynDolodFolder, textures.ResourcePacks).ToArray()), () =>
                 {
-                    var result = TextureGeneration.Run(textures, progress, ct);
+                    var result = TextureGeneration.Run(textures, progress, ct, payload => textureOutput = Record(StageIds.Textures, payload,
+                        ManifestSnapshot(payload, TextureGenerationManifest.FileName, TextureGenerationManifest.Read(payload, requireComplete: textures.ModelFilter.Length == 0)!.Files, ct),
+                        textures.ModelFilter.Length == 0));
                     textureResult = result;
                     if (!result.Published) throw new InvalidDataException("Texture generation did not publish a complete result. Review the texture report; later stages were not started.");
                     return result;
-                }, r => Record("textures", r.OutputFolder, ManifestSnapshot(r.OutputFolder, TextureGenerationManifest.FileName,
-                    TextureGenerationManifest.Read(r.OutputFolder, requireComplete: textures.ModelFilter.Length == 0)!.Files, ct), textures.ModelFilter.Length == 0));
+                }, _ => textureOutput!);
             }
             if (terrain is not null)
             {
-                active = "terrain";
+                active = StageIds.Terrain;
                 string terrainFingerprint=Fingerprint(terrain);
-                terrainResult = job.Run("terrain", terrainFingerprint, () => TerrainGeneration.RunWithCheckpoints(terrain,
-                    Path.Combine(job.Folder,"terrain-tiles"),terrainFingerprint,request.Resume,progress,ct), r => Record("terrain", r.OutputFolder, r.Output));
+                OutputSnapshot? terrainOutput = null;
+                terrainResult = job.Run(StageIds.Terrain, terrainFingerprint, () => TerrainGeneration.RunWithCheckpoints(terrain,
+                    Path.Combine(job.Folder,"terrain-tiles"),terrainFingerprint,request.Resume,progress,ct,
+                    (payload, snapshot) => terrainOutput = Record(StageIds.Terrain, payload, snapshot)), _ => terrainOutput!);
             }
             if (lod is not null)
             {
-                active = "lod";
+                active = StageIds.Lod;
                 OutputSnapshot? output = null;
-                var previousLodHashes = job.Journal.Stages.Single(s => s.Plan.Id == "lod").Output;
-                receipt = job.Run("lod", Fingerprint(lod, ResourceCatalog.ExternalFiles(lod.DynDolodFolder, lod.ResourcePacks).Concat(new[] { lod.CustomRulesFile,
+                // The output's receipt records what was last published there, whichever plan (desktop button) wrote it.
+                var previousLodHashes = PublishedFiles(lod.OutputFolder!, ct);
+                receipt = job.Run(StageIds.Lod, Fingerprint(lod, ResourceCatalog.ExternalFiles(lod.DynDolodFolder, lod.ResourcePacks).Concat(new[] { lod.CustomRulesFile,
                     grass is null ? lod.GeneratedGrassFolder : null, textures is null ? lod.GeneratedTextureFolder : null, terrain is null ? lod.GeneratedTerrainFolder : null }).ToArray()), () =>
                 {
                     // The engine verifies generated inputs before writing to the isolated destination.
@@ -163,7 +172,7 @@ public static class GenerationPipeline
                     var completedScope = OutputSetReceipt.Union(
                         new OutputScope(worlds, levels, worlds.SelectMany(w => levels.Select(l => w.ToLowerInvariant() + ":" + l)).Order(StringComparer.Ordinal).ToArray()),
                         OutputSetReceipt.Scope(output.Files.Keys));
-                    output = OutputSetReceipt.Record(staged.Payload, "lod", inputs.Fingerprint, output, dependencies, scope: completedScope);
+                    output = OutputSetReceipt.Record(staged.Payload, StageIds.Lod, inputs.Fingerprint, output, dependencies, scope: completedScope);
                     staged.Commit(progress);
                     return new LodStageReceipt(lod.OutputFolder!, output.Files.Count, summary.Generation?.BlocksWritten ?? 0,
                         summary.Plan.Unchanged.Count, summary.Generation?.Triangles ?? 0, summary.Warnings, staged.PreviousOutput);
@@ -202,10 +211,19 @@ public static class GenerationPipeline
             snapshot = new OutputSnapshot { Files = new(snapshot.Files, StringComparer.OrdinalIgnoreCase) };
             // Include stage reports and logs as owned metadata as well as the generated assets.
             foreach (string relative in OutputFiles.Enumerate(folder, ct))
-                if (!relative.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) && !relative.Equals("meta.ini", StringComparison.OrdinalIgnoreCase) && !snapshot.Files.ContainsKey(relative))
+                if (!relative.Equals(OutputSetReceipt.FileName, StringComparison.OrdinalIgnoreCase) && !UserOwnedFiles.Contains(relative) && !snapshot.Files.ContainsKey(relative))
                     snapshot.Files[relative] = OutputSnapshot.HashFile(OutputSnapshot.Resolve(folder, relative), ct);
             return OutputSetReceipt.Record(folder, id, inputs.Fingerprint, snapshot, complete: complete);
         }
+    }
+
+    /// <summary>Files and hashes the output's receipt records as published, or null for a new or unmanaged folder.</summary>
+    internal static OutputSnapshot? PublishedFiles(string output, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!OutputSetReceipt.Exists(output)) return null;
+        var stage = OutputSetReceipt.Read(output).Stages.SingleOrDefault(s => s.Id == StageIds.Lod);
+        return stage is null ? null : new OutputSnapshot { Files = new(stage.Files, StringComparer.Ordinal) };
     }
 
     private static OutputSnapshot ManifestSnapshot(string root, string manifest, Dictionary<string, string> files, CancellationToken ct)
