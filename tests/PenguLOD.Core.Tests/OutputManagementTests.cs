@@ -37,8 +37,8 @@ public sealed class OutputManagementTests : IDisposable
         var report = OutputCostReport.Analyze(Folder("lod"));
         Assert.Equal(4, report.Blocks.Count); Assert.Equal(6, report.Groups.Sum(g => g.Triangles)); Assert.Equal(3, report.Groups.Sum(g => g.MeshGroups));
         Assert.Contains(report.Groups, g => g.World == "Other" && g.Layer == "grass" && g.Season == "WIN");
-        Assert.Null(Assert.Single(report.Blocks.Where(b => b.File.EndsWith("8.0.bto"))).Layers);
-        Assert.Empty(Assert.Single(report.Blocks.Where(b => b.File.EndsWith("4.0.bto"))).Layers!);
+        Assert.Null(Assert.Single(report.Blocks, b => b.File.EndsWith("8.0.bto")).Layers);
+        Assert.Empty(Assert.Single(report.Blocks, b => b.File.EndsWith("4.0.bto")).Layers!);
         Assert.Equal(report.Blocks.OrderBy(b => b.File, StringComparer.Ordinal), report.Blocks);
         string path = Folder("report.json"); report.Write(path);
         Assert.Equal(report.Groups, OutputCostReport.Read(path).Groups);
@@ -310,6 +310,67 @@ public sealed class OutputManagementTests : IDisposable
         var second = GenerationPipeline.Run(request, cache); Assert.True(second.Success, second.Error);
         Assert.All(second.Journal.Stages, stage => Assert.False(stage.Reused));
         Assert.True(OutputManagement.Verify([fixture.Output, fixture.Textures.Output]).Valid);
+    }
+
+    [Fact]
+    public void OutputsBelowASymlinkedParentCanBeVerifiedPlannedAndPublished()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(Folder("real"));
+        string alias = Folder("alias"); Directory.CreateSymbolicLink(alias, Folder("real"));
+        string stage = Path.Combine(alias, "stage"), package = Path.Combine(alias, "package");
+        Directory.CreateDirectory(stage); File.WriteAllText(Path.Combine(stage, "PenguLOD.esm"), "fixture");
+        OutputSetReceipt.Record(stage, "lod", "source", OutputSnapshot.Capture(stage));
+        Assert.Single(OutputSetReceipt.Read(stage).Stages);
+        Assert.True(OutputManagement.Verify([stage]).Valid);
+        var plan = OutputManagement.Plan([stage], package); Assert.True(plan.CanPublish, string.Join('\n', plan.Errors));
+        OutputManagement.Publish(plan);
+        Assert.True(OutputManagement.Verify([package]).Valid);
+        Assert.Single(GenerationScope.ReviewOutputs([new("lod", stage)]).Stages);
+    }
+
+    [Fact]
+    public void OutputFolderThatIsItselfASymlinkIsRejected()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        string stage = Stage("stage", "lod", "PenguLOD.esm");
+        string link = Folder("stage-link"); Directory.CreateSymbolicLink(link, stage);
+        Assert.Throws<IOException>(() => OutputSetReceipt.Read(link));
+        Assert.Contains(OutputManagement.Plan([stage], link).Errors, e => e.Contains("symbolic link"));
+        Assert.Contains(OutputManagement.Plan([link], Folder("package")).Errors, e => e.Contains("symbolic link"));
+    }
+
+    [Fact]
+    public void ReceiptWithoutTreeLod4BandIsExtendedWhenRead()
+    {
+        // 0.6.0-alpha.4 recorded only the requested levels although tree blocks are always LOD4.
+        Put("lod", "meshes/terrain/Tamriel/objects/Tamriel.8.0.0.bto", Mesh());
+        Put("lod", "meshes/terrain/Tamriel/trees/Tamriel.4.0.0.btt", [1, 2, 3]);
+        var requested = new OutputScope(["Tamriel"], [8], ["tamriel:8"]);
+        OutputSetReceipt.Record(Folder("lod"), "lod", "source", OutputSnapshot.Capture(Folder("lod")), scope: requested);
+        var stage = OutputSetReceipt.Read(Folder("lod")).Stages[0];
+        Assert.Contains("tamriel:4", stage.Scope.Bands); Assert.Contains("tamriel:8", stage.Scope.Bands);
+        Assert.Equal([4, 8], stage.Scope.Levels);
+    }
+
+    [Fact]
+    public void ReceiptStillRejectsUncoveredObjectBands()
+    {
+        Put("lod", "meshes/terrain/Tamriel/objects/Tamriel.4.0.0.bto", Mesh());
+        Put("lod", "meshes/terrain/Tamriel/objects/Tamriel.8.0.0.bto", Mesh());
+        OutputSetReceipt.Record(Folder("lod"), "lod", "source", OutputSnapshot.Capture(Folder("lod")),
+            scope: new OutputScope(["Tamriel"], [8], ["tamriel:8"]));
+        Assert.Throws<InvalidDataException>(() => OutputSetReceipt.Read(Folder("lod")));
+    }
+
+    [Fact]
+    public void ScopeUnionKeepsRequestedEmptyBandsAndWrittenTreeBands()
+    {
+        var union = OutputSetReceipt.Union(new OutputScope(["Tamriel"], [8, 16], ["tamriel:16", "tamriel:8"]),
+            OutputSetReceipt.Scope(["meshes/terrain/Tamriel/trees/Tamriel.4.0.0.btt"]));
+        Assert.Equal(["Tamriel"], union.Worlds); Assert.Equal([4, 8, 16], union.Levels);
+        Assert.Equal(["tamriel:16", "tamriel:4", "tamriel:8"], union.Bands);
+        Assert.Equal(LodLevels.All, LodLevels.Selected([]));
     }
 
     [Fact]

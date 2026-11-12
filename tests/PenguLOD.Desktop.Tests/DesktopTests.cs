@@ -9,6 +9,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 
@@ -203,7 +204,7 @@ public sealed class DesktopTests : IDisposable
             Dispatcher.UIThread.RunJobs();window.UpdateLayout();
             if(Environment.GetEnvironmentVariable("PENGULOD_SCREENSHOTS") is { } folder)
             {
-                Directory.CreateDirectory(folder);using var image=window.CaptureRenderedFrame();image!.Save(Path.Combine(folder,"terrain-materials.png"));
+                Directory.CreateDirectory(folder);using var image=window.CaptureRenderedFrame();image!.Save(Path.Combine(folder,"terrain-materials.png"), PngBitmapEncoderOptions.Default);
             }
         }
         finally {window.Close();}
@@ -275,7 +276,7 @@ public sealed class DesktopTests : IDisposable
             Click(window, title);
             Assert.Contains(window.GetVisualDescendants().OfType<ScrollViewer>(), s => s.Bounds.Width > 0);
             if (screenshots is not null)
-            { Directory.CreateDirectory(screenshots); using var bitmap = window.CaptureRenderedFrame(); Assert.NotNull(bitmap); bitmap.Save(Path.Combine(screenshots, file + ".png")); }
+            { Directory.CreateDirectory(screenshots); using var bitmap = window.CaptureRenderedFrame(); Assert.NotNull(bitmap); bitmap.Save(Path.Combine(screenshots, file + ".png"), PngBitmapEncoderOptions.Default); }
         }
         Click(window, "Object LOD"); Click(window, "Objects only");
         Assert.False(GenerationOptions.Get<bool>(window.Settings, "trees"));
@@ -283,7 +284,7 @@ public sealed class DesktopTests : IDisposable
         Assert.Equal("/mnt/mods/My MO2", window.Settings.Instance);
         window.ReplaceSettings(window.Settings.Snapshot());
         window.Width = 960; window.Height = 680; Click(window, "Overview");
-        if (screenshots is not null) { using var bitmap = window.CaptureRenderedFrame(); bitmap!.Save(Path.Combine(screenshots, "compact.png")); }
+        if (screenshots is not null) { using var bitmap = window.CaptureRenderedFrame(); bitmap!.Save(Path.Combine(screenshots, "compact.png"), PngBitmapEncoderOptions.Default); }
         window.Close();
         var reloaded = new SettingsStore(Path.Combine(_root, "settings.json")).Load();
         Assert.Equal("/mnt/mods/My MO2", reloaded.Instance);
@@ -320,7 +321,7 @@ public sealed class DesktopTests : IDisposable
         GrassGenerationManifest.Read(fixture.Output, true)!.Verify(fixture.Output);
         window.ReplaceSettings(window.Settings.Snapshot()); Click(window, "Grass cache");
         if (Environment.GetEnvironmentVariable("PENGULOD_SCREENSHOTS") is { } screenshots)
-        { using var bitmap = window.CaptureRenderedFrame(); bitmap!.Save(Path.Combine(screenshots, "grass-results.png")); }
+        { using var bitmap = window.CaptureRenderedFrame(); bitmap!.Save(Path.Combine(screenshots, "grass-results.png"), PngBitmapEncoderOptions.Default); }
         window.Close();
     }
 
@@ -532,9 +533,9 @@ public sealed class DesktopTests : IDisposable
         Assert.IsType<Avalonia.Controls.Image>(preview.Content);
         if (Environment.GetEnvironmentVariable("PENGULOD_SCREENSHOTS") is { } screenshots)
         {
-            using var frame = preview.CaptureRenderedFrame(); frame!.Save(Path.Combine(screenshots, "texture-preview.png"));
+            using var frame = preview.CaptureRenderedFrame(); frame!.Save(Path.Combine(screenshots, "texture-preview.png"), PngBitmapEncoderOptions.Default);
             window.GetVisualDescendants().OfType<ScrollViewer>().First(v => v.Content is StackPanel).ScrollToEnd();
-            Dispatcher.UIThread.RunJobs(); using var result = window.CaptureRenderedFrame(); result!.Save(Path.Combine(screenshots, "texture-results.png"));
+            Dispatcher.UIThread.RunJobs(); using var result = window.CaptureRenderedFrame(); result!.Save(Path.Combine(screenshots, "texture-results.png"), PngBitmapEncoderOptions.Default);
         }
         preview.Close();
         await window.RunTextureGeneration(true);
@@ -642,7 +643,7 @@ public sealed class DesktopTests : IDisposable
             window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PackageFolder").Text += "-changed";
             Assert.False(FindButton(window, "Publish reviewed package").IsEnabled);
             if (Environment.GetEnvironmentVariable("PENGULOD_SCREENSHOTS") is { } screenshots)
-                window.CaptureRenderedFrame()?.Save(Path.Combine(screenshots, "reports-outputs.png"));
+                window.CaptureRenderedFrame()?.Save(Path.Combine(screenshots, "reports-outputs.png"), PngBitmapEncoderOptions.Default);
         }
         finally { window.Close(); }
     }
@@ -748,7 +749,7 @@ public sealed class DesktopTests : IDisposable
         {
             var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().First(v => v.Content is StackPanel);
             scroll.ScrollToEnd(); Dispatcher.UIThread.RunJobs();
-            using var bitmap = window.CaptureRenderedFrame(); bitmap!.Save(Path.Combine(screenshots, "grass-real-results.png"));
+            using var bitmap = window.CaptureRenderedFrame(); bitmap!.Save(Path.Combine(screenshots, "grass-real-results.png"), PngBitmapEncoderOptions.Default);
         }
         window.Close();
     }
@@ -781,7 +782,7 @@ public sealed class DesktopTests : IDisposable
         {
             var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().First(v => v.Content is StackPanel);
             scroll.ScrollToEnd(); Dispatcher.UIThread.RunJobs();
-            using var frame = window.CaptureRenderedFrame(); frame!.Save(Path.Combine(screenshots, "completed-build.png"));
+            using var frame = window.CaptureRenderedFrame(); frame!.Save(Path.Combine(screenshots, "completed-build.png"), PngBitmapEncoderOptions.Default);
         }
         window.Close();
     }

@@ -62,6 +62,32 @@ public class LargeReferenceStageTests
         Assert.False(File.Exists(Path.Combine(f.Output, LargeReferenceStage.FileName)));
     }
 
+    [Fact]
+    public void LightPluginsCountAsMastersWithoutTheHeaderFlag()
+    {
+        using var f = Fixture();
+        using (var game = GameContext.Open(f.Game))
+        {
+            // The game loads every .esl as a master, whether or not its header carries the ESM flag.
+            var source = game.LoadOrder.ListedOrder.Single(l => l.ModKey.FileName.String == "Skyrim.esm").Mod!;
+            var extra = new SkyrimMod(ModKey.FromNameAndExtension("ExtraWalls.esl"), SkyrimRelease.SkyrimSE);
+            var wall = extra.Statics.AddNew();
+            wall.ObjectBounds = new ObjectBounds { First = new P3Int16(-1000, -1000, 0), Second = new P3Int16(1000, 1000, 2000) };
+            var world = source.Worldspaces.Single().DeepCopy();
+            var cell = world.SubCells[0].Items[0].Items[0];
+            cell.Temporary.Clear(); cell.Landscape = null;
+            var placed = new PlacedObject(extra.GetNextFormKey(), SkyrimRelease.SkyrimSE) { Placement = new Placement { Position = new P3Float(-13000, -13000, 0) } };
+            placed.Base.SetTo(wall); cell.Temporary.Add(placed);
+            extra.Worldspaces.Add(world);
+            Assert.False(extra.ModHeader.Flags.HasFlag(SkyrimModHeader.HeaderFlag.Master));
+            extra.WriteToBinary(Path.Combine(f.Textures.Data, "ExtraWalls.esl"));
+        }
+        File.AppendAllText(f.Textures.Plugins, "\n*ExtraWalls.esl\n");
+        using var updated = GameContext.Open(f.Game);
+        var result = LargeReferenceStage.Run(updated, ["FixtureWorld"], f.Output, null, Assert.Fail, default);
+        Assert.Equal(2, result.Listed);
+    }
+
     private static TerrainFixture Fixture() => new(editMod: mod =>
     {
         mod.IsMaster = true;

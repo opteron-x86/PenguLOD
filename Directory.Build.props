@@ -4,7 +4,10 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- CI sets PENGULOD_WARNINGS_AS_ERRORS=1 for the Linux build and test steps. Dependency advisories remain warnings. -->
+    <TreatWarningsAsErrors Condition="'$(PENGULOD_WARNINGS_AS_ERRORS)' == '1'">true</TreatWarningsAsErrors>
+    <TreatWarningsAsErrors Condition="'$(PENGULOD_WARNINGS_AS_ERRORS)' != '1'">false</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
     <PlatformTarget>x64</PlatformTarget>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>

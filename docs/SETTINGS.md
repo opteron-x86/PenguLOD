@@ -85,7 +85,7 @@ Leave these blank when the normal source selection works.
 | Setting | What it does |
 | --- | --- |
 | Wine / Proton prefix | On Linux, resolves Windows drive letters stored by the mod manager. Choose the game's `pfx` folder or its containing compatdata folder. |
-| Game folder override (MO2) | Replaces the game location saved in the instance. |
+| Game folder override (MO2) | Replaces the game location saved in the instance. Shown only for a Mod Organizer 2 source and kept separately from the Data-folder path, so **Detect Steam installation** never changes it. The section opens automatically when an override is set. |
 | Mods folder override | Replaces the instance's mod-storage location. |
 | Profiles folder override | Replaces the profile location. |
 | Overwrite folder override | Replaces the instance's Overwrite location. |
@@ -392,7 +392,7 @@ before lowering several quality controls together.
 | PBR texture size | Maximum side length for converted object PBR textures. Default `512`. |
 | PBR waterfalls | Selects full models for PBR-patched waterfalls. Independent of PBR object LOD; enable it only when the installed waterfall models need it. |
 | Terrain underside | Adds a lower terrain surface for volumetric lighting. Off by default; this does not generate the landscape LOD itself. |
-| Underside sample step | Spacing used for that surface. Default `16`; smaller values add geometry. |
+| Underside sample step | Spacing used for that surface. Default `16`; smaller values add geometry. `8` is the finest step; presets saved with `4` load as `8`. |
 
 ### Occlusion
 

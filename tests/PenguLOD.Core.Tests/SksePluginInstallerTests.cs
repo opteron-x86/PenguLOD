@@ -71,4 +71,15 @@ public class SksePluginInstallerTests : IDisposable
         Assert.False(r.Installed);
         Assert.Contains("SkyrimVR.exe", r.Message);
     }
+
+    [Fact]
+    public void PackagedRuntimeIniMatchesTheGeneratedDefault()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "PenguLOD.slnx"))) dir = dir.Parent;
+        Assert.NotNull(dir);
+        // packaging/PenguLOD.ini ships in the SKSE package; the generator writes DefaultIni into new output. Keep them identical.
+        string packaged = File.ReadAllText(Path.Combine(dir!.FullName, "packaging", "PenguLOD.ini")).ReplaceLineEndings("\n");
+        Assert.Equal(DynamicLodWriter.DefaultIni.ReplaceLineEndings("\n"), packaged);
+    }
 }

@@ -35,12 +35,9 @@ public static class LodTextureEncoding
 
     public static TextureImage Decode(byte[] bytes)
     {
-        var info = Read2D(bytes);
-        var image = TextureImages.Decode(bytes);
-        if (info.Uncompressed && info.DataOffset == 128 && info.BitsPerPixel == 32
-            && (BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(104)) == 0 || (BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(80)) & 1) == 0))
-            for (int i = 3; i < image.Pixels.Length; i += 4) image.Pixels[i] = 255;
-        return image;
+        _ = Read2D(bytes);
+        // DdsFile.DecodeTopMip makes padding channels (X8 and 24-bit formats) opaque.
+        return TextureImages.Decode(bytes);
     }
 
     /// <returns>Null if the existing file should be used unchanged.</returns>

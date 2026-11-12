@@ -5,6 +5,55 @@ Pre-release versions are marked alpha or beta until the supported workflows have
 
 ## Unreleased
 
+Output management and the command line
+
+- Fix output folders becoming unusable after tree LOD was generated without LOD4
+  selected. Tree blocks are always LOD4; their band is now recorded, and folders from
+  earlier versions are read with it added.
+- Allow output folders below a symbolic link, such as `~/.steam/steam`. The output
+  folder itself must still be a real folder.
+- The CLI accepts every option listed in `--help`, including `--esl-range`,
+  `--ice-inset`, `--mountain-inset`, `--object-inset`, `--map-objects`, `--snow-cover`,
+  `--snow-shader`, `--optimize-object-textures` and `--object-texture-size`.
+- The CLI refuses generation options next to `--settings` or `--request` instead of
+  ignoring them. Malformed or out-of-range numbers are errors instead of silently using
+  the default. The no-op `--tree-3d-by-name` and `--tree-3d-own-lod` were removed.
+- Without `--report`, `scan` writes its report to the current folder (the AppImage
+  folder is read-only), and `generate` points to the report in its job folder.
+
+Desktop
+
+- Stage pages use the same run settings as **Run selected stages**: setup check,
+  texture compute and scope expansion were ignored by the per-page buttons.
+- Whole-number options step by one. Presets saved with fractional values load rounded.
+- The seasonal checkboxes on Terrain and Object LOD stay in sync, also after a preset.
+- The MO2 game-folder override is a separate setting. **Detect Steam installation**
+  no longer replaces it or an existing Wine prefix. Older MO2 presets keep their override.
+
+Robustness
+
+- A malformed NIF, DDS or grass cache in a mod is reported for that file instead of
+  stopping texture repair, tree LOD, the mesh maker or conversion.
+- Mod folders that differ only in case (`meshes` and `Meshes`) are merged, with a
+  warning, instead of hiding one of them or stopping the scan. The same applies to
+  Data folders and duplicate archive names.
+- Tree LOD blocks use the worldspace's EditorID spelling, so a rerun on Linux no longer
+  leaves a second, differently cased copy of a block.
+- A previous `Occlusion.esp` is no longer used as the source of cell data, so later cell
+  edits by other mods are kept.
+- Large references treat `.esm` and `.esl` files as masters, as the game does, even
+  without the ESM header flag.
+- 24-bit and legacy X8 textures are read as opaque. A worldspace with an unusual EditorID
+  is skipped with a warning when all worldspaces are selected. Cells with a placeholder
+  water height use the worldspace default.
+- Underside step 4 is no longer offered: it exceeded the mesh format's 65,535-vertex
+  limit and produced damaged files. Presets saved with it use step 8.
+- Changes to a file inside an archive are detected even when its size is unchanged.
+
+Incremental LOD output is rebuilt once, because archive contents are now identified by
+the archive's size and date. Regenerate if you used underside step 4 or have textures
+in legacy X8 format; other settings and output are unchanged.
+
 ## [0.6.0-alpha.4] - 2026-11-10
 
 - Fix Review output scope rejecting older AnvilLOD output before inspecting it.

@@ -57,6 +57,10 @@ This checks the selected folders. It does not inspect a mod manager's deployment
 or resolve the game's complete winning asset order. For installed-output checks,
 select the actual combined package or installed stage folders.
 
+Output folders may sit below a symbolic link, such as `~/.steam/steam`. The stage or
+package folder itself must be a real folder, and links inside it are refused, because
+publication renames the folder and must not follow a link elsewhere.
+
 Older outputs without receipts remain usable in game and can be measured. They
 cannot be adopted as managed output automatically: regenerate into a new folder
 when you want to use managed updates. Keep your working generation as it is.

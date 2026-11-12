@@ -20,5 +20,5 @@ public class GrassTests
 
     [Fact]
     public void Cache_with_no_types_reads_empty()
-        => Assert.Equal(0, GrassCache.Read(new byte[4]).Count);
+        => Assert.Empty(GrassCache.Read(new byte[4]));
 }

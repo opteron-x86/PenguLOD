@@ -57,7 +57,9 @@ public sealed class AssetIndex : IAssetSource
     public IReadOnlyList<string> SkippedArchives { get; }
     public TimeSpan IndexTime { get; }
 
-    private sealed record ArchiveEntry(string ArchiveName, IArchiveFile File);
+    /// <param name="ArchiveStamp">Size and modification time of the archive file. A same-size file inside an updated
+    /// archive (a texture of unchanged resolution and format) is otherwise indistinguishable from the old one.</param>
+    private sealed record ArchiveEntry(string ArchiveName, IArchiveFile File, string ArchiveStamp = "");
 
     private AssetIndex(Func<string, FileInfo?> looseResolver, Func<string, IEnumerable<string>> looseEnumerator,
         Dictionary<string, ArchiveEntry> archived, int archiveCount, TimeSpan time, IReadOnlyList<string> skipped)
@@ -78,21 +80,19 @@ public sealed class AssetIndex : IAssetSource
     {
         var archives = SkyrimArchives.Select(release, Directory.EnumerateFiles(dataFolder), pluginOrder ?? [],
             SkyrimArchives.ReadIniLists(iniPaths ?? []));
+        // Folders that differ only in case ("meshes", "Meshes") are one folder to the game; the last in ordinal order wins.
         IEnumerable<string> EnumerateLoose(string prefix)
         {
-            var dir = GamePath.ResolveExisting(dataFolder, prefix.TrimEnd('\\'));
-            if (dir is null || !Directory.Exists(dir)) yield break;
             var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-            foreach (var f in Directory.EnumerateFiles(dir, "*", opts))
-                yield return GamePath.Normalize(Path.GetRelativePath(dataFolder, f));
+            foreach (var dir in GamePath.ResolveAllExisting(dataFolder, prefix.TrimEnd('\\')).Where(Directory.Exists))
+                foreach (var f in Directory.EnumerateFiles(dir, "*", opts))
+                    yield return GamePath.Normalize(Path.GetRelativePath(dataFolder, f));
         }
 
         return Create(release, archives, EnumerateLoose, key =>
         {
-            var full = GamePath.ResolveExisting(dataFolder, key);
-            if (full is null) return null;
-            var fi = new FileInfo(full);
-            return fi.Exists ? fi : null;
+            var full = GamePath.ResolveAllExisting(dataFolder, key).LastOrDefault(File.Exists);
+            return full is null ? null : new FileInfo(full);
         }, pathFilter);
     }
 
@@ -132,7 +132,10 @@ public sealed class AssetIndex : IAssetSource
                 skipped.Add($"{name}: {ex.GetBaseException().Message}");
                 continue;
             }
-            foreach (var (key, f) in entries) map[key] = new ArchiveEntry(name, f); // later archive wins
+            string stamp;
+            try { var info = new FileInfo(archivePath); stamp = info.Exists ? $"{info.Length}:{info.LastWriteTimeUtc.Ticks}" : ""; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { stamp = ""; }
+            foreach (var (key, f) in entries) map[key] = new ArchiveEntry(name, f, stamp); // later archive wins
         }
 
         return new AssetIndex(looseResolver, looseEnumerator, map, archivesLowToHigh.Count - skipped.Count, sw.Elapsed, skipped);
@@ -210,7 +213,7 @@ public sealed class AssetIndex : IAssetSource
         if (_overrides.TryGetValue(key, out var generated)) return $"G:{generated.Length}:{generated.LastWriteTimeUtc.Ticks}";
         if (Replaced(key)) return null;
         if (Loose(key) is { } fi) return $"L:{fi.Length}:{fi.LastWriteTimeUtc.Ticks}";
-        if (_archived.TryGetValue(key, out var e)) return $"A:{e.ArchiveName}:{e.File.Size}";
+        if (_archived.TryGetValue(key, out var e)) return $"A:{e.ArchiveName}:{e.ArchiveStamp}:{e.File.Size}";
         if (Fallback(key) is { } fb) return $"F:{fb.Length}:{fb.LastWriteTimeUtc.Ticks}";
         return null;
     }

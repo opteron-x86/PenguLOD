@@ -72,7 +72,13 @@ public static class TerrainGeneration
         foreach(var world in worlds)
         {
             ct.ThrowIfCancellationRequested();string name=world.EditorID!;
-            if(!Regex.IsMatch(name,@"^[A-Za-z0-9_]+$"))throw new InvalidDataException("Unsupported worldspace EditorID: "+name);
+            if(!Regex.IsMatch(name,@"^[A-Za-z0-9_]+$"))
+            {
+                // An explicitly requested world must not be skipped silently; with all worlds selected, one odd EditorID
+                // must not stop terrain for the others.
+                if(wanted is not null)throw new InvalidDataException("Unsupported worldspace EditorID: "+name);
+                Warn(name+": EditorID contains characters that terrain LOD file names cannot use; worldspace skipped.");continue;
+            }
             if(!assets.TryOpen(LodSettings.RelativePathFor(name),out var s)) {Warn(name+": no LOD settings; worldspace skipped.");continue;}
             LodSettings settings;using(s){var bytes=new byte[16];s.ReadExactly(bytes);settings=LodSettings.Parse(bytes);}
             if(settings.Stride is <4 or >4096 || (settings.Stride&(settings.Stride-1))!=0)throw new InvalidDataException(name+": invalid LOD grid bounds.");

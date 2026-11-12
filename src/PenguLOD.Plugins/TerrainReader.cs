@@ -45,9 +45,11 @@ public static class TerrainReader
             var cell = cctx.Record;
             if (cell.Grid is not { } cgrid || !cell.Flags.HasFlag(Cell.Flag.HasWater)) continue;
             if (!cctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var cws) || cws.Record.EditorID is not { } cwsName || !wanted.Contains(cwsName)) continue;
-            var level = cell.WaterHeight ?? cws.Record.LandDefaults?.DefaultWaterHeight;
-            // Sentinels ("no water", FLT_MAX) and nonsense values are not a surface.
-            if (level is not { } wl || !float.IsFinite(wl) || MathF.Abs(wl) > 1_000_000f) continue;
+            // A sentinel ("no water", FLT_MAX) or nonsense cell value falls back to the worldspace default, as TerrainSource does.
+            static bool Valid(float? v) => v is { } x && float.IsFinite(x) && MathF.Abs(x) < 1_000_000f;
+            var level = Valid(cell.WaterHeight) ? cell.WaterHeight : cws.Record.LandDefaults?.DefaultWaterHeight;
+            if (!Valid(level)) continue;
+            float wl = level!.Value;
             heights.SetWater(cwsName, cgrid.Point.X, cgrid.Point.Y, wl);
         }
 

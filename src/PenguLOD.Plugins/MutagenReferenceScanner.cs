@@ -145,7 +145,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
         BaseInfo? ReadBase(FormKey fk)
         {
             if (GeneratedLodInputs.IsPlugin(fk.ModKey.FileName.String)) return null;
-            if (!linkCache.TryResolve(fk, out var rec)) return null;
+            if (!linkCache.TryResolveAny(fk, out var rec)) return null;
             // Object types that can have static object LOD. Trees (TREE) come with tree LOD (milestone 3).
             if (rec is not (IStaticGetter or IMoveableStaticGetter or IActivatorGetter or IFurnitureGetter or IDoorGetter or IContainerGetter))
                 return null;
@@ -476,7 +476,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
                 // Whatever a quest can switch off would stay visible: same rule as the child-to-parent copies.
                 // A persistent reference of a base that is visible when distant is scenery (the three Whiterun windmill towers): copy it.
                 if ((raw & FlagInitiallyDisabled) != 0 || ((raw & FlagPersistent) != 0 && !PersistentScenery(baseKey.Value)) || (r.EnableParent is { } pep && !pep.Reference.IsNull)) { pcSwitchable++; continue; }
-                var edid = baseEdid.GetOrAdd(baseKey.Value, k => linkCache.TryResolve(k, out var b) ? b.EditorID : null);
+                var edid = baseEdid.GetOrAdd(baseKey.Value, k => linkCache.TryResolveAny(k, out var b) ? b.EditorID : null);
                 if (t.Config.IgnoresEditorId(edid)) { pcIgnored++; continue; }
                 if (_childCopies.IsParentStandIn(LodRules.FormIdKey(r.FormKey.ModKey.ToString(), r.FormKey.ID))) { pcStandIn++; continue; }
 
@@ -549,7 +549,7 @@ public sealed class MutagenReferenceScanner : IReferenceScanner
             {
                 var baseKey = r.Base.FormKeyNullable;
                 if (baseKey is null || baseKey.Value.IsNull) return;
-                if (copy is not null && copy.IgnoresEditorId(baseEdid.GetOrAdd(baseKey.Value, k => linkCache.TryResolve(k, out var b) ? b.EditorID : null)))
+                if (copy is not null && copy.IgnoresEditorId(baseEdid.GetOrAdd(baseKey.Value, k => linkCache.TryResolveAny(k, out var b) ? b.EditorID : null)))
                 { childCopyIgnored++; return; }
 
                 if (options.TreeLod && isTreeCache.GetOrAdd(baseKey.Value, IsTree))

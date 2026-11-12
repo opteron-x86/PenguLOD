@@ -1,7 +1,8 @@
 name: Build and release
 on:
+  # Feature branches are built through their pull request; pushing to them as well would run every job twice.
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -43,6 +44,7 @@ jobs:
       - name: Engine and rendered UI tests
         env:
           PENGULOD_TEST_VULKAN: '1'
+          PENGULOD_WARNINGS_AS_ERRORS: '1'
         run: bash tools/test.sh
       - name: Synthetic terrain benchmarks
         run: |

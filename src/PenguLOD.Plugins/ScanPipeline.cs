@@ -125,6 +125,11 @@ public static class ScanPipeline
         ResourceCatalog.ValidateFolders(req.DynDolodFolder, req.ResourcePacks, req.OutputFolder);
         req.Scan.Tree3D?.Validate();
         req.AutomaticObjects?.Validate();
+        // Checked before the scan so a bad value does not waste a full run. Only generation with the option uses them.
+        if (req.Generate && req.ObjectAtlas && (req.AtlasCellSize is < 64 or > 512 || (req.AtlasCellSize & (req.AtlasCellSize - 1)) != 0))
+            throw new ArgumentException("Atlas cell size must be a power of two from 64 to 512.");
+        if (req.Generate && req.OptimizeObjectTextures && (req.ObjectTextureSize is < 128 or > 4096 || (req.ObjectTextureSize & (req.ObjectTextureSize - 1)) != 0))
+            throw new ArgumentException("Object texture size must be a power of two from 128 to 4096.");
         if (req.AutomaticObjects is { Enabled: true })
             req = req with { SettingsFingerprint = req.SettingsFingerprint + "|automatic-objects1:" + JsonSerializer.Serialize(req.AutomaticObjects) };
         if (req.Generate && string.IsNullOrWhiteSpace(req.OutputFolder))
@@ -543,10 +548,6 @@ public static class ScanPipeline
         var plan = manifest.Plan(hashes, staged?.Output ?? req.OutputFolder, InScope);
         if (req.ObjectAtlas || req.OptimizeObjectTextures) plan = new BuildPlan(hashes.Keys.ToArray(),[],plan.StaleFiles); // material layout and texture inputs can affect every block
         if (staged is not null) plan = staged.SeedLodBlocks(plan, progress);
-        if(req.AtlasCellSize is <64 or >512 || (req.AtlasCellSize&(req.AtlasCellSize-1))!=0)throw new ArgumentException("Atlas cell size must be a power of two from 64 to 512.");
-
-        if (req.ObjectTextureSize is < 128 or > 4096 || (req.ObjectTextureSize & (req.ObjectTextureSize - 1)) != 0)
-            throw new ArgumentException("Object texture size must be a power of two from 128 to 4096.");
 
         GenerateStats? gen = null;
         TreeGenerateStats? trees = null;

@@ -16,6 +16,10 @@ public static class LodLevels
 {
     public static readonly IReadOnlyList<LodLevel> All = [LodLevel.Lod4, LodLevel.Lod8, LodLevel.Lod16, LodLevel.Lod32];
 
+    /// <summary>The levels a request selects. Null and empty both mean every level.</summary>
+    public static IReadOnlyCollection<LodLevel> Selected(IReadOnlyCollection<LodLevel>? requested) =>
+        requested is { Count: > 0 } ? requested : All;
+
     /// <summary>MNAM slot index (0..3) for a level.</summary>
     public static int SlotIndex(this LodLevel level) => level switch
     {

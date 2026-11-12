@@ -9,6 +9,13 @@ public static class NifCostReader
 {
     public static IReadOnlyList<GeometryCost> Read(byte[] bytes, string defaultLayer = LodLayers.Objects)
     {
+        try { return ReadCore(bytes, defaultLayer); }
+        catch (Exception e) when (e is OverflowException or ArgumentOutOfRangeException or IndexOutOfRangeException or EndOfStreamException)
+        { throw new InvalidDataException("Malformed NIF: " + e.Message, e); }
+    }
+
+    private static IReadOnlyList<GeometryCost> ReadCore(byte[] bytes, string defaultLayer)
+    {
         var nif = NifFile.Read(bytes);
         if (nif.BsVersion != NifFile.BsVersionSse) throw new NotSupportedException("Geometry costs require an SSE NIF.");
         var costs = new Dictionary<string, GeometryCost>(StringComparer.Ordinal);

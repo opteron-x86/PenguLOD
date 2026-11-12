@@ -187,7 +187,7 @@ public static class TextureFixer
                 }
                 finally { try { Directory.Delete(temp, true); } catch (IOException) { } }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or InvalidDataException)
             {
                 results.Add(new FixedTexture(item, target, backup, "Failed: " + ex.Message));
             }

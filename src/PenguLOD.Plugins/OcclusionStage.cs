@@ -96,7 +96,9 @@ public static class OcclusionStage
             var data = calc.ComputeMany(todo, new Progress<int>(n => { if (n - last >= 2000) { last = n; progress?.Report($"Occlusion {ws}: {n:N0} of {todo.Count:N0} cells"); } }), ct);
 
             int written = 0;
-            foreach (var ctx in game.LoadOrder.PriorityOrder.Cell().WinningContextOverrides(game.LinkCache))
+            // An Occlusion.esp from an earlier xLODGen, DynDOLOD or PenguLOD run would otherwise be the winning override and its
+            // stale cell data would be copied forward over later cell edits by other mods.
+            foreach (var ctx in game.LoadOrder.PriorityOrder.Where(l => l.ModKey != mod.ModKey).Cell().WinningContextOverrides(game.LinkCache))
             {
                 if (ctx.Record.Grid is not { } g || !data.TryGetValue((g.Point.X, g.Point.Y), out var tvdt)) continue;
                 if (!ctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var wsCtx) || !string.Equals(wsCtx.Record.EditorID, ws, StringComparison.OrdinalIgnoreCase)) continue;

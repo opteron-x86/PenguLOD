@@ -181,7 +181,7 @@ public static class UndersideStage
     {
         try
         {
-            foreach (var name in UndersidePluginWriter.LegacyFileNames.Append(UndersidePluginWriter.FileName).Concat(Directory.Exists(output) ? Directory.GetFiles(output, "PenguLOD Effects*.esp").Select(Path.GetFileName)! : []))
+            foreach (var name in UndersidePluginWriter.LegacyFileNames.Append(UndersidePluginWriter.FileName).Concat(Directory.Exists(output) ? Directory.GetFiles(output, "PenguLOD Effects*.esp").Select(f => Path.GetFileName(f)) : []))
             {
                 var file = Path.Combine(output, name);
                 if (File.Exists(file)) File.Delete(file);

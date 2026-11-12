@@ -7,6 +7,25 @@ public sealed class DesktopSettings : ObservableObject
 {
     public int SchemaVersion { get; set; } = 1;
     public Dictionary<string, JsonElement> Options { get; set; } = [];
+
+    /// <summary>Raised with the option key after <see cref="SetOption"/>, or with "*" after <see cref="ResetOptions"/>.</summary>
+    public event Action<string>? OptionChanged;
+
+    /// <summary>Writes one generation option and notifies every control bound to it.</summary>
+    public void SetOption(string key, JsonElement value)
+    {
+        Options[key] = value;
+        OptionChanged?.Invoke(key);
+        if (key == "seasons") Changed(nameof(Seasons));
+    }
+
+    /// <summary>Restores every generation option to its default and notifies bound controls.</summary>
+    public void ResetOptions()
+    {
+        Options.Clear();
+        OptionChanged?.Invoke("*");
+        Changed(nameof(Seasons));
+    }
     private string _sourceMode = "Mod Organizer 2";
     public string SourceMode { get => _sourceMode; set => Set(ref _sourceMode, value ?? ""); }
     private string _edition = "SE / AE";
@@ -18,7 +37,11 @@ public sealed class DesktopSettings : ObservableObject
     private string _winePrefix = "";
     public string WinePrefix { get => _winePrefix; set => Set(ref _winePrefix, value ?? ""); }
     private string _gameFolder = "";
+    /// <summary>Game or Data folder for the Data-folder source. Not used in Mod Organizer 2 mode.</summary>
     public string GameFolder { get => _gameFolder; set => Set(ref _gameFolder, value ?? ""); }
+    private string _mo2GameFolder = "";
+    /// <summary>Mod Organizer 2 mode only: replaces the gamePath saved in ModOrganizer.ini.</summary>
+    public string Mo2GameFolder { get => _mo2GameFolder; set => Set(ref _mo2GameFolder, value ?? ""); }
     private string _modsFolder = "";
     public string ModsFolder { get => _modsFolder; set => Set(ref _modsFolder, value ?? ""); }
     private string _profilesFolder = "";
@@ -80,7 +103,7 @@ public sealed class DesktopSettings : ObservableObject
     public bool Seasons
     {
         get => GenerationOptions.Get<bool>(this, "seasons");
-        set { Options["seasons"] = JsonSerializer.SerializeToElement(value); Changed(); }
+        set => SetOption("seasons", JsonSerializer.SerializeToElement(value));
     }
     public decimal TerrainBrightness { get => _terrainBrightness; set => Set(ref _terrainBrightness, value); }
     private decimal _terrainVertexColor = 1;

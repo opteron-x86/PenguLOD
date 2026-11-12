@@ -23,6 +23,14 @@ one stage. Referenced generated inputs must already exist for a standalone LOD c
 a combined pipeline connects its new outputs automatically. `--request` and `--settings`
 are mutually exclusive. A raw request must define every requested stage.
 
+The preset or request defines the generation. Options that would change it, such as
+`--output`, `--worldspace` or `--grass-density`, are refused next to `--settings` or
+`--request` instead of being ignored; change the preset in the desktop instead. Run
+options are accepted: `--stages`, `--job-folder`, `--cache-folder`, `--threads`,
+`--report`, `--texture-compute`, `--no-resume`, `--no-preflight`, `--verify-source-contents`,
+`--expand-output-scope`, `--deep-scan`, `--verify-outputs`, `--inspect-asset` and
+`--wine-prefix`. `export-job` also takes `--output` for the request file it writes.
+
 `--cache-folder`, `--threads`, `--texture-compute Cpu|Auto|Vulkan`, `--no-resume`,
 `--verify-source-contents`, and `--no-preflight` provide explicit overrides. Preset cache
 and worker settings are honored when overrides are absent. A saved job stores stage
@@ -31,7 +39,10 @@ emits compact run status and the journal. These private run reports can contain 
 paths; use the Diagnostics export for sharing.
 
 Existing flag-based `generate` also uses transactional publication and checkpoints;
-`scan` remains read-only. Legacy author, mesh maker, conversion and repair commands remain
+`scan` remains read-only. Numeric options must be plain numbers within the range shown
+in `--help` (for example `--grass-density 15`, not `15%`); out-of-range values are errors.
+Without `--report`, `scan` writes `PenguLOD.scan.json` in the current folder and
+`generate` points to `scan-report.json` in its job folder. Legacy author, mesh maker, conversion and repair commands remain
 available in `--help`. Exit status is 0 for success, 2 for argument/generation failure,
 and 130 for cancellation. `diagnose` returns 1 for blocking findings.
 

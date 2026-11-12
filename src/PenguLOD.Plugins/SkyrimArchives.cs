@@ -36,8 +36,10 @@ public static class SkyrimArchives
     public static IReadOnlyList<string> Select(GameRelease release, IEnumerable<string> archivePaths,
         IReadOnlyList<string> plugins, IReadOnlyList<string> iniArchives)
     {
-        var available = archivePaths.Where(p => p.EndsWith(".bsa", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(GamePath.GetFileName, p => p, StringComparer.OrdinalIgnoreCase);
+        // A case-sensitive Data folder can hold "Foo.bsa" and "foo.bsa"; the game loads one archive by that name.
+        var available = archivePaths.Where(p => p.EndsWith(".bsa", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal)
+            .GroupBy(GamePath.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Add(string name) { if (available.TryGetValue(name, out var full) && seen.Add(name)) result.Add(full); }

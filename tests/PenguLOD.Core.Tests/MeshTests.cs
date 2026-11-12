@@ -130,13 +130,13 @@ public class MeshTests
         var refs = new[] { R("lod", LodShaderKind.None, 100), R("lod", LodShaderKind.Snow, 200), R("full", LodShaderKind.Snow, 300), R("full", LodShaderKind.Ash, 400), R("full", LodShaderKind.None, 500) };
         var res = BtoBuilder.Build(new QuadKey("T", LodLevel.Lod4, 0, 0), refs, p => meshes[p]);
 
-        var names = NifGeometryReader.Read("out", res.Bytes).Parts.Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        var names = NifGeometryReader.Read("out", res.Bytes).Parts.Select(p => p.Name ?? "").OrderBy(n => n, StringComparer.Ordinal).ToArray();
         Assert.Equal(["obj", "obj", "objAshHD", "objSnow", "objSnowHD"], names);
         Assert.Equal(5, res.Shapes);
 
         // The HD material is for LOD4 only: higher levels draw full-texture shapes with the plain snow / ash material (DynDOLOD's default).
         var far = BtoBuilder.Build(new QuadKey("T", LodLevel.Lod8, 0, 0), refs, p => meshes[p]);
-        var farNames = NifGeometryReader.Read("out", far.Bytes).Parts.Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        var farNames = NifGeometryReader.Read("out", far.Bytes).Parts.Select(p => p.Name ?? "").OrderBy(n => n, StringComparer.Ordinal).ToArray();
         Assert.Equal(["obj", "obj", "objAsh", "objSnow", "objSnow"], farNames);
     }
 

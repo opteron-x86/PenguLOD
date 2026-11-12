@@ -24,7 +24,11 @@ public static class UndersideMesher
     /// <summary>LAND vertex steps per underside quad. Smaller is finer and heavier; must divide 1024.</summary>
     public const int DefaultStep = 16;
 
-    public static bool IsValidStep(int step) => step is 4 or 8 or 16 or 32 or 64 or 128;
+    /// <summary>
+    /// Steps whose block fits one 16-bit-indexed shape: step 8 gives 129² = 16,641 vertices per LOD32 block.
+    /// Step 4 (257² = 66,049) would overflow the shape's vertex and triangle counts.
+    /// </summary>
+    public static bool IsValidStep(int step) => step is 8 or 16 or 32 or 64 or 128;
 
     /// <param name="Positions">World-space vertices.</param>
     /// <param name="Indices">Triangles, wound so the faces point down.</param>
@@ -36,7 +40,7 @@ public static class UndersideMesher
     /// <summary>The underside of the LOD32 block whose south-west cell is (blockX, blockY), or null where it has no terrain.</summary>
     public static Shape? Build(TerrainHeights terrain, string worldspace, int blockX, int blockY, int step = DefaultStep)
     {
-        if (!IsValidStep(step)) throw new ArgumentOutOfRangeException(nameof(step), "Step must be 4, 8, 16, 32, 64 or 128.");
+        if (!IsValidStep(step)) throw new ArgumentOutOfRangeException(nameof(step), "Step must be 8, 16, 32, 64 or 128.");
         int n = BlockVertices / step;      // quads per side
         int stride = n + 2;                // blocks run from -1 to n so that border vertices see their outside neighbours
         int gx0 = blockX * (TerrainHeights.Grid - 1), gy0 = blockY * (TerrainHeights.Grid - 1);

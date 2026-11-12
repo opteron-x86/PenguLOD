@@ -185,11 +185,17 @@ internal static class ReportFiles
 
 internal static class OutputFiles
 {
+    /// <summary>
+    /// Rejects an output folder that is itself a symbolic link: publication renames that folder, which would move the
+    /// link rather than its target. Links in parent folders (for example ~/.steam/steam) are allowed, and links inside
+    /// the folder are rejected while its files are enumerated.
+    /// </summary>
     public static void RequireRealPath(string root)
     {
-        for (string? part = Path.GetFullPath(root); part is not null; part = Path.GetDirectoryName(part))
-            if (new DirectoryInfo(part).LinkTarget is not null || new FileInfo(part).LinkTarget is not null)
-                throw new IOException("Output paths must not pass through symbolic links: " + part);
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        if (Path.GetPathRoot(full) == full) return;
+        if (new DirectoryInfo(full).LinkTarget is not null || new FileInfo(full).LinkTarget is not null)
+            throw new IOException("The output folder must not be a symbolic link; choose the folder it points to instead: " + full);
     }
     public static IReadOnlyList<string> Enumerate(string root, CancellationToken ct = default)
     {

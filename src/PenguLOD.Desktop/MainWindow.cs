@@ -207,7 +207,11 @@ public sealed partial class MainWindow : Window
             PathField("plugins.txt", nameof(DesktopSettings.PluginsFile), file: true, hint: "Choose an explicit plugin list; an empty file works for a vanilla game."));
         mo2.Bind(IsVisibleProperty, new Binding(nameof(DesktopSettings.SourceMode)) { Source = _settings, Converter = new FuncValueConverter<string, bool>(v => v == "Mod Organizer 2") });
         data.Bind(IsVisibleProperty, new Binding(nameof(DesktopSettings.SourceMode)) { Source = _settings, Converter = new FuncValueConverter<string, bool>(v => v != "Mod Organizer 2") });
-        ((StackPanel)advanced.Content!).Children.Insert(1, PathField("Game folder override (MO2)", nameof(DesktopSettings.GameFolder), hint: "Use this if the gamePath saved in MO2 points to an old location."));
+        var mo2Game = PathField("Game folder override (MO2)", nameof(DesktopSettings.Mo2GameFolder), hint: "Use this if the gamePath saved in MO2 points to an old location.");
+        mo2Game.Bind(IsVisibleProperty, new Binding(nameof(DesktopSettings.SourceMode)) { Source = _settings, Converter = new FuncValueConverter<string, bool>(v => v == "Mod Organizer 2") });
+        ((StackPanel)advanced.Content!).Children.Insert(1, mo2Game);
+        // An override hidden in a collapsed section is easy to forget; show the section when one is set.
+        advanced.IsExpanded = !string.IsNullOrWhiteSpace(_settings.Mo2GameFolder) && _settings.SourceMode == "Mod Organizer 2";
         return Scroll(Stack(16, Heading("Game & resources"),
             Card("Game source", Stack(12, Row(source, Choice("Game edition", nameof(DesktopSettings.Edition), ["SE / AE", "VR"])), mo2, data, advanced)),
             Card("LOD resources", Stack(12,
@@ -238,7 +242,10 @@ public sealed partial class MainWindow : Window
                 }
                 else if (spec.Default is decimal)
                 {
-                    var number = new NumericUpDown { Minimum = spec.Min, Maximum = spec.Max, Increment = spec.Max <= 10 ? .05m : 1, FormatString = "0.##", Width = 145 };
+                    // Whole-number options step by one; fractional options use a step that suits their range.
+                    var number = spec.Whole
+                        ? new NumericUpDown { Minimum = spec.Min, Maximum = spec.Max, Increment = 1, FormatString = "0", Width = 145 }
+                        : new NumericUpDown { Minimum = spec.Min, Maximum = spec.Max, Increment = spec.Max <= 10 ? .05m : 1, FormatString = "0.##", Width = 145 };
                     Bind(number, NumericUpDown.ValueProperty, value, nameof(OptionValue.Number)); input = Labeled(spec.Label, number);
                 }
                 else
