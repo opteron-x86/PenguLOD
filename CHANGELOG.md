@@ -107,6 +107,13 @@ The data file format is unchanged: this runtime reads output from earlier genera
 and earlier runtimes read output from this one. New settings files include `iMaxShowPerUpdate`;
 an existing `PenguLOD.ini` uses the default until the key is added.
 
+Game runtime package
+
+- The SKSE plugin archive contains the installer, the three DLLs and license notices only,
+  about 1 MB instead of 107 MB. It no longer bundles source archives, which mod sites
+  reject; the source is the release tag in the repository.
+- Shorter wording in the installer's game version step.
+
 ## [0.6.0-alpha.4] - 2026-11-10
 
 - Fix Review output scope rejecting older AnvilLOD output before inspecting it.
