@@ -492,11 +492,15 @@ public static partial class NifGeometryReader
         return n;
     }
 
-    /// <summary>Per-vertex tangent and bitangent from the UV layout, made orthogonal to the normal.</summary>
-    private static (Vector3[] Tangents, Vector3[] Bitangents) TangentsFromUv(Vector3[] pos, Vector2[] uv, Vector3[] nrm, ushort[] tris)
+    /// <summary>
+    /// Per-vertex tangent frame from the UV layout, in the convention of the NIF fields (see <see cref="LodMeshPart.Tangents"/>):
+    /// the tangent follows +V (dP/dv) and the bitangent +U (dP/du), each made orthogonal to the normal. This matches nifly's
+    /// CalcTangentSpace and the data stored in Skyrim SE meshes.
+    /// </summary>
+    internal static (Vector3[] Tangents, Vector3[] Bitangents) TangentsFromUv(Vector3[] pos, Vector2[] uv, Vector3[] nrm, ushort[] tris)
     {
-        var tan = new Vector3[pos.Length];
-        var bit = new Vector3[pos.Length];
+        var alongV = new Vector3[pos.Length];
+        var alongU = new Vector3[pos.Length];
         for (int t = 0; t + 2 < tris.Length; t += 3)
         {
             int a = tris[t], b = tris[t + 1], c = tris[t + 2];
@@ -505,18 +509,20 @@ public static partial class NifGeometryReader
             float det = d1.X * d2.Y - d2.X * d1.Y;
             if (MathF.Abs(det) < 1e-12f) continue;
             float inv = 1f / det;
-            var tv = (e1 * d2.Y - e2 * d1.Y) * inv;
-            var bv = (e2 * d1.X - e1 * d2.X) * inv;
-            tan[a] += tv; tan[b] += tv; tan[c] += tv;
-            bit[a] += bv; bit[b] += bv; bit[c] += bv;
+            var du = (e1 * d2.Y - e2 * d1.Y) * inv;   // dP/du
+            var dv = (e2 * d1.X - e1 * d2.X) * inv;   // dP/dv
+            alongU[a] += du; alongU[b] += du; alongU[c] += du;
+            alongV[a] += dv; alongV[b] += dv; alongV[c] += dv;
         }
+        var tan = new Vector3[pos.Length];
+        var bit = new Vector3[pos.Length];
         for (int i = 0; i < pos.Length; i++)
         {
             var n = nrm[i];
-            var t = tan[i] - n * Vector3.Dot(n, tan[i]);
-            t = Transforms.SafeNormalize(t, Vector3.UnitX);
-            var b = Transforms.SafeNormalize(Vector3.Cross(n, t), Vector3.UnitY);
-            if (Vector3.Dot(b, bit[i]) < 0) b = -b;
+            var t = Transforms.SafeNormalize(alongV[i] - n * Vector3.Dot(n, alongV[i]), Vector3.Zero);
+            if (t == Vector3.Zero) t = Transforms.SafeNormalize(Vector3.Cross(n, alongU[i]), Vector3.UnitY);
+            var b = alongU[i] - n * Vector3.Dot(n, alongU[i]) - t * Vector3.Dot(t, alongU[i]);
+            b = b.LengthSquared() > 1e-12f ? Vector3.Normalize(b) : Transforms.SafeNormalize(Vector3.Cross(t, n), Vector3.UnitX);
             tan[i] = t; bit[i] = b;
         }
         return (tan, bit);

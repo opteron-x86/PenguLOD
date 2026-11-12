@@ -54,6 +54,30 @@ Incremental LOD output is rebuilt once, because archive contents are now identif
 the archive's size and date. Regenerate if you used underside step 4 or have textures
 in legacy X8 format; other settings and output are unchanged.
 
+Visual correctness
+
+- Generated tangents follow the convention of Skyrim meshes and nifly: the NIF tangent
+  runs along V and the bitangent along U. Shapes without stored tangents (most Skyrim LE
+  meshes and some SE ones), tree and hybrid trunk cards, water stand-ins and rendered
+  billboards used the opposite, which mirrored normal-map lighting.
+- Simplified parts keep their shape name, tier and TexGen scale, so automatic object LOD
+  again matches alternate textures and recipes.
+- Seasons of Skyrim INIs are applied in the game's order: `MainFormSwap_<SEASON>.ini`
+  first, then the others in case-sensitive name order. A line for a record that is not in
+  the load order is skipped and reported, as in game; **Strict seasonal swaps**
+  (`--seasons-strict`) restores the stop. Seasons that change nothing get no seasonal files.
+- BC7: blocks whose texels share the same channel sum (red beside green) no longer encode
+  as one flat colour, and opaque blocks decode to alpha 255. The Vulkan encoder matches.
+- Block-compressed output always has a top level that is a multiple of four, which
+  Direct3D 11 requires; authored mips that are not are left unsliced. Recipe tiles of
+  another aspect keep the resolution of their long axis. Opaque copies of sRGB textures
+  stay sRGB.
+
+Regenerate object LOD, tree LOD and textures to pick up these changes: block hashes,
+billboard, hybrid trunk, automatic object, PBR and opaque-copy caches rebuild once. An
+in-game look at normal-mapped billboards and converted Skyrim LE meshes is still
+recommended before a release.
+
 ## [0.6.0-alpha.4] - 2026-11-10
 
 - Fix Review output scope rejecting older AnvilLOD output before inspecting it.

@@ -202,9 +202,9 @@ public static class MeshSimplifier
                 tris.Add((ushort)newIndex[v]);
             }
         }
-        return new LodMeshPart
+        // Keep the name, tier and TexGen scale: shape names carry LODGen instructions and drive texture matching.
+        return part with
         {
-            Material = part.Material,
             Positions = [.. pos], UVs = [.. uv], Normals = [.. nrm], Tangents = [.. tan], Bitangents = [.. bit],
             Colors = col?.ToArray(), Triangles = [.. tris],
         };

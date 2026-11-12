@@ -26,7 +26,7 @@ public class HdBillboardTests
             Name = "side", Material = side.Material,
             Positions = side.Positions.Select(p => new Vector3(-200, p.X * .5f, p.Z)).ToArray(),
             UVs = side.UVs, Normals = Enumerable.Repeat(Vector3.UnitX, 4).ToArray(),
-            Tangents = Enumerable.Repeat(Vector3.UnitY, 4).ToArray(), Bitangents = side.Bitangents, Triangles = side.Triangles
+            Tangents = side.Tangents, Bitangents = Enumerable.Repeat(Vector3.UnitY, 4).ToArray(), Triangles = side.Triangles
         }] };
     }
     private static (byte[], int, int) Color(string path) =>

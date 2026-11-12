@@ -61,6 +61,8 @@ public static class LodTextureEncoding
             }
             // Keep even partial authored mip chains. Adding levels can change alpha coverage or atlas seams.
             if (first == 0) return null;
+            // A smaller authored level that is not a multiple of four cannot be the top of a BC texture the game loads.
+            if (first > 0 && (width % 4 != 0 || height % 4 != 0)) return null;
             if (first > 0)
             {
                 var result = new byte[info.DataOffset + offset - start];
@@ -86,6 +88,17 @@ public static class LodTextureEncoding
         var encoded = Encode(image, channels, IsSrgb(info), alphaCutoff, coverage);
         return encoded.Length < bytes.Length ? encoded : null;
     }
+
+    /// <summary>Nearest multiple of four, at least four.</summary>
+    public static int BlockSize(int size) => Math.Max(4, (size + 2) / 4 * 4);
+
+    /// <summary>
+    /// Direct3D 11 refuses a block-compressed texture whose top level is not a multiple of four in both dimensions, so the
+    /// game cannot load it. Lower mip levels may be any size. Resizes to the nearest multiples of four when needed.
+    /// </summary>
+    public static TextureImage BlockAligned(TextureImage image, Channels channels, bool srgb = false) =>
+        image.Width % 4 == 0 && image.Height % 4 == 0 ? image
+            : Resample(image, BlockSize(image.Width), BlockSize(image.Height), channels, srgb);
 
     public static TextureImage Down(TextureImage image, Channels channels, bool srgb = false)
     {
@@ -161,6 +174,7 @@ public static class LodTextureEncoding
 
     public static byte[] Encode(TextureImage image, Channels channels, bool srgb = false, int? alphaCutoff = null, float? coverage = null)
     {
+        image = BlockAligned(image, channels, srgb);
         var mips = new List<byte[]>();
         coverage ??= alphaCutoff is > 0 and < 256 ? PbrLodConverter.Coverage(image.Pixels, 1, alphaCutoff.Value) : null;
         var level = image;

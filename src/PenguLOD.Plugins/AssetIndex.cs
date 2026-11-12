@@ -234,6 +234,17 @@ public sealed class AssetIndex : IAssetSource
         return _archived.TryGetValue(key, out var archive) ? "Archive: " + Path.GetFileName(archive.ArchiveName) : Fallback(key) is not null ? "Generated fallback cache" : null;
     }
 
+    /// <summary>The winning file's own name, with its real case. Lookup keys are lower-cased; ordering rules may need the original.</summary>
+    public string FileNameOf(string dataRelativePath)
+    {
+        var key = GamePath.Normalize(dataRelativePath);
+        if (_overrides.TryGetValue(key, out var generated)) return generated.Name;
+        if (!Replaced(key) && Loose(key) is { } loose) return loose.Name;
+        if (_archived.TryGetValue(key, out var e)) return GamePath.GetFileName(e.File.Path);
+        if (Fallback(key) is { } fb) return fb.Name;
+        return GamePath.GetFileName(key);
+    }
+
     /// <summary>Where the winning copy comes from — handy for reports ("loose" or the BSA name).</summary>
     public string? SourceOf(string dataRelativePath)
     {

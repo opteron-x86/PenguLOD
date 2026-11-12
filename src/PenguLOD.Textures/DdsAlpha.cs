@@ -88,6 +88,9 @@ public static class DdsAlpha
         while (Math.Max(w, h) > maxSize && Math.Min(w, h) > 4)
             (rgba, w, h) = TreeAtlasBuilder.Downsample(rgba, w, h);
         for (int i = 3; i < rgba.Length; i += 4) rgba[i] = 255;
+        bool srgb = LodTextureEncoding.IsSrgb(info);
+        var aligned = LodTextureEncoding.BlockAligned(new(rgba, w, h), LodTextureEncoding.Channels.Color, srgb);
+        (rgba, w, h) = (aligned.Pixels, aligned.Width, aligned.Height);
 
         var mips = new List<byte[]> { Bc7Encoder.EncodeImage(rgba, w, h) };
         int mw = w, mh = h;
@@ -98,7 +101,7 @@ public static class DdsAlpha
             mips.Add(Bc7Encoder.EncodeImage(level, mw, mh));
         }
         using var ms = new MemoryStream();
-        DdsFile.WriteBc7(ms, w, h, mips, srgb: info.DxgiFormat is 99 or 91 or 93);
+        DdsFile.WriteBc7(ms, w, h, mips, srgb: srgb);
         return ms.ToArray();
     }
 }

@@ -94,12 +94,49 @@ public class SeasonalGenerationTests
     }
 
     [Fact]
-    public void UnresolvedSeasonalSwapFailsBeforeReplacingTerrain()
+    public void UnresolvedSeasonalSwapFailsBeforeReplacingTerrainWhenStrict()
     {
         using var f=new TerrainFixture(seasons:true);
         File.AppendAllText(GamePath.ToFileSystemPath(f.Textures.Data,@"seasons\Fixture_WIN.ini"),"\n[LandTextures]\nFixtureLand|MissingLand\n");
-        Assert.Throws<InvalidDataException>(()=>TerrainGeneration.Run(f.Request with {Seasons=true}));
+        Assert.Throws<InvalidDataException>(()=>TerrainGeneration.Run(f.Request with {Seasons=true,SeasonsStrict=true}));
         Assert.False(Directory.Exists(f.Output));
+    }
+
+    [Fact]
+    public void SeasonalObjectLodSkipsUnresolvedSwapsAndWritesNothingWhenNoBlockChanges()
+    {
+        using var f=new TerrainFixture(seasons:true,editMod:mod=>
+        {
+            var a=mod.Statics.AddNew();a.EditorID="FixtureObject";a.Model=new Model {File=@"fixture\object.nif"};a.MajorFlags|=Static.MajorFlag.HasDistantLOD;
+            var placed=new PlacedObject(mod.GetNextFormKey(),SkyrimRelease.SkyrimSE) {Placement=new Placement {Position=new Noggog.P3Float(-9500,-9500,0)}};
+            placed.Base.SetTo(a);mod.Worldspaces.Single().SubCells[0].Items[0].Items[0].Temporary.Add(placed);
+        });
+        byte[] mesh=PenguLOD.Meshes.Authoring.LodNifWriter.Write("object",[TextureFixture.Card("object",@"textures\red.dds")]);
+        TextureFixture.Put(f.Textures.Data,@"meshes\fixture\object.nif",mesh);TextureFixture.Put(f.Textures.Data,@"meshes\fixture\object_lod_0.nif",mesh);
+        File.AppendAllText(GamePath.ToFileSystemPath(f.Textures.Data,@"seasons\Fixture_WIN.ini"),"\n[Statics]\n0x800~NotInstalled.esp|0x801~NotInstalled.esp\n");
+        Assert.True(TextureGeneration.Run(f.Textures.Request with {Stitched=false,Trees=true}).Published);
+        string output=Path.Combine(f.Root,"lod");
+        var request=new ScanRequest(f.Game,new(Worldspaces:["FixtureWorld"],TreeLod:true,DynamicLod:false,GridObjects:false,Tree3D:new(Enabled:false)),
+            OutputFolder:output,Generate:true,Seasons:true,GrassLod:false,ChildWorlds:false,SkseDll:SkseDllChoice.None,
+            GeneratedTextureFolder:f.Textures.Output,RemoveBuried:false,RemoveUnderwater:false);
+        var result=ScanPipeline.Run(request);
+        Assert.Contains(result.Warnings,w=>w.Contains("[Statics]") && w.Contains("skipped"));
+        // Billboard trees are tree LOD, not object LOD: no object block differs in winter, so no seasonal object set is written.
+        Assert.Contains(Directory.GetFiles(output,"*.bto",SearchOption.AllDirectories),p=>!p.EndsWith(".WIN.bto"));
+        Assert.Empty(Directory.GetFiles(output,"*.WIN.bto",SearchOption.AllDirectories));
+        Assert.NotEmpty(Directory.GetFiles(output,"*.WIN.btt",SearchOption.AllDirectories));
+        Assert.Throws<InvalidDataException>(()=>ScanPipeline.Run(request with {SeasonsStrict=true,OutputFolder=Path.Combine(f.Root,"strict")}));
+    }
+
+    [Fact]
+    public void UnresolvedSeasonalSwapIsSkippedAndReportedLikeTheGame()
+    {
+        // Seasons of Skyrim ignores a line for a form that is not loaded (an optional plugin, say); generation does too.
+        using var f=new TerrainFixture(seasons:true);
+        File.AppendAllText(GamePath.ToFileSystemPath(f.Textures.Data,@"seasons\Fixture_WIN.ini"),"\n[LandTextures]\nFixtureLand|MissingLand\n");
+        var result=TerrainGeneration.Run(f.Request with {Seasons=true});
+        Assert.Contains(result.Warnings,w=>w.Contains("MissingLand") && w.Contains("skipped"));
+        Assert.Contains(result.Tiles,t=>t.Season=="WIN");
     }
 
     [Theory]

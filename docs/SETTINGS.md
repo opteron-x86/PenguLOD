@@ -359,6 +359,7 @@ the grass included in this LOD output.
 | Glow effect rules | Loads additional supplied fire and light-glow rules. Off by default; needs the corresponding resources. |
 | Water stand-ins | Includes lit replacement surfaces for supported streams and ponds. Off by default. Separate from Terrain's water LOD. |
 | Seasonal LOD | Builds variants using installed Seasons of Skyrim swaps. Off by default. Shared with Terrain's seasonal switch; grass-cache seasons are selected separately. |
+| Strict seasonal swaps | Stops generation when a seasonal INI names a record that is not in the load order. Off by default: such lines are skipped and reported, as the game does. |
 | Include initially disabled objects | Includes objects initially disabled by plugins. Off by default. Enabling it can bake unwanted removed objects into LOD. |
 | Include enable-parented objects | Includes objects whose visibility is controlled by another reference. On by default. |
 | SKSE DLL installation | **None** means install the matching DLL separately; it does not disable runtime features. **Auto** or an explicit runtime selects a supplied compatible DLL when available. PenguLOD packages do not bundle that DLL. |

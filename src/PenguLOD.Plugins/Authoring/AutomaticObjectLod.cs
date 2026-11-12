@@ -28,7 +28,7 @@ public sealed record AutomaticObjectLevel(string Model, int Level, string? Mesh,
 /// names and full-model UVs, so the normal record-variant, recipe and atlas pipeline can consume them.</summary>
 public sealed class AutomaticObjectLod
 {
-    private const int Version = 2;
+    private const int Version = 3; // NIF tangent frame and preserved shape names
     private readonly AssetIndex _assets;
     private readonly AutomaticObjectSettings _settings;
     private readonly string _root;

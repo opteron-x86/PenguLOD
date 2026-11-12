@@ -109,6 +109,7 @@ public static class GenerationOptions
         new("candles", "World & runtime", "Candle rules", "Load additional DynDOLOD candle rules.", false),
         new("fxGlow", "World & runtime", "Glow effect rules", "Load additional DynDOLOD fire and light glow rules.", false),
         new("water", "World & runtime", "Water stand-ins", "Lit fake water for stream and pond planes.", false),
+        new("seasonsStrict", "World & runtime", "Strict seasonal swaps", "Stop when a Seasons of Skyrim INI names a form that is not in the load order. Off: such lines are skipped and reported, as the game does.", false),
         new("seasons", "World & runtime", "Seasonal LOD", "Generate seasonal variants for Seasons of Skyrim.", false),
         new("disabled", "World & runtime", "Include initially disabled objects", "Include static references initially disabled by the game.", false),
         new("parented", "World & runtime", "Include enable-parented objects", "Include references controlled by another reference.", true),

@@ -17,7 +17,7 @@ public sealed record TerrainGenerationRequest(GameContextOptions Game, string Ou
     IReadOnlyCollection<string>? Worldspaces = null, IReadOnlyCollection<LodLevel>? Levels = null,
     int TextureSize = 512, float Brightness = 1, float VertexColorStrength = 1, float TextureRepeatsPerCell = 24,
     float SkirtDepth = 512, bool Water = true, bool UseExistingTerrain = true, bool ExportHeightmaps = true,
-    int HeightmapMaximumSize = 8192, bool Seasons = false, TerrainMaterialSettings? Materials = null);
+    int HeightmapMaximumSize = 8192, bool Seasons = false, TerrainMaterialSettings? Materials = null, bool SeasonsStrict = false);
 public sealed record TerrainTileResult(string Worldspace, int Level, int X, int Y, int Triangles, int WaterCells, string? Season = null);
 public sealed record TerrainWorldResult(string Worldspace, int LandscapeCells, int ExistingTilesUsed, int Tiles, string? Heightmap);
 public sealed record TerrainPerformance(int BuiltTiles, int ReusedTiles, IReadOnlyDictionary<string,double> Timings);
@@ -59,7 +59,6 @@ public static class TerrainGeneration
         string defaultDiffuse = TerrainDefaultTexture.Resolve(request.Game, game.DataFolder);
         string defaultNormal = TerrainDefaultTexture.Resolve(request.Game, game.DataFolder, normal: true);
         progress?.Report("Default landscape diffuse: " + defaultDiffuse);
-        var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures") : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         var wanted=request.Worldspaces is {Count:>0}?new HashSet<string>(request.Worldspaces,StringComparer.OrdinalIgnoreCase):null;
         var worlds=game.LoadOrder.PriorityOrder.Worldspace().WinningOverrides().Where(w=>!w.IsDeleted && w.EditorID is {} id && (wanted is null||wanted.Contains(id))).ToArray();
         var owned = new OutputSnapshot();
@@ -67,6 +66,7 @@ public static class TerrainGeneration
         var materialReports = new HashSet<TerrainMaterialReport>();
         var timings=new Dictionary<string,double>();int built=0,reused=0;
         void Warn(string s){warnings.Add(s);progress?.Report("WARNING: "+s);}
+        var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures",request.SeasonsStrict,Warn) : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         using var stage=new StagedOutput(request.OutputFolder,false,progress,ct);
         preparation.Dispose();using var generation=WorkTiming.Measure("generation");
         foreach(var world in worlds)

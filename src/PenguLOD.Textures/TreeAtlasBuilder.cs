@@ -192,19 +192,24 @@ public sealed class TreeAtlasBuilder
     }
 
     /// <summary>2×2 box filter; colours are alpha-weighted so transparent texels don't darken edges.</summary>
-    public static (byte[] Rgba, int W, int H) Downsample(byte[] src, int w, int h, bool alphaWeighted = true)
+    public static (byte[] Rgba, int W, int H) Downsample(byte[] src, int w, int h, bool alphaWeighted = true) =>
+        Downsample(src, w, h, alphaWeighted, halveWidth: true, halveHeight: true);
+
+    /// <summary>Box-filters by two along the chosen axes; an axis that is not halved keeps its size.</summary>
+    public static (byte[] Rgba, int W, int H) Downsample(byte[] src, int w, int h, bool alphaWeighted, bool halveWidth, bool halveHeight)
     {
-        int nw = Math.Max(1, w / 2), nh = Math.Max(1, h / 2);
+        int stepX = halveWidth ? 2 : 1, stepY = halveHeight ? 2 : 1, samples = stepX * stepY;
+        int nw = halveWidth ? Math.Max(1, w / 2) : w, nh = halveHeight ? Math.Max(1, h / 2) : h;
         var dst = new byte[nw * nh * 4];
         Parallel.For(0, nh, RunLimits.Parallel(), y =>
         {
             for (int x = 0; x < nw; x++)
             {
                 float r = 0, g = 0, b = 0, a = 0, pr = 0, pg = 0, pb = 0;
-                for (int dy = 0; dy < 2; dy++)
-                for (int dx = 0; dx < 2; dx++)
+                for (int dy = 0; dy < stepY; dy++)
+                for (int dx = 0; dx < stepX; dx++)
                 {
-                    int sx = Math.Min(x * 2 + dx, w - 1), sy = Math.Min(y * 2 + dy, h - 1);
+                    int sx = Math.Min(x * stepX + dx, w - 1), sy = Math.Min(y * stepY + dy, h - 1);
                     int i = (sy * w + sx) * 4;
                     float al = src[i + 3];
                     r += src[i] * al; g += src[i + 1] * al; b += src[i + 2] * al; a += al;
@@ -219,11 +224,11 @@ public sealed class TreeAtlasBuilder
                 }
                 else
                 {
-                    dst[o] = (byte)MathF.Round(pr / 4);
-                    dst[o + 1] = (byte)MathF.Round(pg / 4);
-                    dst[o + 2] = (byte)MathF.Round(pb / 4);
+                    dst[o] = (byte)MathF.Round(pr / samples);
+                    dst[o + 1] = (byte)MathF.Round(pg / samples);
+                    dst[o + 2] = (byte)MathF.Round(pb / samples);
                 }
-                dst[o + 3] = (byte)MathF.Round(a / 4);
+                dst[o + 3] = (byte)MathF.Round(a / samples);
             }
         });
         return (dst, nw, nh);

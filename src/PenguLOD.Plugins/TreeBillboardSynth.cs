@@ -65,7 +65,7 @@ public sealed class TreeBillboardSynth(IAssetSource assets, string? cacheRoot = 
         var sb = new StringBuilder().Append(Convert.ToHexString(SHA256.HashData(bytes))).Append('|').Append(variant?.Id);
         foreach (var t in mesh.Parts.SelectMany(p => p.Material.Textures).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
             sb.Append('|').Append(assets.Fingerprint(TexturePath(t)));
-        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v6-pengulod|" + sb))).ToLowerInvariant()[..24];
+        var source = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("v7-pengulod|" + sb))).ToLowerInvariant()[..24];
 
         var dir = Path.Combine(_root, "textures", "terrain", "lodgen", pluginFolder);
         var main = Path.Combine(dir, name + ".dds");

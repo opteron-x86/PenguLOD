@@ -63,11 +63,10 @@ internal sealed record TrunkView(Vector3 Right, Vector3 Up, Vector3 Depth,
         float unitsPerPixel, float brightness, MaterialBakeSettings? materials = null)
     {
         Vector3 Project(Vector3 p) => new(Vector3.Dot(p, Right), Vector3.Dot(p, Depth), Vector3.Dot(p, Up));
-        var projected = new LodMesh { Path = source.Path, Parts = source.Parts.Select(p => new LodMeshPart
+        var projected = new LodMesh { Path = source.Path, Parts = source.Parts.Select(p => p with
         {
-            Name = p.Name, Material = p.Material, Positions = p.Positions.Select(Project).ToArray(),
-            Normals = p.Normals.Select(Project).ToArray(), Tangents = p.Tangents.Select(Project).ToArray(),
-            Bitangents = p.Bitangents.Select(Project).ToArray(), UVs = p.UVs, Colors = p.Colors, Triangles = p.Triangles
+            Positions = p.Positions.Select(Project).ToArray(), Normals = p.Normals.Select(Project).ToArray(),
+            Tangents = p.Tangents.Select(Project).ToArray(), Bitangents = p.Bitangents.Select(Project).ToArray(),
         }).ToArray() };
         return BillboardRenderer.Render(projected, loader, maxSize, unitsPerPixel: unitsPerPixel,
             viewport: (new(Left, 0, Bottom), new(Left + Width, 0, Bottom + Height)), brightness: brightness, materials: materials)

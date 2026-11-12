@@ -46,10 +46,12 @@ public static class TextureImages
         int left = (int)Math.Clamp(-(long)ox, 0, w), right = (int)Math.Clamp((long)target.Width - ox, 0, w);
         int topRow = (int)Math.Clamp(-(long)oy, 0, h), bottomRow = (int)Math.Clamp((long)target.Height - oy, 0, h);
         // Reduce large inputs first so a small tile averages the source rather than sampling isolated full-resolution pixels.
-        while (source.Width >= w * 2 || source.Height >= h * 2)
+        // Each axis is halved only while it is at least twice the tile's size: a tile of another aspect keeps its long axis.
+        while (true)
         {
-            if (source.Width == 1 && source.Height == 1) break;
-            var d = TreeAtlasBuilder.Downsample(source.Pixels, source.Width, source.Height, alphaWeighted: !normal);
+            bool halveWidth = source.Width >= w * 2 && source.Width > 1, halveHeight = source.Height >= h * 2 && source.Height > 1;
+            if (!halveWidth && !halveHeight) break;
+            var d = TreeAtlasBuilder.Downsample(source.Pixels, source.Width, source.Height, !normal, halveWidth, halveHeight);
             source = new(d.Rgba, d.W, d.H);
         }
         for (int y = topRow; y < bottomRow; y++)
