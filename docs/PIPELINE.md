@@ -15,25 +15,35 @@ Jobs live under `<cache>/jobs/<plan-id>/`: `job.json` records state, timings and
 LOD attempts. These local files contain paths from your computer. Review them before sharing.
 Output location locks prevent two pipeline jobs writing the same destination.
 
-LOD generation writes to a sibling staging directory. It publishes only after generation
-and output verification succeed. The previous directory is retained with a `.previous-`
-suffix; remove old backups yourself when satisfied. A concurrent change to the original
-output prevents publication. Failed stages can be retried. Terrain saves each complete mesh/diffuse/normal tile set,
+Every stage (grass, textures, terrain and LOD) writes to a sibling staging directory and
+publishes only after generation and output verification succeed. The output receipt is
+written into the staged directory, so it is published together with the files. On Linux
+the old and new directories are swapped in one atomic step; elsewhere, two renames are
+used, and if the process stops between them the next run reports the leftover copy.
+The replaced directory is kept with a `.previous-` suffix. **Previous outputs to keep**
+(Generation Overview > Run options, `--keep-previous` in the CLI, default 1) sets how many
+are kept; older ones are removed after each publication. `PenguLOD clean` lists and removes
+them on request. A concurrent change to the original output's generated files prevents
+publication. `meta.ini` and `SKSE/Plugins/PenguLOD.ini` belong to your installation: they
+are never hashed or replaced, and changes to them during a run are kept. Failed stages can be retried. Terrain saves each complete mesh/diffuse/normal tile set,
 including seasonal tiles, under the job's `terrain-tiles` directory. A retry verifies the
 cached file hashes while copying into staging. Missing, changed or malformed checkpoints
 are rebuilt individually. Cancellation before a tile finishes leaves it uncached. Settings,
 source or application-version changes invalidate its tile cache. Heightmaps and the final
 manifest are regenerated when the terrain stage resumes; the old published directory stays
-intact until the complete replacement is ready. Grass and textures retain their own
-publication and manifest checks.
+intact until the complete replacement is ready. Tile caches made for earlier settings and
+unfinished cache entries are removed when terrain generation starts. Grass and textures keep
+their manifest checks; texture generation keeps files it never wrote in its output folder.
 
 Object blocks scheduled for rebuild or deletion are not copied into staging. Unchanged
 and unselected blocks are copied independently; the previous directory remains intact.
 Hashes recorded during completed block writes and retained-file copies are used for the
 new stage's snapshot while those staged files retain their recorded metadata. Other files
 are read and hashed normally. Resume always rechecks published file contents, including
-changes that preserve size and timestamps. Retained blocks that disagree with a saved
-output hash are rebuilt; a damaged block outside the selected scope stops publication.
+changes that preserve size and timestamps. Retained blocks that disagree with the hashes
+in the output's receipt are rebuilt; a damaged block outside the selected scope stops
+publication. The receipt describes what was last published to the folder, so separate jobs
+(for example the desktop's per-stage buttons) can take turns on one output folder.
 
 Before generation, disable the previously installed **object LOD** mod. The scan excludes
 PenguLOD/AnvilLOD-owned references and terrain support meshes even when previous output is

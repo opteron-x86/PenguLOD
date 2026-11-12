@@ -66,6 +66,23 @@ public class SeasonalPipelineTests
     }
 
     [Fact]
+    public void DifferentPlansCanTakeTurnsOnOneLodFolderWithSeasonalBlocks()
+    {
+        // The desktop's buttons are separate plans with their own checkpoints but share the LOD output folder.
+        using var f=Fixture();string cache=Path.Combine(f.Root,"cache");var full=Request(f,false);
+        var lodOnly=new GenerationPipelineRequest(Lod:full.Lod! with {GeneratedTextureFolder=full.Textures!.OutputFolder,
+            GeneratedTerrainFolder=full.Terrain!.OutputFolder,ObjectBrightness=0.5f},Preflight:false);
+        var first=GenerationPipeline.Run(full,cache);Assert.True(first.Success,first.Error);
+        string winter=GamePath.ToFileSystemPath(full.Lod!.OutputFolder!,@"meshes\terrain\FixtureWorld\objects\FixtureWorld.4.-4.-4.WIN.bto");
+        string before=OutputSnapshot.HashFile(winter);
+        var other=GenerationPipeline.Run(lodOnly,cache);Assert.True(other.Success,other.Error);
+        Assert.NotEqual(before,OutputSnapshot.HashFile(winter));
+        var again=GenerationPipeline.Run(full,cache);Assert.True(again.Success,again.Error);
+        Assert.Equal(before,OutputSnapshot.HashFile(winter));
+        Assert.True(OutputManagement.Verify([full.Lod.OutputFolder!,full.Textures.OutputFolder,full.Terrain.OutputFolder]).Valid);
+    }
+
+    [Fact]
     public void DiagnosticsReportUnresolvedAndWrongRecordTypeBeforeGeneration()
     {
         using var f=Fixture();

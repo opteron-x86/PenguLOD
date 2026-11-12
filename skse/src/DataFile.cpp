@@ -22,6 +22,13 @@ namespace PenguLOD
 				return true;
 			}
 
+			/// True when a_count records of at least a_bytes each can still fit. A corrupted count would
+			/// otherwise allocate gigabytes (std::bad_alloc inside the kDataLoaded handler).
+			[[nodiscard]] bool Fits(std::uint32_t a_count, std::size_t a_bytes) const
+			{
+				return static_cast<std::uint64_t>(a_count) * a_bytes <= _data.size() - _pos;
+			}
+
 			bool GetString(std::string& a_out)
 			{
 				std::uint16_t len = 0;
@@ -60,7 +67,8 @@ namespace PenguLOD
 		}
 
 		std::uint32_t count = 0;
-		if (!r.Get(count)) {
+		if (!r.Get(count) || !r.Fits(count, sizeof(std::uint16_t))) {
+			logger::error("{}: truncated string table", a_path.string());
 			return false;
 		}
 		strings.resize(count);
@@ -70,7 +78,8 @@ namespace PenguLOD
 				return false;
 			}
 		}
-		if (!r.Get(count)) {
+		if (!r.Get(count) || !r.Fits(count, 44)) {  // 3 ids, 7 floats, flags
+			logger::error("{}: truncated entry table", a_path.string());
 			return false;
 		}
 		entries.resize(count);
@@ -108,7 +117,8 @@ namespace PenguLOD
 			return false;
 		}
 		std::uint32_t count = 0;
-		if (!r.Get(count)) {
+		if (!r.Get(count) || !r.Fits(count, sizeof(std::uint16_t))) {
+			logger::error("{}: truncated string table", a_path.string());
 			return false;
 		}
 		strings.resize(count);
@@ -118,7 +128,8 @@ namespace PenguLOD
 				return false;
 			}
 		}
-		if (!r.Get(count)) {
+		if (!r.Get(count) || !r.Fits(count, version >= 2 ? 40 : 28)) {  // 7 ids and flags, then x, y, z in version 2
+			logger::error("{}: truncated entry table", a_path.string());
 			return false;
 		}
 		entries.resize(count);
@@ -163,7 +174,8 @@ namespace PenguLOD
 		}
 
 		std::uint32_t count = 0;
-		if (!r.Get(count)) {
+		if (!r.Get(count) || !r.Fits(count, sizeof(std::uint16_t))) {
+			logger::error("{}: truncated string table", a_path.string());
 			return false;
 		}
 		strings.resize(count);
@@ -174,7 +186,8 @@ namespace PenguLOD
 			}
 		}
 
-		if (!r.Get(count)) {
+		if (!r.Get(count) || !r.Fits(count, 60)) {  // 5 ids, 7 floats, 3 parent/flag fields
+			logger::error("{}: truncated entry table", a_path.string());
 			return false;
 		}
 		entries.resize(count);

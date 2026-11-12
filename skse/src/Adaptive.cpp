@@ -46,13 +46,16 @@ namespace PenguLOD
 
 	void Adaptive::Reset()
 	{
-		_lowSeconds = 0;
-		_highSeconds = 0;
-		_sinceChange = 1000;
-		_upHold = 60;
-		_lastWasUp = false;
+		_policy.Reset();
 		if (_level != 0) {
 			Apply(0);
+		}
+	}
+
+	void Adaptive::Reapply()
+	{
+		if (Settings::Get().adaptiveQuality && _level != 0) {
+			Layers::Get().Preset(_level);
 		}
 	}
 
@@ -110,8 +113,7 @@ namespace PenguLOD
 		// Menus, pauses and loading screens say nothing about how the game runs.
 		auto* ui = RE::UI::GetSingleton();
 		if (ui && (ui->GameIsPaused() || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME))) {
-			_lowSeconds = 0;
-			_highSeconds = 0;
+			_policy.Pause();
 			return;
 		}
 		_fps = _fps.load() <= 0.0f ? fps : _fps.load() * 0.7f + fps * 0.3f;
@@ -121,49 +123,15 @@ namespace PenguLOD
 			if (_level != 0) {
 				Reset();
 			}
-			_lowSeconds = 0;
-			_highSeconds = 0;
+			_policy.Pause();
 			return;
 		}
 
-		const float target = static_cast<float>(s.adaptiveTargetFps);
-		const int   lowest = std::clamp(s.adaptiveFloor, 0, 3);
-		++_sinceChange;
-		if (_level > lowest) {
-			// The floor was raised (menu or ini) below where it had gone: come back up to it at once.
-			Apply(lowest);
-			_lowSeconds = 0;
-			_highSeconds = 0;
-			_sinceChange = 0;
-			return;
-		}
-		if (_fps < target) {
-			++_lowSeconds;
-			_highSeconds = 0;
-		} else if (_fps > target * 1.35f) {
-			++_highSeconds;
-			_lowSeconds = 0;
-		} else {
-			_lowSeconds = 0;
-			_highSeconds = 0;
-		}
-
-		if (_lowSeconds >= 8 && _level < lowest && _sinceChange >= 15) {
-			// Having to step down again soon after a step up means the headroom was only the lower setting's: wait longer before the next one.
-			if (_lastWasUp && _sinceChange < 180) {
-				_upHold = std::min(_upHold * 2, 900);
-			}
-			Apply(_level + 1);
-			_lowSeconds = 0;
-			_highSeconds = 0;
-			_sinceChange = 0;
-			_lastWasUp = false;
-		} else if (_highSeconds >= _upHold && _level > 0 && _sinceChange >= 30) {
-			Apply(_level - 1);
-			_lowSeconds = 0;
-			_highSeconds = 0;
-			_sinceChange = 0;
-			_lastWasUp = true;
+		const int next = _policy.Step(_fps, static_cast<float>(s.adaptiveTargetFps), s.adaptiveFloor, _level);
+		_cap = _policy.Capped() ? _policy.Ceiling() : 0.0f;
+		_target = _policy.EffectiveTarget(static_cast<float>(s.adaptiveTargetFps));
+		if (next != _level) {
+			Apply(next);
 		}
 #endif
 	}

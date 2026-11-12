@@ -1,6 +1,9 @@
 #include "RuntimePaths.h"
 #include "LodDistances.h"
 #include "IniFile.h"
+#include "IniParse.h"
+
+#include <Windows.h>
 
 namespace PenguLOD
 {
@@ -8,7 +11,6 @@ namespace PenguLOD
 	{
 		const std::filesystem::path kDynDefaults{ "Data/MCM/Config/DynDOLOD/settings.ini" };
 		const std::filesystem::path kDynUser{ "Data/MCM/Settings/DynDOLOD.ini" };
-		const std::filesystem::path kSettings{ "Data/SKSE/Plugins/PenguLOD.ini" };
 
 		// key in the files -> candidate game settings ("name:Section"), first one that exists is used
 		const std::vector<std::pair<std::string, std::vector<std::string>>> kKeys{
@@ -30,42 +32,6 @@ namespace PenguLOD
 			{ "fGrassFadeRange", { "fGrassFadeRange:Grass" } },
 		};
 
-		std::string Lower(std::string s)
-		{
-			for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-			return s;
-		}
-
-		std::string Trim(const std::string& s)
-		{
-			const auto a = s.find_first_not_of(" \t\r\n");
-			if (a == std::string::npos) return {};
-			const auto b = s.find_last_not_of(" \t\r\n");
-			return s.substr(a, b - a + 1);
-		}
-
-		/// Reads key=value pairs of one section (case-insensitive) into a_out (lower-case keys).
-		void ReadSection(const std::filesystem::path& a_path, std::string_view a_section, std::map<std::string, std::string>& a_out)
-		{
-			std::ifstream in(a_path);
-			if (!in) return;
-			std::string line;
-			bool inSection = false;
-			const auto want = Lower(std::string(a_section));
-			while (std::getline(in, line)) {
-				line = Trim(line);
-				if (line.empty() || line[0] == ';' || line[0] == '#') continue;
-				if (line.front() == '[') {
-					inSection = Lower(Trim(line.substr(1, line.find(']') - 1))) == want;
-					continue;
-				}
-				if (!inSection) continue;
-				const auto eq = line.find('=');
-				if (eq == std::string::npos) continue;
-				a_out[Lower(Trim(line.substr(0, eq)))] = Trim(line.substr(eq + 1));
-			}
-		}
-
 		RE::Setting* FindSetting(const std::string& a_name)
 		{
 			if (auto ini = RE::INISettingCollection::GetSingleton()) {
@@ -79,9 +45,17 @@ namespace PenguLOD
 
 		bool DynDolodDllLoaded()
 		{
-			// Installed = loaded: SKSE loads every DLL in Data\SKSE\Plugins (MO2's virtual Data folder included).
-			std::error_code ec;
-			return std::filesystem::exists("Data/SKSE/Plugins/DynDOLOD.dll", ec);
+			// The loaded module, not the file: a DLL SKSE refused to load (built for another game version) manages nothing.
+			return ::GetModuleHandleW(L"DynDOLOD.dll") != nullptr;
+		}
+
+		bool Flag(const Ini::Document& a_doc, const char* a_key, bool a_default)
+		{
+			const auto* v = a_doc.Get("LOD", a_key);
+			if (!v) return a_default;
+			if (const auto b = Ini::Bool(*v)) return *b;
+			logger::warn("PenguLOD.ini [LOD]: bad value for {}: {}", a_key, *v);
+			return a_default;
 		}
 	}
 
@@ -99,19 +73,16 @@ namespace PenguLOD
 
 	std::map<std::string, float> LodDistances::Read() const
 	{
-		std::map<std::string, std::string> raw;
-		ReadSection(kDynDefaults, "Settings", raw);
-		ReadSection(kDynUser, "Settings", raw);
-		ReadSection(RuntimePaths::SettingsRead(), "LOD", raw);
-
+		// Later files win: DynDOLOD DLL NG's defaults, the values the DynDOLOD MCM saved, then PenguLOD.ini [LOD].
+		const Ini::Document files[]{ Ini::Document::Read(kDynDefaults), Ini::Document::Read(kDynUser), Ini::Document::Read(RuntimePaths::SettingsRead()) };
+		const char*         sections[]{ "Settings", "Settings", "LOD" };
 		std::map<std::string, float> values;
 		for (const auto& [key, candidates] : kKeys) {
-			if (auto it = raw.find(Lower(key)); it != raw.end() && !it->second.empty()) {
-				try {
-					values[key] = std::stof(it->second);
-				} catch (const std::exception&) {
-					logger::warn("LOD settings: bad value for {}: {}", key, it->second);
-				}
+			for (int f = 0; f < 3; ++f) {
+				const auto* v = files[f].Get(sections[f], key);
+				if (!v || v->empty()) continue;
+				if (const auto n = Ini::Float(*v)) values[key] = *n;
+				else logger::warn("LOD settings: bad value for {}: {}", key, *v);
 			}
 		}
 		return values;
@@ -131,15 +102,11 @@ namespace PenguLOD
 
 	void LodDistances::Apply(const char* a_reason)
 	{
-		std::map<std::string, std::string> settings;
-		ReadSection(RuntimePaths::SettingsRead(), "LOD", settings);
-		const auto flag = [&](const char* k, bool def) {
-			auto it = settings.find(Lower(k));
-			return it == settings.end() ? def : (it->second != "0" && Lower(it->second) != "false");
-		};
+		const auto settings = Ini::Document::Read(RuntimePaths::SettingsRead());
 		_lastWrite = NewestWrite();
-		if (!flag("bApplyLodDistances", true)) return;
-		if (DynDolodDllLoaded() && !flag("bOverrideDynDOLOD", false)) {
+		_deferring = DynDolodDllLoaded() && !Flag(settings, "bOverrideDynDOLOD", false);
+		if (!Flag(settings, "bApplyLodDistances", true)) return;
+		if (_deferring) {
 			logger::info("LOD settings ({}): DynDOLOD.dll is loaded and manages them; not applying (set bOverrideDynDOLOD=1 to take over)", a_reason);
 			return;
 		}
@@ -169,10 +136,15 @@ namespace PenguLOD
 		std::thread([this] {
 			for (;;) {
 				std::this_thread::sleep_for(std::chrono::seconds(2));
-				if (NewestWrite() != _lastWrite) {
-					SKSE::GetTaskInterface()->AddTask([this] { Apply("file changed"); });
-					std::this_thread::sleep_for(std::chrono::seconds(1));  // let the task run before checking again
+				const auto newest = NewestWrite();
+				if (newest == _lastWrite.load()) continue;
+				// Saving another menu page rewrites PenguLOD.ini: that is not an edit to apply over the live sliders.
+				if (IniFile::IsOwnWrite(RuntimePaths::Settings, newest)) {
+					_lastWrite = newest;
+					continue;
 				}
+				SKSE::GetTaskInterface()->AddTask([this] { Apply("file changed"); });
+				std::this_thread::sleep_for(std::chrono::seconds(1));  // let the task run before checking again
 			}
 		}).detach();
 	}
@@ -203,7 +175,7 @@ namespace PenguLOD
 		RE::Setting* SettingFor(const std::string& a_key)
 		{
 			for (const auto& [key, candidates] : kKeys) {
-				if (Lower(key) != Lower(a_key)) continue;
+				if (Ini::Lower(key) != Ini::Lower(a_key)) continue;
 				for (const auto& c : candidates)
 					if (auto s = FindSetting(c); s && s->GetType() == RE::Setting::Type::kFloat) return s;
 			}
@@ -231,18 +203,14 @@ namespace PenguLOD
 		for (const auto& e : Entries()) {
 			if (auto v = GetGame(e.key)) values.emplace_back(e.key, std::format("{:.2f}", *v));
 		}
-		const bool ok = IniFile::Write(kSettings, "LOD", values);
+		const bool ok = IniFile::Write(RuntimePaths::Settings, "LOD", values);
 		_lastWrite = NewestWrite();  // our own save is not a change to re-apply
-		logger::info("LOD settings saved to {}: {}", kSettings.string(), ok ? "ok" : "FAILED");
+		logger::info("LOD settings saved to {}: {}", RuntimePaths::Settings.string(), ok ? "ok" : "FAILED");
 		return ok;
 	}
 
 	bool LodDistances::DeferringToDynDolod() const
 	{
-		std::map<std::string, std::string> settings;
-		ReadSection(RuntimePaths::SettingsRead(), "LOD", settings);
-		auto it = settings.find("boverridedyndolod");
-		bool overrideDyn = it != settings.end() && it->second != "0" && Lower(it->second) != "false";
-		return DynDolodDllLoaded() && !overrideDyn;
+		return _deferring;  // set by Apply; the menu asks every frame
 	}
 }

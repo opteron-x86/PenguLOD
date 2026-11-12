@@ -24,6 +24,28 @@ internal sealed class TerrainTileCache
         // Resolve against the job folder so existing links at any cache level are rejected.
         OutputSnapshot.Resolve(folder,Path.GetFileName(_root)+"/probe");
         Directory.CreateDirectory(_root);
+        Sweep(folder,_root,progress);
+    }
+
+    /// <summary>
+    /// Removes tile caches of earlier inputs (each is a full copy of the tiles) and entries a stopped process left half
+    /// written. The job folder is locked by its pipeline, so nothing else is using them.
+    /// </summary>
+    internal static int Sweep(string folder,string current,IProgress<string>? progress)
+    {
+        int removed=0;
+        static bool IsHash(string name)=>name.Length==64 && name.All(Uri.IsHexDigit);
+        void Remove(string dir)
+        {
+            if(new DirectoryInfo(dir).LinkTarget is not null)return;
+            try{Directory.Delete(dir,true);removed++;}
+            catch(Exception e) when(e is IOException or UnauthorizedAccessException){progress?.Report("Could not remove old terrain tile cache "+dir+": "+e.Message);}
+        }
+        foreach(var dir in Directory.EnumerateDirectories(folder))
+            if(IsHash(Path.GetFileName(dir)) && !Path.GetFullPath(dir).Equals(Path.GetFullPath(current),StringComparison.Ordinal))Remove(dir);
+        foreach(var dir in Directory.EnumerateDirectories(current,"*.pending-*"))Remove(dir);
+        if(removed>0)progress?.Report($"Removed {removed} outdated or unfinished terrain tile cache folder(s).");
+        return removed;
     }
     private string Folder(TerrainTileResult tile) => OutputSnapshot.Resolve(_root,
         OutputSnapshot.HashText($"{tile.Worldspace}|{tile.Level}|{tile.X}|{tile.Y}|{tile.Season}")+"/entry.json");

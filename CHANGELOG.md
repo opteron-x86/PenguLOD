@@ -3,7 +3,7 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
-## Unreleased
+## [0.6.0-alpha.5] - 2026-11-12
 
 Output management and the command line
 
@@ -53,6 +53,59 @@ Robustness
 Incremental LOD output is rebuilt once, because archive contents are now identified by
 the archive's size and date. Regenerate if you used underside step 4 or have textures
 in legacy X8 format; other settings and output are unchanged.
+
+Pipeline state and output ownership
+
+- Grass, textures and terrain publish the same way as object LOD: the output receipt is
+  written with the files and the folder is replaced in one step. An interruption between
+  the two can no longer leave a receipt that blocks the next run.
+- On Linux, publication swaps the old and new folders atomically. Elsewhere, a run that
+  finds only a leftover `.previous-` copy reports how to restore it.
+- `meta.ini` and `SKSE/Plugins/PenguLOD.ini` belong to your installation. Editing them, or
+  the mod manager rewriting them during a run, no longer fails verification, resume or
+  publication, and the installed copies are kept.
+- Separate jobs on one LOD folder (the desktop's stage buttons) no longer treat each other's
+  blocks as damaged. Incremental checks use the hashes the folder's receipt records.
+- A stage that finished publishing is recorded as complete even if you cancel just afterwards.
+- New **Previous outputs to keep** setting and `--keep-previous` option (default 1); older
+  `.previous-` copies are removed after publication. New `PenguLOD clean` command lists and,
+  with `--apply`, removes previous copies and unfinished build folders.
+- Unfinished build folders of an output, outdated terrain tile caches, and old desktop run
+  and analysis folders are removed automatically.
+- Relative paths in a CLI preset resolve against the preset's folder.
+- Texture generation no longer creates an empty output folder when nothing is published.
+
+Existing output is read as before. The first publication after updating may remove
+`.previous-` copies beyond the newest one; set a higher number first to keep more.
+
+Game runtime (SKSE plugin)
+
+- Entering a worldspace no longer loads every dynamic LOD model in one frame. At most
+  `iMaxShowPerUpdate` (default 200) are loaded per update; the nearest come first.
+- At `iMaxShown`, a nearer object replaces the farthest one drawn, so objects next to the
+  player are never the ones missing. Lowering the cap in the menu takes effect at once.
+- Native grid objects in `PenguLOD.esp` are kept in step even when there is no other
+  dynamic LOD to draw.
+- Saving one menu page no longer reloads `PenguLOD.ini` over values changed live on another.
+  External edits are still picked up, and are now read on the game's main thread.
+- Adaptive quality recognises a frame cap (V-sync, a limiter): at the cap counts as
+  headroom, and a target at or above the cap is used just below it. Before, it could step
+  down to the lowest preset and never come back. The menu shows the detected cap.
+- Adaptive quality keeps its preset when the layer settings are reloaded from the file.
+- The quality layer checkboxes appear once LOD blocks load, also after starting from the main
+  menu or an interior, and blocks are rescanned after a worldspace change.
+- Water opacity works with water animation turned off.
+- One settings parser for every section. `no`, `off` and inline comments (`0 ; off`) are
+  read correctly, numbers do not depend on the system locale, and a malformed value is
+  logged and ignored instead of being treated as on.
+- A damaged data file is refused instead of crashing the game while it loads.
+- DynDOLOD.dll counts as present only when it is actually loaded. The About page shows the
+  real log location, and the Dynamic LOD page counts switchable references, grid objects
+  and window glow separately.
+
+The data file format is unchanged: this runtime reads output from earlier generator versions,
+and earlier runtimes read output from this one. New settings files include `iMaxShowPerUpdate`;
+an existing `PenguLOD.ini` uses the default until the key is added.
 
 ## [0.6.0-alpha.4] - 2026-11-10
 

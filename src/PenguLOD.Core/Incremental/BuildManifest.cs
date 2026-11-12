@@ -27,6 +27,9 @@ public sealed class BuildManifest
         try
         {
             var m = JsonSerializer.Deserialize<BuildManifest>(File.ReadAllText(path), Json) ?? new();
+            // Deserialisation creates ordinal dictionaries; block and worldspace keys compare case-insensitively.
+            m.Quads = new(m.Quads ?? [], StringComparer.OrdinalIgnoreCase);
+            m.Trees = new(m.Trees ?? [], StringComparer.OrdinalIgnoreCase);
             // Rebuild everything if the algorithm changed.
             return m.AlgorithmVersion == QuadHasher.AlgorithmVersion ? m : new BuildManifest();
         }

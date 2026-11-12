@@ -65,6 +65,14 @@ public sealed class SettingsStore
         settings.Mo2GameFolder = settings.GameFolder; settings.GameFolder = "";
     }
 
+    /// <summary>Reads an exported preset whose relative paths are relative to the preset file, as the CLI does.</summary>
+    public static DesktopSettings ReadPreset(string file)
+    {
+        var settings = Read(file);
+        settings.BaseFolder = Path.GetDirectoryName(Path.GetFullPath(file));
+        return settings;
+    }
+
     public void Save(DesktopSettings settings) => Write(FilePath, settings);
     public static void Write(string file, DesktopSettings settings) => Write(file, settings, overwrite: true);
     private static void Write(string file, DesktopSettings settings, bool overwrite)
