@@ -224,7 +224,7 @@ jobs:
             .tools/runtime-deps-${{ matrix.line }}
             .tools/runtime-vcpkg-${{ matrix.line }}/buildtrees/commonlibsse-ng/src
           key: skse-vs2026-v1-${{ matrix.line }}-${{ hashFiles('skse/vcpkg*.json', 'skse/cmake/**') }}
-      - name: Build game runtime and collect sources
+      - name: Build game runtime and collect licenses
         run: ./tools/build-runtime-windows.ps1 -Line '${{ matrix.line }}'
       - name: Save runtime dependencies and matching source
         if: ${{ !cancelled() && steps.runtime-cache.outputs.cache-hit != 'true' }}

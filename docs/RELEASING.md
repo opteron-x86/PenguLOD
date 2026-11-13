@@ -46,7 +46,10 @@ The archive should contain no personal settings, logs, source profiles or genera
 
 On Windows, `tools/build-windows.ps1` creates the ZIP and `SHA256SUMS-WINDOWS`.
 The runtime jobs run `tools/build-runtime-windows.ps1` for each game line and
-`tools/package-runtime.py` assembles the separate SKSE archive with licenses and sources.
+`tools/package-runtime.py` assembles the separate SKSE archive: the three DLLs, the FOMOD
+installer and license notices. It holds no source archives, because mod sites reject uploads
+that contain them. Link the release tag on the mod page; the plugin source is that revision,
+and the CommonLib versions and patches it was built from are under `skse/cmake`.
 The tag workflow verifies each package's checksums and combines them before publishing.
 It publishes only after all platform checks succeed; neither platform can publish a partial release.
 
