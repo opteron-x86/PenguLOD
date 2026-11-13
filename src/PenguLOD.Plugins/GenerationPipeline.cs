@@ -201,7 +201,12 @@ public static class GenerationPipeline
             active = null;
         }
         catch (Exception e) when (e is not OperationCanceledException)
-        { error = e.Message; progress?.Report("Pipeline stopped at " + active + ": " + e); }
+        {
+            // A read that failed because its storage went away gets a plain account; the stack trace says nothing more.
+            string? plain = RunEnvironment.DescribeLostStorage(e);
+            error = plain ?? e.Message;
+            progress?.Report("Pipeline stopped at " + active + ": " + (plain ?? e.ToString()));
+        }
         return new(job.Folder, inputs, job.Journal, grassResult, textureResult, receipt, summary, active, error, terrainResult, diagnostics, seasonalOutput);
 
         OutputSnapshot Record(string id, string folder, OutputSnapshot snapshot, bool complete = true)

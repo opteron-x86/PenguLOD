@@ -25,8 +25,21 @@ Terrain
   much smaller level, so a large tile filled it, emptied it and decoded the same files
   again many times. It now keeps only the levels a tile reads. Output is byte-identical.
 
+- 16-bit DDS textures are read: R5G6B5, which the Creation Kit writes for terrain LOD normal
+  maps, plus X1R5G5B5, A1R5G5B5 and A4R4G4B4 and their DXGI equivalents. A worldspace whose
+  existing terrain LOD used one stopped terrain generation with "DDS pixel format (16-bit,
+  flags 0x40) is not supported".
+
 Terrain is rebuilt once after updating, because the two settings are part of its inputs.
 Output is unchanged where nothing was missing.
+
+Running alongside the game
+
+- The preflight warns when the game is running, and on Linux when the game's `Data` folder
+  is a mod manager's virtual file system at that moment. Starting or closing the game from
+  such a mod manager during a run changes `Data` underneath PenguLOD.
+- A read that fails because its storage changed or went away now stops the pipeline with a
+  plain explanation and what to do, in place of a stack trace ending in "Input/output error".
 
 Visual correctness
 

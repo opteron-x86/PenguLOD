@@ -68,6 +68,13 @@ public static class PipelineDiagnostics
             plugins=game.PluginsLoaded;version=SksePluginInstaller.GameVersion(game.DataFolder)?.ToString();
             foreach(var missing in game.MissingPlugins)Add("Error","missing-plugin","Enabled plugin is unavailable: "+missing,"Restore the plugin or correct the profile before generating.",missing);
             foreach(var warning in game.Warnings)Add("Warning","source-warning",warning,"Check the selected game and profile paths.");
+            // A mod manager's virtual Data folder appears and disappears with the game; reads through it stop when it does.
+            if(RunEnvironment.RunningGame() is {} running)Add("Warning",RunEnvironment.GameRunningCode,$"The game is running: {running}.",
+                "Close the game before generating, or leave it open until the run finishes. Starting or closing it from a mod manager during a run changes the Data folder underneath PenguLOD and stops the run.");
+            if(RunEnvironment.DataMount(game.DataFolder) is {} mount)Add("Warning",RunEnvironment.DataMountedCode,
+                $"The game's Data folder is a virtual file system right now: {mount} on {game.DataFolder}.",
+                "A mod manager mounts it while the game or another program started from it runs, and removes it afterwards. A run reading through it stops when that happens. Close that program before generating, or keep it open until the run finishes.",
+                game.DataFolder);
             assets=game.BuildAssets(p=>p.StartsWith("dyndolod\\") || p.StartsWith("skse\\") || seasonal && (p.StartsWith("seasons\\") || p.StartsWith("grass\\")) || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null
                 || request.Terrain is not null && (p.StartsWith("textures\\") || p.StartsWith("meshes\\terrain\\") || p.StartsWith("lodsettings\\") || p.StartsWith("seasons\\")));
             archives=assets.ArchiveCount;
