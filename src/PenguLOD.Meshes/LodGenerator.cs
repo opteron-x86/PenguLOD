@@ -289,9 +289,7 @@ public sealed class LodGenerator
                     {
                         var textures = p.Material.Textures.ToList(); textures[0] = diffuse;
                         if (normal is not null) { while (textures.Count < 2) textures.Add(""); textures[1] = normal; }
-                        part = new LodMeshPart { Name = p.Name, TexGenScale = p.TexGenScale, Tier = p.Tier,
-                            Material = p.Material with { Textures = textures }, Positions = p.Positions, UVs = p.UVs, Normals = p.Normals,
-                            Tangents = p.Tangents, Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles };
+                        part = p with { Material = p.Material with { Textures = textures } };
                     }
                 }
             }
@@ -409,11 +407,7 @@ public sealed class LodGenerator
             }
             if (ReferenceEquals(swapped, m)) { parts.Add(p); continue; }
             any = true;
-            parts.Add(new LodMeshPart
-            {
-                Name = p.Name, Material = swapped, Positions = p.Positions, UVs = p.UVs, Normals = p.Normals,
-                Tangents = p.Tangents, Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles,
-            });
+            parts.Add(p with { Material = swapped });
         }
         return any ? new LodMesh { Path = mesh.Path, Parts = parts, Warnings = mesh.Warnings, NoShapesInFile = mesh.NoShapesInFile } : mesh;
     }
@@ -436,11 +430,7 @@ public sealed class LodGenerator
                 }
                 cache[m.Key] = swapped;
             }
-            parts.Add(ReferenceEquals(swapped, m) ? p : new LodMeshPart
-            {
-                Name = p.Name, Material = swapped, Positions = p.Positions, UVs = p.UVs, Normals = p.Normals,
-                Tangents = p.Tangents, Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles,
-            });
+            parts.Add(ReferenceEquals(swapped, m) ? p : p with { Material = swapped });
         }
         return new LodMesh { Path = mesh.Path, Parts = parts, Warnings = mesh.Warnings, NoShapesInFile = mesh.NoShapesInFile };
     }
@@ -464,11 +454,7 @@ public sealed class LodGenerator
                 }
                 cache[m.Key] = swapped;
             }
-            parts.Add(ReferenceEquals(swapped, m) ? p : new LodMeshPart
-            {
-                Name = p.Name, Material = swapped, Positions = p.Positions, UVs = p.UVs, Normals = p.Normals,
-                Tangents = p.Tangents, Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles,
-            });
+            parts.Add(ReferenceEquals(swapped, m) ? p : p with { Material = swapped });
         }
         return new LodMesh { Path = mesh.Path, Parts = parts, Warnings = mesh.Warnings, NoShapesInFile = mesh.NoShapesInFile };
     }

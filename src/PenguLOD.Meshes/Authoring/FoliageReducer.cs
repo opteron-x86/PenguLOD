@@ -205,7 +205,7 @@ public static class FoliageReducer
         var keep = indices.Distinct().Order().ToArray();
         var map = keep.Select((old, index) => (old, index)).ToDictionary(p => p.old, p => (ushort)p.index);
         T[] Select<T>(T[] items) => keep.Select(i => items[i]).ToArray();
-        return new() { Name = part.Name, TexGenScale = part.TexGenScale, Tier = part.Tier, Material = part.Material,
+        return part with {
             Positions = Select(part.Positions), UVs = Select(part.UVs), Normals = Select(part.Normals),
             Tangents = Select(part.Tangents), Bitangents = Select(part.Bitangents), Colors = part.Colors is null ? null : Select(part.Colors),
             Triangles = indices.Select(i => map[i]).ToArray() };

@@ -49,7 +49,8 @@ public sealed class TextureFixture : IDisposable
         Name = name, Material = new LodMaterial([texture, "", "", "", "", "", "", "", ""], 0, 0, 3, false, 0, 0, Vector3.Zero, 1),
         Positions = [new(0, 0, 0), new(400, 0, 0), new(0, 0, 400), new(400, 0, 400)],
         UVs = [new(0, 1), new(1, 1), new(0, 0), new(1, 0)], Normals = [-Vector3.UnitY, -Vector3.UnitY, -Vector3.UnitY, -Vector3.UnitY],
-        Tangents = [Vector3.UnitX, Vector3.UnitX, Vector3.UnitX, Vector3.UnitX], Bitangents = [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ],
+        // NIF tangent frame: U runs along +X (bitangent field), V runs down the card (tangent field).
+        Tangents = [-Vector3.UnitZ, -Vector3.UnitZ, -Vector3.UnitZ, -Vector3.UnitZ], Bitangents = [Vector3.UnitX, Vector3.UnitX, Vector3.UnitX, Vector3.UnitX],
         Triangles = [0, 1, 2, 1, 3, 2]
     };
     public static void Put(string root, string relative, byte[] bytes)

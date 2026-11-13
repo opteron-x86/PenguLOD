@@ -77,19 +77,7 @@ public static class MountainFit
         return side > 1e-3f && dist <= MaxMove ? point : v;
     }
 
-    private static LodMeshPart CopyWith(LodMeshPart p, Vector3[] positions) => new()
-    {
-        Name = p.Name,
-        Material = p.Material,
-        Positions = positions,
-        UVs = p.UVs,
-        Normals = p.Normals,
-        Tangents = p.Tangents,
-        Bitangents = p.Bitangents,
-        Colors = p.Colors,
-        Triangles = p.Triangles,
-        Tier = p.Tier,
-    };
+    private static LodMeshPart CopyWith(LodMeshPart p, Vector3[] positions) => p with { Positions = positions };
 
     /// <summary>Closest point of triangle ABC to P (Ericson, Real-Time Collision Detection).</summary>
     internal static Vector3 ClosestOnTriangle(Vector3 p, Vector3 a, Vector3 b, Vector3 c)

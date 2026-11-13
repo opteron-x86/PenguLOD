@@ -116,8 +116,10 @@ public static class Bc7Encoder
         Span<int> idx = stackalloc int[16];
         int p0, p1;
 
-        Quantize(e0, q0, out p0);
-        Quantize(e1, q1, out p1);
+        bool opaque = true;
+        for (int i = 0; i < 16 && opaque; i++) opaque = px[i * 4 + 3] >= 255;
+        Quantize(e0, q0, out p0, opaque);
+        Quantize(e1, q1, out p1, opaque);
         float err = AssignIndices(px, q0, p0, q1, p1, idx);
 
         if (!solid)
@@ -130,8 +132,8 @@ public static class Bc7Encoder
                 Span<int> rq0 = stackalloc int[4];
                 Span<int> rq1 = stackalloc int[4];
                 Span<int> ridx = stackalloc int[16];
-                Quantize(r0, rq0, out int rp0);
-                Quantize(r1, rq1, out int rp1);
+                Quantize(r0, rq0, out int rp0, opaque);
+                Quantize(r1, rq1, out int rp1, opaque);
                 float rerr = AssignIndices(px, rq0, rp0, rq1, rp1, ridx);
                 if (rerr < err)
                 {
@@ -284,8 +286,23 @@ public static class Bc7Encoder
                 for (int b = 0; b < 4; b++) cov[a * 4 + b] += da * (px[i * 4 + b] - mean[b]);
             }
 
-        // Power iteration for the dominant axis.
-        Span<float> axis = stackalloc float[4] { 1, 1, 1, 1 };
+        // Power iteration for the dominant axis. A (1,1,1,1) seed is orthogonal to the axis of a block whose texels share the
+        // same channel sum (red beside green), which collapsed both endpoints to the mean. Seed with the covariance row of the
+        // channel that varies most instead, and fall back to the bounding-box diagonal.
+        Span<float> axis = stackalloc float[4];
+        int widest = 0;
+        for (int c = 1; c < 4; c++) if (cov[c * 4 + c] > cov[widest * 4 + widest]) widest = c;
+        for (int c = 0; c < 4; c++) axis[c] = cov[widest * 4 + c];
+        if (!Normalize(axis))
+        {
+            for (int c = 0; c < 4; c++)
+            {
+                float lo = float.MaxValue, hi = float.MinValue;
+                for (int i = 0; i < 16; i++) { lo = MathF.Min(lo, px[i * 4 + c]); hi = MathF.Max(hi, px[i * 4 + c]); }
+                axis[c] = hi - lo;
+            }
+            if (!Normalize(axis)) axis.Fill(.5f);
+        }
         Span<float> tmp = stackalloc float[4];
         for (int it = 0; it < 8; it++)
         {
@@ -317,13 +334,26 @@ public static class Bc7Encoder
         }
     }
 
-    /// <summary>7-bit endpoint + shared p-bit: picks the p-bit that best reproduces the endpoint.</summary>
-    private static void Quantize(ReadOnlySpan<float> e, Span<int> q, out int pbit)
+    private static bool Normalize(Span<float> v)
+    {
+        float len = 0;
+        for (int c = 0; c < v.Length; c++) len += v[c] * v[c];
+        if (len < 1e-12f || !float.IsFinite(len)) return false;
+        len = MathF.Sqrt(len);
+        for (int c = 0; c < v.Length; c++) v[c] /= len;
+        return true;
+    }
+
+    /// <summary>
+    /// 7-bit endpoint + shared p-bit: picks the p-bit that best reproduces the endpoint. For an opaque block only p-bit 1
+    /// is considered: it is the only one that can store alpha 255 (127 * 2 + 1), so the block decodes fully opaque.
+    /// </summary>
+    private static void Quantize(ReadOnlySpan<float> e, Span<int> q, out int pbit, bool opaque = false)
     {
         float bestErr = float.MaxValue;
         pbit = 0;
         Span<int> cand = stackalloc int[4];
-        for (int p = 0; p < 2; p++)
+        for (int p = opaque ? 1 : 0; p < 2; p++)
         {
             float err = 0;
             for (int c = 0; c < 4; c++)

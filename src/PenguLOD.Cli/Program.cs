@@ -121,6 +121,8 @@ public static partial class Program
           --no-dynamic           Keep switchable references (quest-toggled) in static LOD instead of
                                  handing them to the PenguLOD SKSE plugin
           --seasons              Seasonal object and grass LOD for Seasons of Skyrim (Data\Seasons\*_WIN.ini ...)
+          --seasons-strict       With --seasons: stop on a swap naming a form that is not in the load order
+                                 (default: skip and report it, as the game does)
           --skse-dll <which>     SKSE plugin put in the output: auto (default, reads SkyrimSE.exe),
                                  1170 (SE 1.5.97 - AE 1.6.1170), 17 (newer, 1.7.x), none (installed separately)
           --no-grid-objects      Don't hand water planes, waterfalls, fires and windmills (DynDOLOD
@@ -465,6 +467,7 @@ public static partial class Program
             GrassLod: !a.Has("no-grass"),
             ChildWorlds: !a.Has("no-child-worlds"),
             Seasons: a.Has("seasons"),
+            SeasonsStrict: a.Has("seasons-strict") && (a.Has("seasons") ? true : throw new CliArgException("--seasons-strict only applies together with --seasons.")),
             Underside: a.Has("underside"),
             NativeGridObjects: a.Has("native-grid-objects"),
             NativeEffects: a.Has("native-effects"),

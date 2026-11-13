@@ -18,7 +18,7 @@ public static class PbrLodConverter
     public const byte AlphaThreshold = 128;
 
     /// <summary>Bump when the mip chain changes, so converted copies written by an older build are made again.</summary>
-    public const int MipVersion = 2;
+    public const int MipVersion = 3; // top level a multiple of four
 
     /// <param name="brightness">Multiplier on top of <see cref="BaseScale"/> (1 = DynDOLOD's default).</param>
     /// <param name="maxSize">Largest side kept; bigger textures are halved until they fit.</param>
@@ -28,6 +28,8 @@ public static class PbrLodConverter
         var (rgba, w, h, _) = DdsFile.DecodeTopMip(dds);
         while (Math.Max(w, h) > maxSize && Math.Min(w, h) > 4)
             (rgba, w, h) = TreeAtlasBuilder.Downsample(rgba, w, h);
+        var aligned = LodTextureEncoding.BlockAligned(new(rgba, w, h), LodTextureEncoding.Channels.Color);
+        (rgba, w, h) = (aligned.Pixels, aligned.Width, aligned.Height);
 
         var lut = new byte[256];
         for (int i = 0; i < 256; i++)

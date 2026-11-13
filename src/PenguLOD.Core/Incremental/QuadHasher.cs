@@ -16,7 +16,7 @@ namespace PenguLOD.Core.Incremental;
 public static class QuadHasher
 {
     /// <summary>Bump when the output format/algorithm changes so every block rebuilds once.</summary>
-    public const int AlgorithmVersion = 13; // PenguLOD asset paths and runtime layer names
+    public const int AlgorithmVersion = 14; // NIF tangent frame for generated tangents and billboard cards
 
     public static string Hash(
         QuadKey quad,

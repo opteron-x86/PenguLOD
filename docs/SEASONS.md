@@ -5,11 +5,19 @@ share the same preset setting. Generate tree textures first using the same profi
 Texture generation includes winning replacement TREE records, even when those records
 are not directly placed in the default world.
 
-PenguLOD reads `Data/Seasons/*_WIN.ini`, `_SPR.ini`, `_SUM.ini` and `_AUT.ini` in name order.
-Later entries override earlier ones, including identity entries that undo a swap.
+PenguLOD reads `Data/Seasons/*_WIN.ini`, `_SPR.ini`, `_SUM.ini` and `_AUT.ini` in the order
+Seasons of Skyrim applies them: `MainFormSwap_<SEASON>.ini` first, then every other file in
+case-sensitive name order. Later entries override earlier ones, including identity entries
+that undo a swap, so a mod's INI overrides `MainFormSwap` even when its name sorts first.
 `[Trees]` and `[LandTextures]` accept EditorIDs and `0xLocalID~Plugin.esp` references.
-Unknown replacement records stop generation. Missing seasonal tree billboards tell you
-to regenerate textures instead of silently substituting the default tree.
+
+A line naming a record that is not in the load order (an optional plugin that is not
+installed, say) is skipped and reported as a warning, as the game skips it. Turn on
+**Strict seasonal swaps** (CLI `--seasons-strict`) to stop generation instead. Seasonal grass
+caching always treats such lines as errors. A season whose INIs change nothing gets no
+seasonal terrain, tree or object LOD files; the game then uses the normal LOD, which is
+identical. Missing seasonal tree billboards tell you to regenerate textures instead of
+silently substituting the default tree.
 
 For each configured season, terrain emits `.WIN.btr`, `.WIN.dds`, `.WIN_n.dds` (and the
 equivalent other suffixes). Tree LOD emits seasonal `.btt`, `.lst`, and tree atlas files.
@@ -35,8 +43,8 @@ Follow [the transition checks](DIAGNOSTICS.md#repeatable-checks) in each configu
 Compare loaded-cell textures and trees with the corresponding distant output.
 
 Diagnostics lists resolved and unresolved entries by season and record category. Unknown
-entries affecting a selected stage block that stage; entries for unselected categories
-are warnings. The report also counts installed seasonal grass cells and identifies gaps:
+entries are warnings; with strict seasonal swaps (or seasonal grass caching) those affecting
+a selected stage block it. The report also counts installed seasonal grass cells and identifies gaps:
 a missing seasonal cell retains default grass, while a seasonal cell without a default
 cache cannot enter the LOD grid. Rebuild grass caches before generating LOD when these
 counts differ unexpectedly.

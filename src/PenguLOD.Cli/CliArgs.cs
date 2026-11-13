@@ -34,7 +34,7 @@ public sealed class CliArgs
         V("worldspace"), F("keep-output"), P("dyndolod"), P("resources"), V("preset"), F("candles"), F("fxglow"), P("rules"),
         F("keep-buried"), F("keep-underwater"), F("include-disabled"), F("no-enable-parented"), F("no-child-worlds"), F("no-dynamic"),
         F("no-grid-objects"), F("glow-windows"), F("parent-copies"), F("no-match-textures"), F("no-grass"), F("water-standins"),
-        F("seasons"), V("skse-dll"), V("esl-range"), F("native-grid-objects"), F("native-effects"), F("no-cs-grass"), F("no-animated-ships"),
+        F("seasons"), F("seasons-strict"), V("skse-dll"), V("esl-range"), F("native-grid-objects"), F("native-effects"), F("no-cs-grass"), F("no-animated-ships"),
         F("no-detailed-ships"), V("ice-inset"), F("no-mountain-fit"), V("mountain-inset"), V("object-inset"), V("snow-cover"), V("snow-shader"),
         V("map-objects"), V("grass-density"), V("grass-top"), V("grass-bottom"), V("tree-brightness"), V("object-brightness"),
         F("occlusion"), V("occlusion-clearance"), P("occlusion-folder"), F("object-atlas"), V("atlas-cell"),

@@ -42,11 +42,7 @@ public sealed class ShipLodBuilder
             if (lift <= 0f) return part;
             var moved = new Vector3[part.VertexCount];
             for (int i = 0; i < moved.Length; i++) moved[i] = part.Positions[i] + part.Normals[i] * lift;
-            return new LodMeshPart
-            {
-                Name = part.Name, Material = part.Material, Positions = moved, UVs = part.UVs, Normals = part.Normals,
-                Tangents = part.Tangents, Bitangents = part.Bitangents, Colors = part.Colors, Triangles = part.Triangles,
-            };
+            return part with { Positions = moved };
         }
     }
 

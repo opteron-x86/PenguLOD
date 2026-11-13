@@ -43,7 +43,7 @@ public sealed record Tree3DLevelReport(string Model, int Level, string SourceMod
 public sealed class Tree3DSource : ISyntheticMeshSource
 {
     public const string Prefix = "~pengulod-tree3d|";
-    private const int Version = 8;
+    private const int Version = 9; // NIF tangent frame for generated tangents and trunk cards
 
     private readonly AssetIndex _assets;
     private readonly float _brightness;
@@ -221,11 +221,9 @@ public sealed class Tree3DSource : ISyntheticMeshSource
 
     private static LodMesh NativeMaterial(LodMesh mesh) => new()
     {
-        Path = mesh.Path, Warnings = mesh.Warnings, Parts = mesh.Parts.Select(p => new LodMeshPart
+        Path = mesh.Path, Warnings = mesh.Warnings, Parts = mesh.Parts.Select(p => p with
         {
-            Name = p.Name, Positions = p.Positions,
-            UVs = p.Material.Passthru is { } uv ? p.UVs.Select(v => v * new Vector2(uv.UvScaleX, uv.UvScaleY) + new Vector2(uv.UvOffsetX, uv.UvOffsetY)).ToArray() : p.UVs, Normals = p.Normals, Tangents = p.Tangents, Bitangents = p.Bitangents,
-            Colors = p.Colors, Triangles = p.Triangles,
+            UVs = p.Material.Passthru is { } uv ? p.UVs.Select(v => v * new Vector2(uv.UvScaleX, uv.UvScaleY) + new Vector2(uv.UvOffsetX, uv.UvOffsetY)).ToArray() : p.UVs,
             Material = p.Material with { Textures = ShaderGuard.BakedSlots(p.Material.Textures.Take(2).ToArray()),
                 ShaderFlags1 = 0x80000300u | (p.Material.ShaderFlags1 & 0x1008u),
                 ShaderFlags2 = 5u | (p.Material.ShaderFlags2 & 0x10u),
@@ -311,14 +309,7 @@ public sealed class Tree3DSource : ISyntheticMeshSource
                 for (int i = 0; i < colors.Length; i++) colors[i] = BtoBuilder.Scale(src?[i] ?? 0xFFFF_FFFFu, _brightness);
             }
 
-            parts.Add(new LodMeshPart
-            {
-                Name = part.Name,
-                Material = part.Material,
-                Positions = part.Positions, UVs = part.UVs, Normals = normals,
-                Tangents = part.Tangents, Bitangents = part.Bitangents,
-                Colors = colors, Triangles = part.Triangles,
-            });
+            parts.Add(part with { Normals = normals, Colors = colors });
         }
         return new LodMesh { Path = path, Parts = parts, Warnings = raw.Warnings };
     }

@@ -14,7 +14,7 @@ namespace PenguLOD.Plugins;
 public sealed class TreeCardSource : ISyntheticMeshSource
 {
     public const string Prefix = "~pengulod-treecard|";
-    private const int Version = 2;
+    private const int Version = 3; // NIF tangent frame on billboard cards
 
     private readonly AssetIndex _assets;
     private readonly float _brightness;
@@ -108,7 +108,8 @@ public sealed class TreeCardSource : ISyntheticMeshSource
             pos[v + 2] = dir * hw + new Vector3(0, 0, z1);
             pos[v + 3] = -dir * hw + new Vector3(0, 0, z1);
             uv[v] = new Vector2(0, 1); uv[v + 1] = new Vector2(1, 1); uv[v + 2] = new Vector2(1, 0); uv[v + 3] = new Vector2(0, 0);
-            for (int k = 0; k < 4; k++) { nrm[v + k] = normalDir; tan[v + k] = dir; bit[v + k] = Vector3.UnitZ; }
+            // NIF tangent frame: tangent along +V (down the card), bitangent along +U (across it).
+            for (int k = 0; k < 4; k++) { nrm[v + k] = normalDir; tan[v + k] = -Vector3.UnitZ; bit[v + k] = dir; }
             int t = c * 6;
             tris[t] = (ushort)v; tris[t + 1] = (ushort)(v + 1); tris[t + 2] = (ushort)(v + 2);
             tris[t + 3] = (ushort)v; tris[t + 4] = (ushort)(v + 2); tris[t + 5] = (ushort)(v + 3);
@@ -140,8 +141,8 @@ public sealed class TreeCardSource : ISyntheticMeshSource
                 0x8000_0300u, 0x0000_0015u, 3, true, GrassPatchBuilder.AlphaTestFlags, GrassPatchBuilder.AlphaThreshold, Vector3.Zero, 1),
             Positions = [bottom - dir * half, bottom + dir * half, top + dir * half, top - dir * half],
             UVs = [new(0, 1), new(1, 1), new(1, 0), new(0, 0)],
-            Normals = [normalDir, normalDir, normalDir, normalDir], Tangents = [dir, dir, dir, dir],
-            Bitangents = [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ], Triangles = [0, 1, 2, 0, 2, 3],
+            Normals = [normalDir, normalDir, normalDir, normalDir], Tangents = [-Vector3.UnitZ, -Vector3.UnitZ, -Vector3.UnitZ, -Vector3.UnitZ],
+            Bitangents = [dir, dir, dir, dir], Triangles = [0, 1, 2, 0, 2, 3],
             Colors = MathF.Abs(_brightness - 1) <= .001f ? null : Enumerable.Repeat(BtoBuilder.Scale(0xFFFFFFFF, _brightness), 4).ToArray()
         };
     }

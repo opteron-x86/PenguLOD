@@ -29,12 +29,8 @@ internal sealed class ObjectTextureAssets(IAssetSource assets, string output)
         return ((material.AlphaFlags >> 10) & 7) switch { 4 => material.AlphaThreshold + 1, 6 => material.AlphaThreshold, _ => null };
     }
 
-    public static LodMeshPart With(LodMeshPart p, LodMaterial material, System.Numerics.Vector2[]? uvs = null) => new()
-    {
-        Name = p.Name, TexGenScale = p.TexGenScale, Material = material, UVs = uvs ?? p.UVs,
-        Positions = p.Positions, Normals = p.Normals, Tangents = p.Tangents, Bitangents = p.Bitangents,
-        Colors = p.Colors, Triangles = p.Triangles, Tier = p.Tier
-    };
+    public static LodMeshPart With(LodMeshPart p, LodMaterial material, System.Numerics.Vector2[]? uvs = null) =>
+        p with { Material = material, UVs = uvs ?? p.UVs };
 
     public static void Write(string output, string relative, byte[] bytes)
     {
