@@ -21,6 +21,13 @@ public static class DdsAlpha
         {
             // 24-bit, BGRX and legacy X8 files carry no alpha; their fourth byte (if any) is padding.
             if (!DdsFile.HasAlpha(dds, info)) return false;
+            if (info.BitsPerPixel != 32)
+            {
+                // Packed 16-bit formats with alpha (A1R5G5B5, A4R4G4B4): expand, then test the same way.
+                var rgba = DdsFile.DecodeTopMip(dds).Rgba;
+                for (int i = 3; i < rgba.Length; i += 4) if (rgba[i] < OpaqueAbove) return true;
+                return false;
+            }
             var data = dds.AsSpan(info.DataOffset);
             long n = (long)info.Width * info.Height;
             if (n * 4 > data.Length) throw new InvalidDataException("Truncated texture.");

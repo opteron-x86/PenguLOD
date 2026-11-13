@@ -4,7 +4,7 @@ using PenguLOD.Textures.Bc;
 namespace PenguLOD.Textures.Dds;
 
 /// <summary>
-/// Minimal DDS reader/writer: 2D textures, BC1/2/3/4/5/7 and 24/32-bit uncompressed, legacy or DX10 headers.
+/// Minimal DDS reader/writer: 2D textures, BC1/2/3/4/5/7 and 16/24/32-bit uncompressed, legacy or DX10 headers.
 /// Reading decodes the top mip to RGBA8; writing produces BC7 (DX10 header) with a full mip chain.
 /// </summary>
 public static class DdsFile
@@ -55,6 +55,7 @@ public static class DdsFile
                         97 or 98 or 99 => new(width, height, mips, BcFormat.Bc7, false, false, offset, dxgi),
                         27 or 28 or 29 => new(width, height, mips, BcFormat.None, true, false, offset, dxgi),
                         87 or 88 or 90 or 91 => new(width, height, mips, BcFormat.None, true, true, offset, dxgi),
+                        85 or 86 or 115 => new(width, height, mips, BcFormat.None, true, false, offset, dxgi, 16),
                         _ => throw new NotSupportedException($"DXGI format {dxgi} is not supported."),
                     };
                 default: throw new NotSupportedException($"DDS FourCC '{cc}' is not supported.");
@@ -62,8 +63,8 @@ public static class DdsFile
         }
         if (bitCount == 32)
             return new(width, height, mips, BcFormat.None, true, rMask == 0x00FF0000, offset, rMask == 0x00FF0000 ? 87 : 28);
-        if (bitCount == 24 && (pfFlags & 0x40) != 0)
-            return new(width, height, mips, BcFormat.None, true, rMask == 0x00FF0000, offset, 0, 24);
+        if (bitCount is 16 or 24 && (pfFlags & 0x40) != 0)
+            return new(width, height, mips, BcFormat.None, true, rMask == 0x00FF0000, offset, 0, bitCount);
         throw new NotSupportedException($"DDS pixel format ({bitCount}-bit, flags 0x{pfFlags:X}) is not supported.");
     }
 
@@ -74,11 +75,22 @@ public static class DdsFile
     public static bool HasAlpha(ReadOnlySpan<byte> file, Info info)
     {
         if (!info.Uncompressed) return true;
-        if (info.BitsPerPixel == 24 || info.DxgiFormat == 88) return false;
+        if (info.BitsPerPixel == 24 || info.DxgiFormat is 88 or 85) return false;
         if (info.DataOffset != 4 + HeaderSize) return true;
         uint pfFlags = BinaryPrimitives.ReadUInt32LittleEndian(file[80..]), aMask = BinaryPrimitives.ReadUInt32LittleEndian(file[104..]);
         return (pfFlags & 1) != 0 && aMask != 0;
     }
+
+    /// <summary>Channel masks of a 16- or 24-bit packed format: from the legacy header, or implied by a DXGI format.
+    /// The alpha mask is zero when the format has none.</summary>
+    private static (uint R, uint G, uint B, uint A) PackedMasks(ReadOnlySpan<byte> file, Info info) => info.DxgiFormat switch
+    {
+        85 => (0xF800, 0x07E0, 0x001F, 0),            // B5G6R5
+        86 => (0x7C00, 0x03E0, 0x001F, 0x8000),       // B5G5R5A1
+        115 => (0x0F00, 0x00F0, 0x000F, 0xF000),      // B4G4R4A4
+        _ => (BinaryPrimitives.ReadUInt32LittleEndian(file[92..]), BinaryPrimitives.ReadUInt32LittleEndian(file[96..]),
+            BinaryPrimitives.ReadUInt32LittleEndian(file[100..]), HasAlpha(file, info) ? BinaryPrimitives.ReadUInt32LittleEndian(file[104..]) : 0),
+    };
 
     /// <summary>Decodes the top mip level to RGBA8.</summary>
     public static (byte[] Rgba, int Width, int Height, Info Info) DecodeTopMip(byte[] file)
@@ -87,19 +99,21 @@ public static class DdsFile
         var data = file.AsSpan(info.DataOffset);
         if (info.Uncompressed)
         {
-            if (info.BitsPerPixel == 24)
+            if (info.BitsPerPixel is 16 or 24)
             {
-                int pitch = checked(info.Width * 3);
+                int size = info.BitsPerPixel / 8;
+                int pitch = checked(info.Width * size);
                 if ((BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(8)) & 8) != 0)
                     pitch = BinaryPrimitives.ReadInt32LittleEndian(file.AsSpan(20));
-                if (pitch < info.Width * 3 || (long)pitch * info.Height > data.Length)
-                    throw new InvalidDataException("Truncated or invalid 24-bit DDS rows.");
-                uint rMask = BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(92));
-                uint gMask = BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(96));
-                uint bMask = BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(100));
+                if (pitch < info.Width * size || (long)pitch * info.Height > data.Length)
+                    throw new InvalidDataException($"Truncated or invalid {info.BitsPerPixel}-bit DDS rows.");
+                var (rMask, gMask, bMask, aMask) = PackedMasks(file, info);
+                uint limit = info.BitsPerPixel == 16 ? 0xffffu : 0xffffffu;
+                foreach (uint mask in new[] { rMask, gMask, bMask })
+                    if (mask == 0 || mask > limit) throw new InvalidDataException($"Invalid {info.BitsPerPixel}-bit DDS channel mask.");
+                if (aMask > limit) throw new InvalidDataException($"Invalid {info.BitsPerPixel}-bit DDS channel mask.");
                 static byte Channel(uint pixel, uint mask)
                 {
-                    if (mask == 0 || mask > 0xffffff) throw new InvalidDataException("Invalid 24-bit DDS channel mask.");
                     int shift = System.Numerics.BitOperations.TrailingZeroCount(mask);
                     uint max = mask >> shift, value = (pixel & mask) >> shift;
                     return (byte)((value * 255UL + max / 2) / max);
@@ -110,10 +124,11 @@ public static class DdsFile
                     PenguLOD.Core.Pipeline.RunLimits.Check();
                     for (int x = 0; x < info.Width; x++)
                     {
-                        int src = y * pitch + x * 3, dst = (y * info.Width + x) * 4;
-                        uint pixel = (uint)(data[src] | data[src + 1] << 8 | data[src + 2] << 16);
+                        int src = y * pitch + x * size, dst = (y * info.Width + x) * 4;
+                        uint pixel = (uint)(data[src] | data[src + 1] << 8);
+                        if (size == 3) pixel |= (uint)data[src + 2] << 16;
                         expanded[dst] = Channel(pixel, rMask); expanded[dst + 1] = Channel(pixel, gMask);
-                        expanded[dst + 2] = Channel(pixel, bMask); expanded[dst + 3] = 255;
+                        expanded[dst + 2] = Channel(pixel, bMask); expanded[dst + 3] = aMask == 0 ? (byte)255 : Channel(pixel, aMask);
                     }
                 }
                 return (expanded, info.Width, info.Height, info);
