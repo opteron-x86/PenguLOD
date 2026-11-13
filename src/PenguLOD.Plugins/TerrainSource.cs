@@ -8,7 +8,8 @@ using Mutagen.Bethesda.Skyrim;
 
 namespace PenguLOD.Plugins;
 
-/// <summary>Winning LAND plus existing BTR/texture coverage for the landscape stripped from Bethesda plugins.</summary>
+/// <summary>Winning LAND plus existing BTR/texture coverage for the landscape stripped from Bethesda plugins.
+/// Where neither exists, the worldspace's default land height and the default landscape texture can stand in.</summary>
 internal sealed class TerrainSource
 {
     internal sealed record Layer(string Texture, string? Normal, int Quadrant, int Order, float[]? Opacity, string? Occlusion = null);
@@ -28,6 +29,8 @@ internal sealed class TerrainSource
     private readonly string _world;
     private readonly LodGrid _grid;
     private readonly bool _fallback;
+    private readonly float? _defaultLand;
+    private readonly float? _defaultWater;
     private readonly CancellationToken _ct;
     internal readonly Dictionary<CellCoord, Cell> Cells = [];
     internal readonly TerrainHeights Heights = new();
@@ -43,8 +46,11 @@ internal sealed class TerrainSource
     internal void RestoreFallbackTiles(IEnumerable<QuadKey> tiles) => _fallbackUsed.UnionWith(tiles);
 
     internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null, string defaultDiffuse = TerrainDefaultTexture.SkyrimDefault,
-        string defaultNormal = TerrainDefaultTexture.SkyrimNormal, TerrainMaterialSettings? materials = null)
+        string defaultNormal = TerrainDefaultTexture.SkyrimNormal, TerrainMaterialSettings? materials = null,
+        bool fillUncoveredLand = false, bool substituteMissingTextures = false)
     {
+        if (fillUncoveredLand) (_defaultLand, _defaultWater) = TerrainInputs.Defaults(world);
+        var textures = new Dictionary<FormKey, LandTextures?>();
         _season = season; _defaultDiffuse = defaultDiffuse; _assets = assets; _world = grid.Worldspace; _grid = grid; _fallback = fallback; _ct = ct;
         _defaultNormal = defaultNormal; _materialSettings = materials ?? new(); _materialSettings.Validate();
         _materials = new(assets, _materialSettings, ct);
@@ -66,13 +72,13 @@ internal sealed class TerrainSource
                 string diffuse = _defaultDiffuse; string? normal = _defaultNormal, occlusion = null;
                 if (!header.Texture.IsNull)
                 {
-                    if (!game.LinkCache.TryResolve<ILandscapeTextureGetter>(swaps?.GetValueOrDefault(header.Texture.FormKey,header.Texture.FormKey) ?? header.Texture.FormKey, out var ltex)
-                        || ltex.TextureSet?.FormKeyNullable is not { } txKey
-                        || !game.LinkCache.TryResolve<ITextureSetGetter>(txKey, out var tx))
+                    var key = swaps?.GetValueOrDefault(header.Texture.FormKey,header.Texture.FormKey) ?? header.Texture.FormKey;
+                    if (!textures.TryGetValue(key, out var found)) textures[key] = found = TerrainInputs.Resolve(game.LinkCache, key);
+                    if (found is { } set && (!substituteMissingTextures || TerrainMaterials.DiffuseAvailable(assets, _materialSettings, set.Diffuse)))
+                        (diffuse, normal, occlusion) = (set.Diffuse, set.Normal, set.Occlusion);
+                    // Otherwise the layer keeps the default landscape texture, as the game shows for a texture it cannot load.
+                    else if (!substituteMissingTextures)
                         throw new InvalidDataException($"Unresolved landscape texture {header.Texture.FormKey} in {_world} {coord}.");
-                    diffuse = PathOf(tx.Diffuse?.DataRelativePath.Path ?? throw new InvalidDataException("Landscape texture has no diffuse map."));
-                    normal = tx.NormalOrGloss is { IsNull: false } n ? PathOf(n.DataRelativePath.Path) : null;
-                    if (tx.EnvironmentMaskOrSubsurfaceTint is { IsNull: false } ao) occlusion = PathOf(ao.DataRelativePath.Path);
                 }
                 float[]? opacity = null;
                 if (layer is IAlphaLayerGetter alpha)
@@ -107,35 +113,19 @@ internal sealed class TerrainSource
             if (value is { } h && float.IsFinite(h) && Math.Abs(h) < 1_000_000) _water[new(point.Point.X, point.Point.Y)] = h;
         }
     }
-    private static string PathOf(string path)
-    { path = GamePath.Normalize(path); return path.StartsWith("textures\\", StringComparison.Ordinal) ? path : "textures\\" + path; }
-
-    internal IEnumerable<QuadKey> Tiles(IReadOnlyCollection<LodLevel> levels)
-    {
-        var tiles = new HashSet<QuadKey>();
-        foreach (var c in Cells.Keys) foreach (var level in levels) tiles.Add(_grid.QuadFor(c,level));
-        if (_fallback)
-            foreach (string path in _assets.EnumeratePaths($@"meshes\terrain\{_world}\"))
-            {
-                var parts = GamePath.GetFileName(path).Split('.');
-                if (parts.Length == 5 && parts[4] == "btr" && parts[0].Equals(_world, StringComparison.OrdinalIgnoreCase)
-                    && int.TryParse(parts[1],out int level) && levels.Contains((LodLevel)level)
-                    && int.TryParse(parts[2],out int x) && int.TryParse(parts[3],out int y) && _grid.IsInsideGrid(new(x,y)))
-                    tiles.Add(new(_world,(LodLevel)level,x,y));
-            }
-        return tiles.OrderBy(t=>(int)t.Level).ThenBy(t=>t.X).ThenBy(t=>t.Y);
-    }
+    internal IEnumerable<QuadKey> Tiles(IReadOnlyCollection<LodLevel> levels) => TerrainInputs.PlanTiles(_grid, Cells.Keys, _assets, levels, _fallback);
     internal float? Height(float x,float y)
     {
         float gx=x/128, gy=y/128; int ix=(int)MathF.Floor(gx), iy=(int)MathF.Floor(gy);
         float fx=gx-ix, fy=gy-iy;
         float? Vertex(int a,int b)
         {
-            var land=LandVertex(a,b);if(land is not null || !_fallback)return land;
+            var land=LandVertex(a,b);if(land is not null)return land;
+            if(!_fallback)return _defaultLand;
             if(_fallbackVertices.TryGetValue((a,b),out var known))return known;
             // High-resolution texture pixels repeatedly interpolate the same 128-unit terrain vertices.
             if(_fallbackVertices.Count>=65536)_fallbackVertices.Clear();
-            return _fallbackVertices[(a,b)]=FallbackHeight(a*128f,b*128f);
+            return _fallbackVertices[(a,b)]=FallbackHeight(a*128f,b*128f)??_defaultLand;
         }
         var a=Vertex(ix,iy); if(a is null) return null;
         var b=fx<.00001f ? a : Vertex(ix+1,iy); var c=fy<.00001f ? a : Vertex(ix,iy+1);
@@ -168,7 +158,7 @@ internal sealed class TerrainSource
                 if(!_meshes.TryGetValue(tile,out var field))
                 {
                     if(_meshes.Count>=16) { _meshes.Clear(); _waterMeshes.Clear(); }
-                    string path=$@"meshes\terrain\{_world}\{_world}.{(int)level}.{tile.X}.{tile.Y}.btr";
+                    string path=TerrainInputs.ExistingMesh(tile);
                     field=null;
                     if(_assets.TryOpen(path,out var stream))
                     {
@@ -187,7 +177,13 @@ internal sealed class TerrainSource
     internal float? Water(int x,int y)
     {
         if(!_water.TryGetValue(new(x,y),out float h))
-            return _knownCells.Contains(new(x,y)) ? null : FallbackHeight((x+.5f)*4096,(y+.5f)*4096,water:true);
+        {
+            if(_knownCells.Contains(new(x,y))) return null;
+            float cx=(x+.5f)*4096,cy=(y+.5f)*4096;
+            if(FallbackHeight(cx,cy,water:true) is {} existing) return existing;
+            // A cell that only has the default land lies under the worldspace's default water, as it does in game.
+            return _defaultWater is not null && !Cells.ContainsKey(new(x,y)) && FallbackHeight(cx,cy) is null ? _defaultWater : null;
+        }
         // A water-flagged cell can be entirely above water; avoid placing exposed water over it.
         for(int iy=0;iy<=32;iy++) for(int ix=0;ix<=32;ix++)
             if(Height(x*4096f+ix*128,y*4096f+iy*128) is {} ground && ground<h) return h;
@@ -201,7 +197,7 @@ internal sealed class TerrainSource
         {
             if(_fallback) foreach(var level in TerrainLevels)
             {
-                var tile=_grid.QuadFor(coord,level); string path=$@"textures\terrain\{_world}\{_world}.{(int)level}.{tile.X}.{tile.Y}.dds";
+                var tile=_grid.QuadFor(coord,level); string path=TerrainInputs.ExistingTexture(tile);
                 if (_season is not null && _assets.Exists(path[..^4] + "." + _season + ".dds")) path = path[..^4] + "." + _season + ".dds";
                 if(!_assets.Exists(path))continue;
                 float u=(x/4096-tile.X)/(int)level, v=1-(y/4096-tile.Y)/(int)level;
@@ -213,7 +209,9 @@ internal sealed class TerrainSource
                 }
                 return new(_materials.Read(path,u,v,footprint/((int)level*4096),true,false),Vector3.UnitZ,existingNormal);
             }
-            throw new InvalidDataException($"Missing landscape texture coverage in {_world} {coord}.");
+            if(_defaultLand is null) throw new InvalidDataException($"Missing landscape texture coverage in {_world} {coord}.");
+            try { return _materials.Sample(_defaultDiffuse,_defaultNormal,null,x/4096*repeats,-y/4096*repeats,footprint*repeats/4096); }
+            catch (FileNotFoundException e) { throw new FileNotFoundException($"Missing default landscape texture: {e.FileName ?? _defaultDiffuse} (world {_world}, cell {coord.X},{coord.Y}).", e.FileName ?? _defaultDiffuse, e); }
         }
         float vx=(x-coord.X*4096)/128, vy=(y-coord.Y*4096)/128;
         int quadrant=(vx>=16?1:0)+(vy>=16?2:0);

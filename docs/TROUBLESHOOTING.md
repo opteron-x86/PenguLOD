@@ -11,8 +11,11 @@ Use **Diagnostics** to check missing plugins, source precedence, stale generated
 and runtime requirements. For missing models or textures, inspect which enabled mod or
 archive supplies the named asset. Reinstall or correct the source mod when necessary.
 
-Terrain logs identify the default landscape texture and report missing contributing
-textures with world/cell context. The default is `textures/landscape/dirt02.dds`, subject
+Terrain logs identify the default landscape texture. Before the first tile, and in the
+pipeline preflight, every missing landscape texture and every tile without landscape or
+existing terrain LOD is listed with its worldspace, cell count and first cell. By default
+those use the default texture and the worldspace's default land height; turn the two terrain
+settings off to stop instead. The default texture is `textures/landscape/dirt02.dds`, subject
 to the selected INI's `sDefaultLandDiffuseTexture`. See [terrain settings](TERRAIN.md).
 
 ## Output looks different from nearby terrain or trees

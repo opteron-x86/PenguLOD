@@ -3,6 +3,27 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
+## Unreleased
+
+Terrain
+
+- Land with neither landscape records nor existing terrain LOD no longer stops terrain
+  generation. New **Fill uncovered land at the default height** setting (on by default):
+  those cells are flat at the worldspace's default land height with the default landscape
+  texture, under the worldspace's default water where that is higher. Before, a full
+  Tamriel run needed an older terrain LOD mod enabled to cover its outer rows.
+- A landscape texture that is not installed, or a landscape texture record that cannot be
+  resolved, no longer stops terrain generation. New **Use the default texture for missing
+  landscape textures** setting (on by default) paints those layers with the default texture.
+- Both are checked for every selected worldspace before the first tile and in the pipeline
+  preflight. Each is reported once with its worldspace, the number of cells and the first
+  cell. With a setting off, the run stops there with the complete list, not at the first
+  affected tile.
+- Landscape texture records are resolved once per worldspace rather than once per layer.
+
+Terrain is rebuilt once after updating, because the two settings are part of its inputs.
+Output is unchanged where nothing was missing.
+
 ## [0.6.0-alpha.5] - 2026-11-12
 
 Output management and the command line

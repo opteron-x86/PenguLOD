@@ -41,7 +41,7 @@ public sealed class TerrainMaterialTests
         Assert.InRange(Image(f,"_n").Pixels[1],250,255);
         string before=PenguLOD.Core.Pipeline.OutputSnapshot.HashFile(GamePath.ToFileSystemPath(f.Output,TerrainGeneration.ManifestName));
         File.Delete(GamePath.ToFileSystemPath(f.Textures.Data,@"textures\red.dds"));
-        Assert.Throws<FileNotFoundException>(()=>TerrainGeneration.Run(f.Request));
+        Assert.Throws<InvalidDataException>(()=>TerrainGeneration.Run(f.Request with {SubstituteMissingTextures=false}));
         Assert.Equal(before,PenguLOD.Core.Pipeline.OutputSnapshot.HashFile(GamePath.ToFileSystemPath(f.Output,TerrainGeneration.ManifestName)));
     }
 

@@ -114,6 +114,9 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
         _missing.Add(path); _warnings.Add($"Missing optional terrain {kind}: {path}; using {(kind == "normal" ? "surface slope" : "unoccluded colour")}.");
         return false;
     }
+    /// <summary>True when the diffuse map, or the PBR twin read in its place, is installed.</summary>
+    internal static bool DiffuseAvailable(IAssetSource assets, TerrainMaterialSettings settings, string diffuse) =>
+        assets.Exists(diffuse) || settings.PbrTwins && assets.Exists(Twin(diffuse));
     private static string Twin(string path) => path.StartsWith(@"textures\pbr\", StringComparison.OrdinalIgnoreCase)
         ? path : @"textures\pbr\" + path[@"textures\".Length..];
     private Image Downsample(Image source)
