@@ -14,7 +14,12 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
     private sealed record Image(Vector3[] Pixels, int Width, int Height);
     private sealed record Material(string Diffuse, string? Normal, string? Ao, bool Pbr);
     private readonly Dictionary<(string, string?, string?), Material> _materials = [];
-    private readonly Dictionary<(string, bool), List<Image>> _images = [];
+    /// <summary>The retained levels of one texture: <see cref="First"/> is the level number of <c>Levels[0]</c>.</summary>
+    private sealed record Chain(int BaseWidth, int First, List<Image> Levels) { internal long Bytes => Levels.Sum(l => l.Pixels.LongLength * 12); }
+    private const long CacheBytes = 192L * 1024 * 1024;
+    private readonly Dictionary<(string, bool), Chain> _images = [];
+    /// <summary>How many times a texture file was opened and decoded.</summary>
+    internal int Loads { get; private set; }
     private readonly Dictionary<(string, bool, float), Image> _samples = [];
     private readonly HashSet<string> _missing = new(StringComparer.Ordinal);
     private readonly HashSet<string> _available = new(StringComparer.Ordinal);
@@ -66,42 +71,59 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
         ct.ThrowIfCancellationRequested();
         if (_samples.TryGetValue((path,color,footprint),out var selected)) return Sample(selected,u,v,wrap);
         var key = (path, color);
-        if (!_images.TryGetValue(key, out var mips))
+        _images.TryGetValue(key, out var mips);
+        // A terrain tile reads a landscape texture far below its own resolution, so only the level asked for and the
+        // coarser ones are kept. Holding the full image for every texture filled the cache within one large tile, and
+        // each refill decoded the source files again.
+        if (mips is null || Lod(footprint, mips.BaseWidth) < mips.First)
         {
-            if (!assets.TryOpen(path, out var stream)) throw new FileNotFoundException("Missing landscape texture: " + path, path);
-            TextureImage raw;
-            using (stream) { using var bytes = new MemoryStream(); stream.CopyTo(bytes); raw = TextureImages.Decode(bytes.ToArray()); }
-            int factor=1;
-            while (raw.Width/factor>512 || raw.Height/factor>512) factor*=2;
-            int width=Math.Max(1,raw.Width/factor), height=Math.Max(1,raw.Height/factor);
-            var pixels = new Vector3[width*height];
-            for (int y=0;y<height;y++)
-            {
-                ct.ThrowIfCancellationRequested();
-                for (int x=0;x<width;x++)
-                {
-                    Vector3 sum=default; int count=0;
-                    for (int sy=y*factor;sy<Math.Min((y+1)*factor,raw.Height);sy++)
-                    for (int sx=x*factor;sx<Math.Min((x+1)*factor,raw.Width);sx++)
-                    {
-                        int offset=(sy*raw.Width+sx)*4;
-                        byte r=raw.Pixels[offset], g=raw.Pixels[offset+1], b=raw.Pixels[offset+2];
-                        sum+=color ? new Vector3(Linear[r],Linear[g],Linear[b]) : new Vector3(r,g,b)/255;
-                        count++;
-                    }
-                    pixels[y*width+x]=sum/count;
-                }
-            }
-            var image = new Image(pixels,width,height);
-            // Cache complete mip chains under 192 MiB. Material records do not retain evicted images.
-            if (_bytes >= 192L * 1024 * 1024) { _images.Clear(); _samples.Clear(); _bytes = 0; }
-            mips = [image]; _images[key] = mips; _bytes += image.Pixels.LongLength * 12;
+            var image = Load(path, color);
+            int baseWidth = image.Width, first = 0;
+            for (int lod = Lod(footprint, baseWidth); first < lod && (image.Width > 1 || image.Height > 1); first++) image = Downsample(image);
+            if (mips is not null) { _bytes -= mips.Bytes; Forget(path, color); }
+            if (_bytes >= CacheBytes) { _images.Clear(); _samples.Clear(); _bytes = 0; }
+            mips = new(baseWidth, first, [image]); _images[key] = mips; _bytes += mips.Bytes;
         }
-        int lod = Math.Max(0, (int)MathF.Floor(MathF.Log2(Math.Max(1, footprint * mips[0].Width))));
-        while (mips.Count <= lod && (mips[^1].Width > 1 || mips[^1].Height > 1))
-        { var mip = Downsample(mips[^1]); mips.Add(mip); _bytes += mip.Pixels.LongLength * 12; }
-        selected=mips[Math.Min(lod, mips.Count - 1)];_samples[(path,color,footprint)]=selected;
+        int wanted = Lod(footprint, mips.BaseWidth);
+        while (mips.First + mips.Levels.Count <= wanted && (mips.Levels[^1].Width > 1 || mips.Levels[^1].Height > 1))
+        { var mip = Downsample(mips.Levels[^1]); mips.Levels.Add(mip); _bytes += mip.Pixels.LongLength * 12; }
+        selected=mips.Levels[Math.Min(wanted - mips.First, mips.Levels.Count - 1)];_samples[(path,color,footprint)]=selected;
         return Sample(selected, u, v, wrap);
+    }
+
+    private static int Lod(float footprint, int baseWidth) => Math.Max(0, (int)MathF.Floor(MathF.Log2(Math.Max(1, footprint * baseWidth))));
+    private void Forget(string path, bool color)
+    { foreach (var stale in _samples.Keys.Where(k => k.Item2 == color && k.Item1 == path).ToArray()) _samples.Remove(stale); }
+
+    /// <summary>The source texture reduced to at most 512 pixels a side: level 0 of its chain.</summary>
+    private Image Load(string path, bool color)
+    {
+        if (!assets.TryOpen(path, out var stream)) throw new FileNotFoundException("Missing landscape texture: " + path, path);
+        Loads++;
+        TextureImage raw;
+        using (stream) { using var bytes = new MemoryStream(); stream.CopyTo(bytes); raw = TextureImages.Decode(bytes.ToArray()); }
+        int factor=1;
+        while (raw.Width/factor>512 || raw.Height/factor>512) factor*=2;
+        int width=Math.Max(1,raw.Width/factor), height=Math.Max(1,raw.Height/factor);
+        var pixels = new Vector3[width*height];
+        for (int y=0;y<height;y++)
+        {
+            ct.ThrowIfCancellationRequested();
+            for (int x=0;x<width;x++)
+            {
+                Vector3 sum=default; int count=0;
+                for (int sy=y*factor;sy<Math.Min((y+1)*factor,raw.Height);sy++)
+                for (int sx=x*factor;sx<Math.Min((x+1)*factor,raw.Width);sx++)
+                {
+                    int offset=(sy*raw.Width+sx)*4;
+                    byte r=raw.Pixels[offset], g=raw.Pixels[offset+1], b=raw.Pixels[offset+2];
+                    sum+=color ? new Vector3(Linear[r],Linear[g],Linear[b]) : new Vector3(r,g,b)/255;
+                    count++;
+                }
+                pixels[y*width+x]=sum/count;
+            }
+        }
+        return new Image(pixels,width,height);
     }
 
     internal bool Optional(string? path, string kind, out string found)

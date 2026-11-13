@@ -20,6 +20,10 @@ Terrain
   cell. With a setting off, the run stops there with the complete list, not at the first
   affected tile.
 - Landscape texture records are resolved once per worldspace rather than once per layer.
+- LOD16 and LOD32 terrain tiles that cover many different landscape textures no longer take
+  minutes each. The texture cache kept every texture at 512 pixels although a tile reads a
+  much smaller level, so a large tile filled it, emptied it and decoded the same files
+  again many times. It now keeps only the levels a tile reads. Output is byte-identical.
 
 Terrain is rebuilt once after updating, because the two settings are part of its inputs.
 Output is unchanged where nothing was missing.
