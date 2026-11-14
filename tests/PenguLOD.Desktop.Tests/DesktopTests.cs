@@ -12,6 +12,8 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Mutagen.Bethesda;
+using Mutagen.Bethesda.Plugins.Records;
 
 [assembly: AvaloniaTestApplication(typeof(PenguLOD.Desktop.Tests.TestApp))]
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
@@ -785,6 +787,127 @@ public sealed class DesktopTests : IDisposable
             using var frame = window.CaptureRenderedFrame(); frame!.Save(Path.Combine(screenshots, "completed-build.png"), PngBitmapEncoderOptions.Default);
         }
         window.Close();
+    }
+
+    private static TerrainFixture WorldspaceFixture()
+    {
+        var fixture = new TerrainFixture(editMod: mod =>
+        {
+            var parent = mod.Worldspaces.Single(); parent.Name = "Fixture Land";
+            var city = mod.Worldspaces.AddNew(); city.EditorID = "FixtureCity"; city.Name = "Walled City";
+            city.Parent = new Mutagen.Bethesda.Skyrim.WorldspaceParent(); city.Parent.Worldspace.SetTo(parent);
+            var reach = mod.Worldspaces.AddNew(); reach.EditorID = "arnimaDUPLICATE003"; reach.Name = "The Reach";
+            var town = mod.Worldspaces.AddNew(); town.EditorID = "Arnimatown"; town.Name = "Arnima";
+            town.Parent = new Mutagen.Bethesda.Skyrim.WorldspaceParent(); town.Parent.Worldspace.SetTo(reach);
+        });
+        TextureFixture.Put(fixture.Textures.Data, @"lodsettings\arnimaDUPLICATE003.lod", new PenguLOD.Core.World.LodSettings(-64, -64, 128, 4, 32).ToBytes());
+        TextureFixture.Put(fixture.Textures.Data, @"lodsettings\Arnimatown.lod", new PenguLOD.Core.World.LodSettings(-8, -8, 16, 4, 8).ToBytes());
+        return fixture;
+    }
+    private static async Task<MainWindow.WorldspacePicker> OpenPicker(MainWindow window, string property)
+    {
+        Click(window, "Overview");
+        window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "Choose" + property).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await WaitFor(() => window.OwnedWindows.OfType<MainWindow.WorldspacePicker>().Any());
+        var picker = window.OwnedWindows.OfType<MainWindow.WorldspacePicker>().Single();
+        picker.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+        return picker;
+    }
+    private static T Named<T>(Window window, string name) where T : Control => window.GetVisualDescendants().OfType<T>().Single(c => c.Name == name);
+    private static void Press(Window window, string name)
+    { Named<Button>(window, name).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs(); }
+
+    [AvaloniaFact]
+    public async Task WorldspacesAreChosenFromTheLoadOrderForTerrainAndObjectLod()
+    {
+        using var fixture = WorldspaceFixture();
+        var window = Window(); window.ReplaceSettings(new DesktopSettings
+        {
+            SourceMode = "Data folder / Vortex", GameFolder = fixture.Textures.Data, PluginsFile = fixture.Textures.Plugins,
+            Worldspaces = "FixtureWorld, RemovedWorld", GrassWorldspaces = "all",
+        });
+        window.Show();
+        try
+        {
+            var picker = await OpenPicker(window, "Worldspaces");
+            // What the field holds is ticked; a worldspace without LOD settings cannot be chosen; an ID that is gone is named.
+            Assert.False(Named<CheckBox>(picker, "AllWorldspaces").IsChecked);
+            Assert.True(Named<CheckBox>(picker, "World_FixtureWorld").IsChecked);
+            Assert.False(Named<CheckBox>(picker, "World_arnimaDUPLICATE003").IsChecked);
+            Assert.False(Named<CheckBox>(picker, "World_FixtureCity").IsEnabled);
+            Assert.Contains("RemovedWorld", Named<TextBlock>(picker, "UnknownWorldspaces").Text);
+            // Filtering by a plugin or part of a name, then taking everything shown, is how one mod's worldspaces are picked.
+            Named<TextBox>(picker, "WorldspaceFilter").Text = "arnima"; Dispatcher.UIThread.RunJobs();
+            Assert.False(Named<CheckBox>(picker, "World_FixtureWorld").GetVisualAncestors().OfType<Grid>().First().IsVisible);
+            Press(picker, "ClearShown"); Named<CheckBox>(picker, "World_FixtureWorld").IsChecked = false; Dispatcher.UIThread.RunJobs();
+            Assert.False(Named<Button>(picker, "UseSelection").IsEnabled);
+            Press(picker, "SelectShown");
+            if (Environment.GetEnvironmentVariable("PENGULOD_SCREENSHOTS") is { } screenshots)
+            { picker.UpdateLayout(); Dispatcher.UIThread.RunJobs(); using var frame = picker.CaptureRenderedFrame(); frame!.Save(Path.Combine(screenshots, "worldspace-picker.png"), PngBitmapEncoderOptions.Default); }
+            Press(picker, "UseSelection");
+            await WaitFor(() => !window.OwnedWindows.Any());
+            Assert.Equal("arnimaDUPLICATE003, Arnimatown", window.Settings.Worldspaces);
+            Assert.Equal("arnimaDUPLICATE003, Arnimatown", Named<TextBox>(window, "Worldspaces").Text);
+            Assert.Equal(["arnimaDUPLICATE003", "Arnimatown"], RequestFactory.Worldspaces(window.Settings.Worldspaces)!);
+
+            // Cancel keeps the field; every worldspace is written as the field's own word for it.
+            picker = await OpenPicker(window, "Worldspaces");
+            Named<CheckBox>(picker, "AllWorldspaces").IsChecked = true; Press(picker, "CancelSelection");
+            await WaitFor(() => !window.OwnedWindows.Any());
+            Assert.Equal("arnimaDUPLICATE003, Arnimatown", window.Settings.Worldspaces);
+            picker = await OpenPicker(window, "Worldspaces");
+            Named<CheckBox>(picker, "AllWorldspaces").IsChecked = true; Dispatcher.UIThread.RunJobs(); Press(picker, "UseSelection");
+            await WaitFor(() => !window.OwnedWindows.Any());
+            Assert.Equal("*", window.Settings.Worldspaces);
+            if (Environment.GetEnvironmentVariable("PENGULOD_SCREENSHOTS") is { } folder)
+            { Click(window, "Overview"); using var frame = window.CaptureRenderedFrame(); frame!.Save(Path.Combine(folder, "worldspace-fields.png"), PngBitmapEncoderOptions.Default); }
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task GrassWorldspacesAreChosenSeparatelyAndNeedNoLodSettings()
+    {
+        using var fixture = WorldspaceFixture();
+        var window = Window(); window.ReplaceSettings(new DesktopSettings
+        {
+            SourceMode = "Data folder / Vortex", GameFolder = fixture.Textures.Data, PluginsFile = fixture.Textures.Plugins,
+            Worldspaces = "FixtureWorld", GrassWorldspaces = "all",
+        });
+        window.Show();
+        try
+        {
+            var picker = await OpenPicker(window, "GrassWorldspaces");
+            Assert.True(Named<CheckBox>(picker, "AllWorldspaces").IsChecked);
+            Assert.True(Named<CheckBox>(picker, "World_FixtureCity").IsEnabled);
+            Named<CheckBox>(picker, "AllWorldspaces").IsChecked = false;
+            Named<CheckBox>(picker, "World_FixtureCity").IsChecked = true; Named<CheckBox>(picker, "World_FixtureWorld").IsChecked = true;
+            Dispatcher.UIThread.RunJobs(); Press(picker, "UseSelection");
+            await WaitFor(() => !window.OwnedWindows.Any());
+            Assert.Equal("FixtureCity, FixtureWorld", window.Settings.GrassWorldspaces);
+            Assert.Equal("FixtureWorld", window.Settings.Worldspaces);
+            picker = await OpenPicker(window, "GrassWorldspaces");
+            Named<CheckBox>(picker, "AllWorldspaces").IsChecked = true; Dispatcher.UIThread.RunJobs(); Press(picker, "UseSelection");
+            await WaitFor(() => !window.OwnedWindows.Any());
+            Assert.Equal("all", window.Settings.GrassWorldspaces);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task ChoosingWorldspacesWithoutAGameSourceExplainsWhatIsMissing()
+    {
+        var window = Window(); window.ReplaceSettings(new DesktopSettings { SourceMode = "Data folder / Vortex", GameFolder = Path.Combine(_root, "missing") });
+        window.Show();
+        try
+        {
+            Click(window, "Overview");
+            window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ChooseWorldspaces").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await WaitFor(() => window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.IsVisible && t.Text?.Contains("missing") == true));
+            Assert.Empty(window.OwnedWindows);
+            Assert.True(window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ChooseWorldspaces").IsEffectivelyEnabled);
+        }
+        finally { window.Close(); }
     }
 
     [AvaloniaFact]
