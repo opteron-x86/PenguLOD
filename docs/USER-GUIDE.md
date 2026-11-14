@@ -49,7 +49,8 @@ folder. Use the individual path overrides only when the saved locations are wron
 On **Overview**, set a separate output folder for each stage you plan to run.
 Choose the terrain and object LOD worldspaces:
 `Tamriel` for the main Skyrim world, a comma-separated list for selected worlds,
-or leave it blank (or enter `*`) for every world with LOD settings.
+or leave it blank (or enter `*`) for every world with LOD settings. **Choose…**
+lists the worldspaces in your load order, so you do not need to know their IDs.
 
 The world selection applies to terrain and object LOD. **Grass cache has its own
 worldspace selection. Texture generation uses the selected load order and is not

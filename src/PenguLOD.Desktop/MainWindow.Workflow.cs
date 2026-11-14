@@ -66,8 +66,8 @@ public sealed partial class MainWindow
     private Control WorkflowWorldspaces()
     {
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), ColumnSpacing = 16 };
-        row.Children.Add(Field("Terrain and object LOD", nameof(DesktopSettings.Worldspaces), "Comma-separated worldspace IDs, such as Tamriel. * includes all worlds with LOD settings."));
-        var grass = Field("Grass cache", nameof(DesktopSettings.GrassWorldspaces), "Independent of terrain and object LOD. Use all, or comma-separated worldspace IDs.");
+        row.Children.Add(WorldspaceField("Terrain and object LOD", nameof(DesktopSettings.Worldspaces), false, "Comma-separated worldspace IDs, such as Tamriel. * includes all worlds with LOD settings. Choose… lists the worldspaces in the load order."));
+        var grass = WorldspaceField("Grass cache", nameof(DesktopSettings.GrassWorldspaces), true, "Independent of terrain and object LOD. Use all, or comma-separated worldspace IDs. Choose… lists the worldspaces in the load order.");
         Grid.SetColumn(grass, 1); row.Children.Add(grass);
         return Card("Worldspaces", row);
     }
