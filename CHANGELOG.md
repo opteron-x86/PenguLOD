@@ -3,6 +3,17 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
+## Unreleased
+
+Reusing finished work
+
+- Playing the game or running an animation tool between runs no longer rebuilds every
+  stage. The check for changed inputs counted files no stage reads: `ModOrganizer.ini`,
+  each mod's `meta.ini`, `SkyrimPrefs.ini`, animation files, logs, and the settings, caches
+  and menu state SKSE plugins write under `SKSE/Plugins`. Those are now left out; the
+  grass, season and po3 Tweaks settings there still count. Enabling, disabling or updating
+  a mod still rebuilds. The first run with this version rebuilds once.
+
 ## [0.6.0-alpha.5] - 2026-11-12
 
 Output management and the command line
