@@ -13,7 +13,7 @@ public sealed partial class MainWindow
         Heading("Terrain"),
         Card("Output", Stack(12,
             PathField("Terrain output", nameof(DesktopSettings.TerrainOutput)),
-            Field("Worldspaces", nameof(DesktopSettings.Worldspaces), "Shared with Object LOD. Use comma-separated worldspace IDs, or * for all worlds."),
+            WorldspaceField("Worldspaces", nameof(DesktopSettings.Worldspaces), false, "Shared with Object LOD. Use comma-separated worldspace IDs, or * for all worlds. Choose… lists the worldspaces in the load order."),
             Check("Fill missing landscape from existing terrain LOD", nameof(DesktopSettings.TerrainFallback)),
             Help(Check(TerrainGeneration.FillUncoveredLandOption, nameof(DesktopSettings.TerrainFillUncovered)),
                 "Where a tile has neither landscape records nor existing terrain LOD. Off: the run stops and lists those tiles."),

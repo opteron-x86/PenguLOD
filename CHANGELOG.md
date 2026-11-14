@@ -81,12 +81,14 @@ Reusing finished work
   grass, season and po3 Tweaks settings there still count. Enabling, disabling or updating
   a mod still rebuilds. The first run with this version rebuilds once.
 
-Command line
+Choosing worldspaces
 
-- New `PenguLOD worldspaces` command lists every worldspace in the load order: the ID the
-  Worldspaces fields and `--worldspace` take, the name the game shows, the plugin that
-  adds it, its parent worldspace and its LOD grid size. Worldspaces without LOD settings,
-  which terrain and object LOD skip, are listed last.
+- **Choose…** beside every worldspace field lists the worldspaces in the load order with
+  their ID, in-game name, plugin, parent worldspace and LOD grid size, to tick instead of
+  typing IDs. A filter narrows the list by any of those; **Select shown** takes what is
+  left, which picks all worldspaces of one mod. Worldspaces without LOD settings, which
+  terrain and object LOD skip, cannot be ticked there.
+- New `PenguLOD worldspaces` command prints the same list.
 
 ## [0.6.0-alpha.5] - 2026-11-12
 

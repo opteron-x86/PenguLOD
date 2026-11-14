@@ -44,6 +44,14 @@ object LOD** worldspace field accepts comma-separated editor IDs, such as
 `Tamriel, DLC2SolstheimWorld`; blank or `*` includes all worlds with LOD settings.
 **Grass cache** has an independent worldspace selection. Textures use the load order.
 
+**Choose…** beside a worldspace field reads the selected game source and lists its
+worldspaces with their ID, in-game name, plugin, parent worldspace and LOD grid size. Tick
+the ones to generate, or the box for every worldspace. The filter matches any of those
+columns, so typing a plugin name such as `arnima` and pressing **Select shown** picks one
+mod's worldspaces. Worldspaces without LOD settings are listed last and cannot be ticked
+for terrain and object LOD; the grass cache can take any worldspace. The list is read
+again each time, so it follows the enabled mods.
+
 **Check setup** checks the selected stages. **Run selected stages** starts them,
 or resumes a matching saved run. The run button is disabled when no stages are
 selected. Individual stage pages have their own generation button at the bottom
