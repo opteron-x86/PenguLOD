@@ -30,6 +30,9 @@ public static partial class Program
           PenguLOD diagnose --request <request.json> --report <diagnostics.json>
                                          Check a pipeline without generating. Optional: --deep-scan --verify-outputs
                                          --inspect-asset <Data-relative-path>. Export contains metadata, not game assets.
+          PenguLOD worldspaces --settings <preset.json> | --mo2 <path> [--profile <name>] | --data <path> [--plugins <path>]
+                                         List every worldspace in the load order with the ID that --worldspace and the
+                                         desktop's Worldspaces fields take, its name, plugin and LOD grid size.
           PenguLOD scan [options]        analyse the load order and show what would be built
           PenguLOD generate [options]    scan, then write the changed LOD blocks (.bto) to --output
           PenguLOD author --plugin <file> --author-out <folder> [options]
@@ -306,6 +309,7 @@ public static partial class Program
                 "export-job" => ExportJob(options),
                 "job-status" => JobStatus(options),
                 "diagnose" => RunDiagnose(options),
+                "worldspaces" => RunWorldspaces(options),
                 "scan" => RunScan(options, generate: false),
                 "generate" => options.Has("request") || options.Has("settings") ? RunPipeline(options,"lod") : RunScan(options, generate: true),
                 "author" => RunAuthor(options),
@@ -423,13 +427,38 @@ public static partial class Program
         Console.WriteLine(JsonSerializer.Serialize(journal,PersistentPipeline.Json));return 0;
     }
 
+    private static GameContextOptions GameFromArgs(CliArgs a) => a.Get("mo2") is { } mo2Folder
+        ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2Folder, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"))
+        : new GameContextOptions(a.Get("data"), a.Get("plugins"), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"));
+
+    private static int RunWorldspaces(CliArgs a)
+    {
+        a.RejectIgnoredWithPreset();
+        // Progress goes to standard error so the table can be piped or saved on its own.
+        if (a.Has("request")) throw new CliArgException("worldspaces takes --settings or the game source options, not --request.");
+        var game = a.Get("settings") is { } preset ? RequestFactory.Game(SettingsStore.ReadPreset(preset)) : GameFromArgs(a);
+        var worlds = WorldspaceCatalog.List(game, new SyncProgress(Console.Error.WriteLine), Cancellation);
+        Console.Write(WorldspaceTable(worlds));
+        return 0;
+    }
+
+    internal static string WorldspaceTable(IReadOnlyList<WorldspaceInfo> worlds)
+    {
+        var rows = worlds.Select(w => new[] { w.EditorId, w.Name ?? "", w.Plugin, w.Parent ?? "",
+            !w.HasLodSettings ? "no LOD settings" : w.Cells is { } cells ? $"{cells} x {cells} cells" : "unreadable LOD settings" }).Prepend(["ID", "Name", "Plugin", "Parent", "LOD grid"]).ToArray();
+        var widths = Enumerable.Range(0, 5).Select(i => rows.Max(r => r[i].Length)).ToArray();
+        var text = new System.Text.StringBuilder();
+        foreach (var row in rows) text.AppendLine(string.Join("  ", row.Select((cell, i) => i == 4 ? cell : cell.PadRight(widths[i]))).TrimEnd());
+        int usable = worlds.Count(w => w.HasLodSettings);
+        text.AppendLine().AppendLine($"{worlds.Count} worldspaces, {usable} with LOD settings. Terrain and object LOD skip a worldspace without LOD settings.");
+        return text.ToString();
+    }
+
     private static int RunScan(CliArgs a, bool generate)
     {
         var total = Stopwatch.StartNew();
         a.RejectIgnoredWithPreset();
-        var gameOptions = a.Get("mo2") is { } mo2Folder
-            ? new GameContextOptions(Mode: GameSourceMode.Mo2Instance, Mo2InstanceFolder: mo2Folder, Mo2Profile: a.Get("profile"), Mo2Locations: Mo2LocationsFromArgs(a), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"))
-            : new GameContextOptions(a.Get("data"), a.Get("plugins"), GameIniPath: a.Get("game-ini"), WinePrefix: a.Get("wine-prefix"));
+        var gameOptions = GameFromArgs(a);
         int ObjectInt(string key, int fallback) => a.Integer(key, fallback);
         float ObjectFloat(string key, float fallback) => a.Number(key, fallback, float.MinValue, float.MaxValue);
         string Choice(string key, string fallback, params string[] allowed) => a.Get(key)?.ToLowerInvariant() is not { } value ? fallback

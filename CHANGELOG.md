@@ -3,6 +3,15 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
+## Unreleased
+
+Command line
+
+- New `PenguLOD worldspaces` command lists every worldspace in the load order: the ID the
+  Worldspaces fields and `--worldspace` take, the name the game shows, the plugin that
+  adds it, its parent worldspace and its LOD grid size. Worldspaces without LOD settings,
+  which terrain and object LOD skip, are listed last.
+
 ## [0.6.0-alpha.5] - 2026-11-12
 
 Output management and the command line

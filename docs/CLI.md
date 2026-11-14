@@ -11,6 +11,7 @@ PenguLOD texgen --settings my-preset.json
 PenguLOD terrain --settings my-preset.json
 PenguLOD grass --settings my-preset.json
 PenguLOD generate --settings my-preset.json
+PenguLOD worldspaces --settings my-preset.json
 PenguLOD scan --settings my-preset.json --report scan.json
 PenguLOD export-job --settings my-preset.json --stages textures,terrain,lod --output job.json
 PenguLOD pipeline --request job.json --report run.json
@@ -22,6 +23,13 @@ Omit `--stages` to use the desktop's selected pipeline stages. Stage commands se
 one stage. Referenced generated inputs must already exist for a standalone LOD command;
 a combined pipeline connects its new outputs automatically. `--request` and `--settings`
 are mutually exclusive. A raw request must define every requested stage.
+
+`worldspaces` lists every worldspace in the preset's load order: the ID to type in the
+Worldspaces fields or pass to `--worldspace`, the name the game shows, the plugin that adds
+it, its parent worldspace, and the size of its LOD grid. Worldspaces without LOD settings
+are listed last; terrain and object LOD skip them. It also takes `--mo2`, `--profile`,
+`--data` and `--plugins` in place of a preset. Progress goes to standard error, so the
+table can be saved with `> worldspaces.txt`.
 
 The preset or request defines the generation. Options that would change it, such as
 `--output`, `--worldspace` or `--grass-density`, are refused next to `--settings` or
