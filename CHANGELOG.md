@@ -24,6 +24,13 @@ Terrain
   minutes each. The texture cache kept every texture at 512 pixels although a tile reads a
   much smaller level, so a large tile filled it, emptied it and decoded the same files
   again many times. It now keeps only the levels a tile reads. Output is byte-identical.
+- Terrain uses every worker thread. Tiles were built one at a time on one thread, and the
+  terrain-shadow heightmap likewise; both now run on all workers (**Preferences → Worker
+  threads**). Landscape and cell records are found once for the run, not once per
+  worldspace and season, and decoded landscape textures are shared between worldspaces.
+  Output is byte-identical for any worker count.
+- The heightmap export no longer re-reads existing terrain meshes for every row. It kept 16
+  of them, fewer than one row of a large worldspace crosses.
 
 - 16-bit DDS textures are read: R5G6B5, which the Creation Kit writes for terrain LOD normal
   maps, plus X1R5G5B5, A1R5G5B5 and A4R4G4B4 and their DXGI equivalents. A worldspace whose
@@ -64,6 +71,24 @@ Regenerate object LOD, tree LOD and textures to pick up these changes: block has
 billboard, hybrid trunk, automatic object, PBR and opaque-copy caches rebuild once. An
 in-game look at normal-mapped billboards and converted Skyrim LE meshes is still
 recommended before a release.
+
+Reusing finished work
+
+- Playing the game or running an animation tool between runs no longer rebuilds every
+  stage. The check for changed inputs counted files no stage reads: `ModOrganizer.ini`,
+  each mod's `meta.ini`, `SkyrimPrefs.ini`, animation files, logs, and the settings, caches
+  and menu state SKSE plugins write under `SKSE/Plugins`. Those are now left out; the
+  grass, season and po3 Tweaks settings there still count. Enabling, disabling or updating
+  a mod still rebuilds. The first run with this version rebuilds once.
+
+Choosing worldspaces
+
+- **Choose…** beside every worldspace field lists the worldspaces in the load order with
+  their ID, in-game name, plugin, parent worldspace and LOD grid size, to tick instead of
+  typing IDs. A filter narrows the list by any of those; **Select shown** takes what is
+  left, which picks all worldspaces of one mod. Worldspaces without LOD settings, which
+  terrain and object LOD skip, cannot be ticked there.
+- New `PenguLOD worldspaces` command prints the same list.
 
 ## [0.6.0-alpha.5] - 2026-11-12
 
