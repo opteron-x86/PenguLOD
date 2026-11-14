@@ -84,14 +84,13 @@ public class TerrainDefaultTextureTests
     }
 
     [Fact]
-    public void ARealMissingPaintedTextureStillFailsWithItsWorldAndCell()
+    public void AMissingPaintedTextureStopsWithItsWorldAndCellWhenSubstitutionIsOff()
     {
         using var f = new TerrainFixture();
         File.Delete(GamePath.ToFileSystemPath(f.Textures.Data, @"textures\red.dds"));
         TextureFixture.Put(f.Textures.Data, @"textures\landscape\dirt02.dds", TextureFixture.Solid(0, 0, 240));
-        var error = Assert.Throws<FileNotFoundException>(() => TerrainGeneration.Run(f.Request));
-        Assert.Equal(@"textures\red.dds", error.FileName);
-        Assert.Contains("world FixtureWorld, cell", error.Message);
+        var error = Assert.Throws<InvalidDataException>(() => TerrainGeneration.Run(f.Request with { SubstituteMissingTextures = false }));
+        Assert.Contains(@"FixtureWorld: landscape texture textures\red.dds is missing and 16 cells need it (first cell -4,-4)", error.Message);
         Assert.False(Directory.Exists(f.Output));
     }
 

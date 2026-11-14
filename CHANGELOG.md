@@ -3,6 +3,44 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
+## Unreleased
+
+Terrain
+
+- Land with neither landscape records nor existing terrain LOD no longer stops terrain
+  generation. New **Fill uncovered land at the default height** setting (on by default):
+  those cells are flat at the worldspace's default land height with the default landscape
+  texture, under the worldspace's default water where that is higher. Before, a full
+  Tamriel run needed an older terrain LOD mod enabled to cover its outer rows.
+- A landscape texture that is not installed, or a landscape texture record that cannot be
+  resolved, no longer stops terrain generation. New **Use the default texture for missing
+  landscape textures** setting (on by default) paints those layers with the default texture.
+- Both are checked for every selected worldspace before the first tile and in the pipeline
+  preflight. Each is reported once with its worldspace, the number of cells and the first
+  cell. With a setting off, the run stops there with the complete list, not at the first
+  affected tile.
+- Landscape texture records are resolved once per worldspace rather than once per layer.
+- LOD16 and LOD32 terrain tiles that cover many different landscape textures no longer take
+  minutes each. The texture cache kept every texture at 512 pixels although a tile reads a
+  much smaller level, so a large tile filled it, emptied it and decoded the same files
+  again many times. It now keeps only the levels a tile reads. Output is byte-identical.
+
+- 16-bit DDS textures are read: R5G6B5, which the Creation Kit writes for terrain LOD normal
+  maps, plus X1R5G5B5, A1R5G5B5 and A4R4G4B4 and their DXGI equivalents. A worldspace whose
+  existing terrain LOD used one stopped terrain generation with "DDS pixel format (16-bit,
+  flags 0x40) is not supported".
+
+Terrain is rebuilt once after updating, because the two settings are part of its inputs.
+Output is unchanged where nothing was missing.
+
+Running alongside the game
+
+- The preflight warns when the game is running, and on Linux when the game's `Data` folder
+  is a mod manager's virtual file system at that moment. Starting or closing the game from
+  such a mod manager during a run changes `Data` underneath PenguLOD.
+- A read that fails because its storage changed or went away now stops the pipeline with a
+  plain explanation and what to do, in place of a stack trace ending in "Input/output error".
+
 ## [0.6.0-alpha.5] - 2026-11-12
 
 Output management and the command line

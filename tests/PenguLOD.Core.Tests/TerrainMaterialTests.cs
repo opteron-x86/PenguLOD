@@ -41,7 +41,7 @@ public sealed class TerrainMaterialTests
         Assert.InRange(Image(f,"_n").Pixels[1],250,255);
         string before=PenguLOD.Core.Pipeline.OutputSnapshot.HashFile(GamePath.ToFileSystemPath(f.Output,TerrainGeneration.ManifestName));
         File.Delete(GamePath.ToFileSystemPath(f.Textures.Data,@"textures\red.dds"));
-        Assert.Throws<FileNotFoundException>(()=>TerrainGeneration.Run(f.Request));
+        Assert.Throws<InvalidDataException>(()=>TerrainGeneration.Run(f.Request with {SubstituteMissingTextures=false}));
         Assert.Equal(before,PenguLOD.Core.Pipeline.OutputSnapshot.HashFile(GamePath.ToFileSystemPath(f.Output,TerrainGeneration.ManifestName)));
     }
 
@@ -103,6 +103,34 @@ public sealed class TerrainMaterialTests
     }
 
     [Fact]
+    public void ATileThatReadsManyTexturesDecodesEachOfThemOnce()
+    {
+        // 64 textures at 512 pixels a side fill the cache if every pixel is kept, as one LOD16 or LOD32 tile used to do.
+        using var f=new TextureFixture();
+        byte[] pixels=new byte[512*512*4];
+        for(int i=0;i<512*512;i++) {byte c=(byte)(i%512<256?40:200);pixels[i*4]=pixels[i*4+1]=pixels[i*4+2]=c;pixels[i*4+3]=255;}
+        byte[] dds=RawDds(pixels,512);
+        string[] paths=Enumerable.Range(0,64).Select(i=>$@"textures\landscape\many{i:D2}.dds").ToArray();
+        foreach(string path in paths)TextureFixture.Put(f.Data,path,dds);
+        var assets=AssetIndex.Build(GameRelease.SkyrimSE,f.Data);
+        var materials=new TerrainMaterials(assets,new(),default);
+        // A footprint of an eighth of the texture, which is finer than any terrain tile samples a landscape texture.
+        for(int pass=0;pass<3;pass++)foreach(string path in paths)materials.Read(path,.25f,.25f,.125f,color:true);
+        Assert.Equal(64,materials.Loads);
+
+        // A coarser read comes from the kept levels; a finer one decodes the file again and matches a first read.
+        var coarse=materials.Read(paths[0],.25f,.25f,.5f,color:true);
+        Assert.Equal(64,materials.Loads);
+        var fine=materials.Read(paths[0],.25f,.25f,1/512f,color:true);
+        Assert.Equal(65,materials.Loads);
+        var first=new TerrainMaterials(assets,new(),default);
+        Assert.Equal(first.Read(paths[0],.25f,.25f,1/512f,color:true),fine);
+        Assert.Equal(first.Read(paths[0],.25f,.25f,.5f,color:true),coarse);
+        Assert.Equal(first.Read(paths[0],.25f,.25f,.125f,color:true),materials.Read(paths[0],.25f,.25f,.125f,color:true));
+        Assert.Equal(65,materials.Loads);
+    }
+
+    [Fact]
     public void DefaultNormalIniAndSeasonalNormalsReachTheOutput()
     {
         using(var f=new TerrainFixture(editLandscape:l=>l.Layers.Clear()))
@@ -123,11 +151,11 @@ public sealed class TerrainMaterialTests
         }
     }
 
-    private static byte[] RawDds(byte[] pixels)
+    private static byte[] RawDds(byte[] pixels,uint size=8)
     {
         var bytes=new byte[128+pixels.Length];
         void Set(int at,uint value)=>System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(at),value);
-        Set(0,0x20534444);Set(4,124);Set(8,0x100F);Set(12,8);Set(16,8);Set(20,32);
+        Set(0,0x20534444);Set(4,124);Set(8,0x100F);Set(12,size);Set(16,size);Set(20,size*4);
         Set(76,32);Set(80,0x41);Set(88,32);Set(92,0xff);Set(96,0xff00);Set(100,0xff0000);Set(104,0xff000000);Set(108,0x1000);
         pixels.CopyTo(bytes,128);return bytes;
     }

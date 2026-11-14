@@ -60,14 +60,23 @@ public static class PipelineDiagnostics
                 catch(IOException e){Add("Warning","free-space-unavailable",e.Message,"Check destination free space before generation.");}
             }
         }
-        source=source with{ExcludeFolders=(source.ExcludeFolders??[]).Concat(outputs).Distinct().ToArray(),ExtraLooseRoots=(source.ExtraLooseRoots??[]).Concat(seasonal ? ["seasons","grass"] : Array.Empty<string>()).Concat(new[]{"dyndolod"}).Concat(deepScan || inspectAsset is {Length:>0} ? ["skse","textures"] : new[]{"skse"}).Distinct().ToArray()};
+        source=source with{ExcludeFolders=(source.ExcludeFolders??[]).Concat(outputs).Distinct().ToArray(),ExtraLooseRoots=(source.ExtraLooseRoots??[]).Concat(seasonal ? ["seasons","grass"] : Array.Empty<string>()).Concat(new[]{"dyndolod"}).Concat(deepScan || inspectAsset is {Length:>0} ? ["skse","textures"] : new[]{"skse"})
+            .Concat(request.Terrain is null ? [] : new[]{"textures","meshes","lodsettings","seasons"}).Distinct().ToArray()};
         int plugins=0,archives=0;string? version=null;AssetIndex assets;
         using(var game=GameContext.Open(source,progress))
         {
             plugins=game.PluginsLoaded;version=SksePluginInstaller.GameVersion(game.DataFolder)?.ToString();
             foreach(var missing in game.MissingPlugins)Add("Error","missing-plugin","Enabled plugin is unavailable: "+missing,"Restore the plugin or correct the profile before generating.",missing);
             foreach(var warning in game.Warnings)Add("Warning","source-warning",warning,"Check the selected game and profile paths.");
-            assets=game.BuildAssets(p=>p.StartsWith("dyndolod\\") || p.StartsWith("skse\\") || seasonal && (p.StartsWith("seasons\\") || p.StartsWith("grass\\")) || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null);
+            // A mod manager's virtual Data folder appears and disappears with the game; reads through it stop when it does.
+            if(RunEnvironment.RunningGame() is {} running)Add("Warning",RunEnvironment.GameRunningCode,$"The game is running: {running}.",
+                "Close the game before generating, or leave it open until the run finishes. Starting or closing it from a mod manager during a run changes the Data folder underneath PenguLOD and stops the run.");
+            if(RunEnvironment.DataMount(game.DataFolder) is {} mount)Add("Warning",RunEnvironment.DataMountedCode,
+                $"The game's Data folder is a virtual file system right now: {mount} on {game.DataFolder}.",
+                "A mod manager mounts it while the game or another program started from it runs, and removes it afterwards. A run reading through it stops when that happens. Close that program before generating, or keep it open until the run finishes.",
+                game.DataFolder);
+            assets=game.BuildAssets(p=>p.StartsWith("dyndolod\\") || p.StartsWith("skse\\") || seasonal && (p.StartsWith("seasons\\") || p.StartsWith("grass\\")) || deepScan && (p.StartsWith("meshes\\")||p.StartsWith("textures\\")) || inspectAsset is not null
+                || request.Terrain is not null && (p.StartsWith("textures\\") || p.StartsWith("meshes\\terrain\\") || p.StartsWith("lodsettings\\") || p.StartsWith("seasons\\")));
             archives=assets.ArchiveCount;
             foreach(var archive in assets.SkippedArchives)Add("Warning","archive-unreadable",archive,"Repair or remove the unreadable archive before generating.");
             foreach (var stage in new[] {
@@ -152,6 +161,26 @@ public static class PipelineDiagnostics
                     Check("texture-output",()=>{var m=TextureGenerationManifest.Read(textures,true)!;if(verifyOutputs)m.Verify(textures,progress,ct);},request.Textures is not null);
                 if(lod.GeneratedTerrainFolder is {} terrain)
                     Check("terrain-output",()=>{var m=TerrainGeneration.ReadManifest(terrain);if(verifyOutputs)m.Verify(terrain,progress,ct);},request.Terrain is not null);
+            }
+            if(request.Terrain is {} terrainRequest)
+            {
+                // The same check the terrain stage starts with, made here so a gap is known before the earlier stages run.
+                progress?.Report("Preflight: checking landscape textures and terrain coverage...");
+                try
+                {
+                    foreach(var issue in TerrainInputs.Check(game,assets,terrainRequest,ct))
+                        Add(issue.Blocking?"Error":"Warning",issue.Code,issue.Message,issue.Code switch
+                        {
+                            TerrainInputs.UncoveredLand=>issue.Blocking
+                                ?$"Turn on \"{TerrainInputs.FillOption}\" on the Terrain page, or enable a mod that supplies terrain LOD for the area."
+                                :"Enable a mod that supplies terrain LOD for the area if it should show more than flat land.",
+                            TerrainInputs.MissingDefaultTexture=>"Restore the default landscape texture or correct the game INI.",
+                            _=>issue.Blocking
+                                ?$"Install the texture, or turn on \"{TerrainInputs.SubstituteOption}\" on the Terrain page."
+                                :"Install the texture if these cells should not show the default one.",
+                        });
+                }
+                catch(InvalidDataException e){Add("Error","terrain-inputs",e.Message,"Correct the reported input before generating terrain.");}
             }
             if(request.Terrain?.ExportHeightmaps==true)
                 Add("Info","terrain-shadows","Terrain heightmaps are exported for the Terrain Shadows feature.","Enable compatible Community Shaders Terrain Shadows and leave the generated heightmap DDS files loose.");

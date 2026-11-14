@@ -128,6 +128,10 @@ public sealed class DesktopSettings : ObservableObject
     public bool TerrainWater { get => _terrainWater; set => Set(ref _terrainWater, value); }
     private bool _terrainFallback = true;
     public bool TerrainFallback { get => _terrainFallback; set => Set(ref _terrainFallback, value); }
+    private bool _terrainFillUncovered = true;
+    public bool TerrainFillUncovered { get => _terrainFillUncovered; set => Set(ref _terrainFillUncovered, value); }
+    private bool _terrainSubstituteTextures = true;
+    public bool TerrainSubstituteTextures { get => _terrainSubstituteTextures; set => Set(ref _terrainSubstituteTextures, value); }
     private bool _terrainHeightmaps = true;
     public bool TerrainHeightmaps { get => _terrainHeightmaps; set => Set(ref _terrainHeightmaps, value); }
     private decimal _terrainHeightmapSize = 8192;

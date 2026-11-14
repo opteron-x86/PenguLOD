@@ -23,8 +23,26 @@ precedence, defaulting to `textures/landscape/dirt02_n.dds`.
 Skyrim plugins omit landscape in some distant areas. **Fill missing landscape from existing
 terrain LOD** samples installed BTR meshes, diffuse textures and available model-space normals in these areas.
 The report identifies how many existing tiles were used. It cannot recover full-resolution
-detail that was absent from those files. Missing coverage or unresolved landscape materials
-stops publication and preserves the previous output. Missing LOD-water records are reported;
+detail that was absent from those files.
+
+A tile can still contain cells with neither landscape records nor existing terrain LOD, for
+example the outer rows of a worldspace once an older terrain LOD mod is disabled. **Fill
+uncovered land at the default height** (on by default) makes those cells flat at the
+worldspace's default land height, with the default landscape texture, and puts the
+worldspace's default water over them when that is higher. A worldspace without land defaults
+uses -2048. Tiles are only planned where landscape or existing terrain LOD exists, so this
+does not extend the terrain. With the setting off, the run stops and lists the affected tiles.
+
+Landscape textures that are not installed, and landscape texture records that cannot be
+resolved, are handled the same way. **Use the default texture for missing landscape
+textures** (on by default) paints those layers with the default landscape texture; with it
+off, the run stops and lists every missing texture with the number of cells that use it.
+
+Both are checked for every selected worldspace before the first tile is built, and again in
+the pipeline preflight, so a gap is reported in the first seconds of a run rather than when
+its tile is reached. What was filled or replaced is listed in the warnings and in
+`PenguLOD.terrain.json`. A missing default landscape texture always stops the run, since
+nothing can stand in for it. Missing LOD-water records are reported;
 the affected world's water shapes are omitted rather than referencing an invalid water type.
 
 The bake combines source normal detail with terrain slope, using the same layer weights
@@ -41,8 +59,7 @@ maps, without mixing in maps from the original material. Missing AO is unocclude
 (default 0.65) and gamma (1.15) operate on linear albedo, followed by AO strength (0.5).
 Disable calibration to retain the source albedo. This does not reproduce runtime reflections,
 roughness, parallax or changing illumination. `PenguLOD.terrain.json` records selected
-materials and missing optional maps. Malformed maps and missing contributing diffuse maps
-stop publication.
+materials and missing optional maps. Malformed maps stop publication.
 
 [Seasonal terrain](SEASONS.md) applies written Seasons of Skyrim LTEX swaps to colour,
 normal and AO maps together. Brightness scales linear colour; vertex colour strength controls
