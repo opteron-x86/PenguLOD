@@ -3,7 +3,11 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
-## Unreleased
+## [0.6.0-beta.1] - 2026-11-13
+
+The first beta. A full run of grass, textures, terrain and object LOD over 85 worldspaces
+of a 2,044-plugin load order now takes about 35 minutes on a 32-thread machine with NVMe
+storage; terrain alone went from 70 minutes to under 7.
 
 Terrain
 
@@ -31,7 +35,6 @@ Terrain
   Output is byte-identical for any worker count.
 - The heightmap export no longer re-reads existing terrain meshes for every row. It kept 16
   of them, fewer than one row of a large worldspace crosses.
-
 - 16-bit DDS textures are read: R5G6B5, which the Creation Kit writes for terrain LOD normal
   maps, plus X1R5G5B5, A1R5G5B5 and A4R4G4B4 and their DXGI equivalents. A worldspace whose
   existing terrain LOD used one stopped terrain generation with "DDS pixel format (16-bit,
@@ -68,9 +71,9 @@ Visual correctness
   stay sRGB.
 
 Regenerate object LOD, tree LOD and textures to pick up these changes: block hashes,
-billboard, hybrid trunk, automatic object, PBR and opaque-copy caches rebuild once. An
-in-game look at normal-mapped billboards and converted Skyrim LE meshes is still
-recommended before a release.
+billboard, hybrid trunk, automatic object, PBR and opaque-copy caches rebuild once. The
+result has had a general in-game look on one large load order; normal-mapped billboards and
+converted Skyrim LE meshes were not checked one by one.
 
 Reusing finished work
 

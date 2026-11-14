@@ -1,7 +1,7 @@
 # Roadmap
 
 PenguLOD currently provides a native grass → textures → terrain → object/tree/grass LOD
-pipeline, with resumable stages, diagnostics, a desktop and CLI. The project is in alpha.
+pipeline, with resumable stages, diagnostics, a desktop and CLI. The project is in beta.
 The [user guide](USER-GUIDE.md) and feature guides describe the supported workflows and limits.
 
 ## Release consolidation and output management
