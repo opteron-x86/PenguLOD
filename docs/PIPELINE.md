@@ -76,7 +76,9 @@ original build's measurements in the journal.
 
 Terrain reports split mesh building, material sampling, DDS encoding, file writing,
 heightmap export, tile verification and cache writing. They count newly built and restored
-tiles separately. A reused whole stage shows its current verification time; its saved
+tiles separately. Tiles and heightmap rows are built on every worker thread at once, so a
+phase's time is the sum over the workers and can exceed the stage's elapsed time. Output does
+not depend on the worker count. A reused whole stage shows its current verification time; its saved
 result still describes the original generation. Keep the cache outside game files, input
 mods and generated output folders. Deleting a job's `terrain-tiles` directory while no job
 is running frees its tile cache; the next incomplete terrain stage rebuilds those tiles.

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 using PenguLOD.Core.World;
 using PenguLOD.Meshes.Nif;
@@ -9,7 +10,8 @@ using Mutagen.Bethesda.Skyrim;
 namespace PenguLOD.Plugins;
 
 /// <summary>Winning LAND plus existing BTR/texture coverage for the landscape stripped from Bethesda plugins.
-/// Where neither exists, the worldspace's default land height and the default landscape texture can stand in.</summary>
+/// Where neither exists, the worldspace's default land height and the default landscape texture can stand in.
+/// One instance serves one thread; <see cref="Fork"/> gives another worker its own over the same landscape.</summary>
 internal sealed class TerrainSource
 {
     internal sealed record Layer(string Texture, string? Normal, int Quadrant, int Order, float[]? Opacity, string? Occlusion = null);
@@ -32,41 +34,63 @@ internal sealed class TerrainSource
     private readonly float? _defaultLand;
     private readonly float? _defaultWater;
     private readonly CancellationToken _ct;
-    internal readonly Dictionary<CellCoord, Cell> Cells = [];
-    internal readonly TerrainHeights Heights = new();
-    private readonly Dictionary<CellCoord, float> _water = [];
-    private readonly Dictionary<QuadKey, TriangleField?> _meshes = [];
-    private readonly Dictionary<QuadKey, TriangleField?> _waterMeshes = [];
+    // Filled by the constructor, then only read: forks share them.
+    internal readonly Dictionary<CellCoord, Cell> Cells;
+    internal readonly TerrainHeights Heights;
+    private readonly Dictionary<CellCoord, float> _water;
+    private readonly HashSet<CellCoord> _knownCells;
+    /// <summary>Existing terrain meshes as height fields, shared by the forks. A row of a heightmap crosses every tile
+    /// of the worldspace, so this holds more than one tile's neighbourhood.</summary>
+    private readonly ExistingMeshes _meshes;
+    private const int MeshCacheTiles = 256;
+    private sealed class ExistingMeshes
+    {
+        internal readonly ConcurrentDictionary<QuadKey, Lazy<(TriangleField? Land, TriangleField? Water)>> Tiles = new();
+        /// <summary>How many of <see cref="Tiles"/> hold a mesh. A tile that does not exist costs nothing to remember.</summary>
+        internal int Loaded;
+    }
+    // Per thread.
     private readonly Dictionary<(int X,int Y),float?> _fallbackVertices = [];
-    private static readonly LodLevel[] TerrainLevels = [LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32];
-    private readonly HashSet<CellCoord> _knownCells = [];
     private readonly HashSet<QuadKey> _fallbackUsed = [];
+    private static readonly LodLevel[] TerrainLevels = [LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32];
+    /// <summary>The existing terrain tiles sampled since the last <see cref="BeginTile"/>.</summary>
     public IReadOnlyCollection<QuadKey> FallbackUsed => _fallbackUsed;
     internal bool HasLodWater { get; }
-    internal void RestoreFallbackTiles(IEnumerable<QuadKey> tiles) => _fallbackUsed.UnionWith(tiles);
+
+    /// <summary>Another view of the same landscape for one more thread, with its own working state.</summary>
+    internal TerrainSource Fork() => new(this);
+    private TerrainSource(TerrainSource parent)
+    {
+        _season = parent._season; _defaultDiffuse = parent._defaultDiffuse; _defaultNormal = parent._defaultNormal;
+        _materialSettings = parent._materialSettings; _materials = parent._materials.Fork(); _assets = parent._assets; _world = parent._world;
+        _grid = parent._grid; _fallback = parent._fallback; _defaultLand = parent._defaultLand; _defaultWater = parent._defaultWater; _ct = parent._ct;
+        Cells = parent.Cells; Heights = parent.Heights; _water = parent._water; _knownCells = parent._knownCells; _meshes = parent._meshes;
+        HasLodWater = parent.HasLodWater;
+    }
+    /// <summary>Starts a tile: what it uses is then reported for that tile alone.</summary>
+    internal void BeginTile() { _fallbackUsed.Clear(); _materials.Reset(); }
 
     internal TerrainSource(GameContext game, AssetIndex assets, IWorldspaceGetter world, LodGrid grid, bool fallback, CancellationToken ct, IReadOnlyDictionary<FormKey,FormKey>? swaps = null, string? season = null, string defaultDiffuse = TerrainDefaultTexture.SkyrimDefault,
         string defaultNormal = TerrainDefaultTexture.SkyrimNormal, TerrainMaterialSettings? materials = null,
-        bool fillUncoveredLand = false, bool substituteMissingTextures = false)
+        bool fillUncoveredLand = false, bool substituteMissingTextures = false, TerrainTextures? sharedTextures = null, TerrainRecords? records = null)
     {
+        records ??= TerrainRecords.Read(game, ct, new HashSet<FormKey> { world.FormKey });
+        Cells = []; Heights = new(); _water = []; _knownCells = []; _meshes = new();
         if (fillUncoveredLand) (_defaultLand, _defaultWater) = TerrainInputs.Defaults(world);
         var textures = new Dictionary<FormKey, LandTextures?>();
         _season = season; _defaultDiffuse = defaultDiffuse; _assets = assets; _world = grid.Worldspace; _grid = grid; _fallback = fallback; _ct = ct;
         _defaultNormal = defaultNormal; _materialSettings = materials ?? new(); _materialSettings.Validate();
-        _materials = new(assets, _materialSettings, ct);
+        _materials = new(assets, _materialSettings, ct, sharedTextures);
         HasLodWater = world.LodWater.FormKeyNullable is { IsNull: false };
-        foreach (var ctx in game.LoadOrder.PriorityOrder.Landscape().WinningContextOverrides(game.LinkCache))
+        foreach (var (coord, land) in records.Land(world.FormKey))
         {
             ct.ThrowIfCancellationRequested();
-            if (ctx.Record.IsDeleted || !ctx.TryGetParentSimpleContext<ICellGetter>(out var parent) || parent.Record.Grid is not { } point
-                || !ctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var ws) || ws.Record.FormKey != world.FormKey) continue;
-            if (ctx.Record.VertexHeightMap is not { } vh) continue;
-            var coord = new CellCoord(point.Point.X, point.Point.Y);
+            if (land.VertexHeightMap is not { } vh) continue;
             if (!grid.IsInsideGrid(coord)) continue;
             var h = TerrainHeights.Decode(vh.Offset, (x,y) => vh.HeightMap[x,y]);
             if (h.Any(v => !float.IsFinite(v))) throw new InvalidDataException($"Invalid LAND heights in {_world} {coord}.");
             var layers = new List<Layer>();
-            foreach (var layer in ctx.Record.Layers)
+            foreach (var layer in land.Layers)
             {
                 var header = layer.Header ?? throw new InvalidDataException("Missing landscape layer header.");
                 string diffuse = _defaultDiffuse; string? normal = _defaultNormal, occlusion = null;
@@ -93,24 +117,21 @@ internal sealed class TerrainSource
                 layers.Add(new(diffuse, normal, (int)header.Quadrant, header.LayerNumber, opacity, occlusion));
             }
             Vector3[]? colors = null;
-            if (ctx.Record.VertexColors is { } vclr)
+            if (land.VertexColors is { } vclr)
             {
                 colors = new Vector3[33*33];
                 for(int y=0;y<33;y++) for(int x=0;x<33;x++) { var c=vclr[x,y]; colors[y*33+x]=new Vector3(c.X,c.Y,c.Z)/255; }
             }
             Cells[coord] = new(h, colors, layers.OrderBy(l=>l.Order).ToArray()); Heights.Set(_world, coord.X, coord.Y, h);
         }
-        foreach (var ctx in game.LoadOrder.PriorityOrder.Cell().WinningContextOverrides(game.LinkCache))
+        foreach (var (coord, hasWater, waterHeight) in records.Cells(world.FormKey))
         {
             ct.ThrowIfCancellationRequested();
-            var cell = ctx.Record;
-            if (cell.IsDeleted || cell.Grid is not { } point 
-                || !ctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var ws) || ws.Record.FormKey != world.FormKey) continue;
-            _knownCells.Add(new(point.Point.X, point.Point.Y));
-            if (!cell.Flags.HasFlag(Mutagen.Bethesda.Skyrim.Cell.Flag.HasWater)) continue;
-            float? value = cell.WaterHeight;
+            _knownCells.Add(coord);
+            if (!hasWater) continue;
+            float? value = waterHeight;
             if (value is null || !float.IsFinite(value.Value) || Math.Abs(value.Value) > 1_000_000) value = world.LandDefaults?.DefaultWaterHeight;
-            if (value is { } h && float.IsFinite(h) && Math.Abs(h) < 1_000_000) _water[new(point.Point.X, point.Point.Y)] = h;
+            if (value is { } h && float.IsFinite(h) && Math.Abs(h) < 1_000_000) _water[coord] = h;
         }
     }
     internal IEnumerable<QuadKey> Tiles(IReadOnlyCollection<LodLevel> levels) => TerrainInputs.PlanTiles(_grid, Cells.Keys, _assets, levels, _fallback);
@@ -155,24 +176,30 @@ internal sealed class TerrainSource
                 var tile=center with {X=center.X-(neighbor%2)*(int)level,Y=center.Y-(neighbor/2)*(int)level};
                 float lx=x-tile.X*4096f, ly=y-tile.Y*4096f;
                 if(lx<0 || ly<0 || lx>(int)level*4096 || ly>(int)level*4096) continue;
-                if(!_meshes.TryGetValue(tile,out var field))
+                if(!_meshes.Tiles.TryGetValue(tile,out var entry))
                 {
-                    if(_meshes.Count>=16) { _meshes.Clear(); _waterMeshes.Clear(); }
-                    string path=TerrainInputs.ExistingMesh(tile);
-                    field=null;
-                    if(_assets.TryOpen(path,out var stream))
-                    {
-                        using(stream) { using var ms=new MemoryStream(); stream.CopyTo(ms); var mesh=NifGeometryReader.Read(path,ms.ToArray(),passthru:true,includeUnshaded:true);
-                            if(mesh.Parts.Count==0) throw new InvalidDataException("Existing terrain cannot be read: "+path);
-                            _waterMeshes[tile]=new TriangleField(mesh.Parts.Where(p=>ReferenceEquals(p.Material,NifGeometryReader.UnshadedMaterial)).SelectMany(p=>Enumerable.Range(0,p.Triangles.Length/3).Select(i=>(p.Positions[p.Triangles[i*3]],p.Positions[p.Triangles[i*3+1]],p.Positions[p.Triangles[i*3+2]]))),(int)level*4096f);
-                            field=new TriangleField(mesh.Parts.Where(p=>!ReferenceEquals(p.Material,NifGeometryReader.UnshadedMaterial)).SelectMany(p=>Enumerable.Range(0,p.Triangles.Length/3).Select(i=>(p.Positions[p.Triangles[i*3]],p.Positions[p.Triangles[i*3+1]],p.Positions[p.Triangles[i*3+2]]))),(int)level*4096f); }
-                    }
-                    _meshes[tile]=field;
+                    if(Volatile.Read(ref _meshes.Loaded)>=MeshCacheTiles) { _meshes.Tiles.Clear(); Interlocked.Exchange(ref _meshes.Loaded,0); }
+                    entry=_meshes.Tiles.GetOrAdd(tile,key=>new(()=>ReadExisting(key)));
                 }
-                if((water ? _waterMeshes.GetValueOrDefault(tile) : field)?.Sample(lx,ly) is {} h) { _fallbackUsed.Add(tile); return h; }
+                var fields=entry.Value;
+                if((water ? fields.Water : fields.Land)?.Sample(lx,ly) is {} h) { _fallbackUsed.Add(tile); return h; }
             }
         }
         return null;
+    }
+    private (TriangleField? Land, TriangleField? Water) ReadExisting(QuadKey tile)
+    {
+        string path=TerrainInputs.ExistingMesh(tile);
+        if(!_assets.TryOpen(path,out var stream))return (null,null);
+        using(stream)
+        {
+            using var ms=new MemoryStream(); stream.CopyTo(ms); var mesh=NifGeometryReader.Read(path,ms.ToArray(),passthru:true,includeUnshaded:true);
+            if(mesh.Parts.Count==0) throw new InvalidDataException("Existing terrain cannot be read: "+path);
+            float span=(int)tile.Level*4096f; Interlocked.Increment(ref _meshes.Loaded);
+            TriangleField Field(bool water)=>new(mesh.Parts.Where(p=>ReferenceEquals(p.Material,NifGeometryReader.UnshadedMaterial)==water)
+                .SelectMany(p=>Enumerable.Range(0,p.Triangles.Length/3).Select(i=>(p.Positions[p.Triangles[i*3]],p.Positions[p.Triangles[i*3+1]],p.Positions[p.Triangles[i*3+2]]))),span);
+            return (Field(false),Field(true));
+        }
     }
     internal float? Water(int x,int y)
     {
@@ -278,5 +305,41 @@ internal sealed class TerrainSource
             }
             return null;
         }
+    }
+}
+
+/// <summary>
+/// The winning landscape and exterior cell records of the selected worldspaces, found in one pass over the load order.
+/// Finding them takes a few seconds on a large load order whichever worldspace is wanted, so a run over many worldspaces
+/// reads them once instead of once per worldspace and season. Records are kept in load-order position, undecoded.
+/// </summary>
+internal sealed class TerrainRecords
+{
+    private readonly Dictionary<FormKey, List<(CellCoord Coord, ILandscapeGetter Land)>> _land = [];
+    private readonly Dictionary<FormKey, List<(CellCoord Coord, bool HasWater, float? WaterHeight)>> _cells = [];
+    internal IReadOnlyList<(CellCoord Coord, ILandscapeGetter Land)> Land(FormKey world) => _land.GetValueOrDefault(world) ?? [];
+    internal IReadOnlyList<(CellCoord Coord, bool HasWater, float? WaterHeight)> Cells(FormKey world) => _cells.GetValueOrDefault(world) ?? [];
+
+    internal static TerrainRecords Read(GameContext game, CancellationToken ct, IReadOnlySet<FormKey> worlds)
+    {
+        var found = new TerrainRecords();
+        foreach (var ctx in game.LoadOrder.PriorityOrder.Landscape().WinningContextOverrides(game.LinkCache))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (ctx.Record.IsDeleted || !ctx.TryGetParentSimpleContext<ICellGetter>(out var parent) || parent.Record.Grid is not { } point
+                || !ctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var ws) || !worlds.Contains(ws.Record.FormKey)) continue;
+            if (!found._land.TryGetValue(ws.Record.FormKey, out var list)) found._land[ws.Record.FormKey] = list = [];
+            list.Add((new(point.Point.X, point.Point.Y), ctx.Record));
+        }
+        foreach (var ctx in game.LoadOrder.PriorityOrder.Cell().WinningContextOverrides(game.LinkCache))
+        {
+            ct.ThrowIfCancellationRequested();
+            var cell = ctx.Record;
+            if (cell.IsDeleted || cell.Grid is not { } point
+                || !ctx.TryGetParentSimpleContext<IWorldspaceGetter>(out var ws) || !worlds.Contains(ws.Record.FormKey)) continue;
+            if (!found._cells.TryGetValue(ws.Record.FormKey, out var list)) found._cells[ws.Record.FormKey] = list = [];
+            list.Add((new(point.Point.X, point.Point.Y), cell.Flags.HasFlag(Cell.Flag.HasWater), cell.WaterHeight));
+        }
+        return found;
     }
 }
