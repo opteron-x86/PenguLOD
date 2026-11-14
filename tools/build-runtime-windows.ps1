@@ -16,7 +16,7 @@ if (-not (Test-Path "$vcpkg/.git")) {
 git -C $vcpkg fetch --depth 1 origin $manifest.'builtin-baseline'
 git -C $vcpkg checkout --detach FETCH_HEAD
 & "$vcpkg/bootstrap-vcpkg.bat" -disableMetrics
-# Build from source so every package includes the matching CommonLib sources.
+# Build from source so the CommonLib tree, which holds the OpenVR license notice, is present.
 $env:VCPKG_BINARY_SOURCES = 'clear'
 $installed = Join-Path $PenguLODRoot ".tools/runtime-deps-$Line"
 $build = Join-Path $PenguLODRoot ".tools/runtime-build-$Line"
@@ -30,7 +30,7 @@ cmake -S skse -B $build -G Ninja @options
 cmake --build $build --parallel 3
 $folder = switch ($Line) { '1' { '1.5.97-1.6.1170' } '17' { '1.7.x' } 'vr' { '1.4.15-VR' } }
 $out = Join-Path $PenguLODRoot "dist/runtime/$folder"
-New-Item -ItemType Directory -Force "$out/SKSE/Plugins", "$out/licenses", "$out/source" | Out-Null
+New-Item -ItemType Directory -Force "$out/SKSE/Plugins", "$out/licenses" | Out-Null
 Copy-Item "$build/PenguLOD.dll" "$out/SKSE/Plugins/"
 foreach ($package in Get-ChildItem "$installed/x64-windows-static-md/share" -Directory) {
     if (Test-Path "$($package.FullName)/copyright") {
@@ -38,5 +38,5 @@ foreach ($package in Get-ChildItem "$installed/x64-windows-static-md/share" -Dir
     }
 }
 Copy-Item "$installed/vcpkg/status" "$out/licenses/vcpkg-packages.txt"
-python tools/package-runtime-sources.py "$vcpkg/buildtrees/commonlibsse-ng/src" $out
+python tools/package-runtime-licenses.py "$vcpkg/buildtrees/commonlibsse-ng/src" $out
 Write-Host "Built PenguLOD runtime for $folder into $out"

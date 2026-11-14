@@ -165,7 +165,9 @@ them; also regenerate object LOD when its terrain input changes.
 | Setting | What it does |
 | --- | --- |
 | Terrain output | Destination for the terrain mod. Keep it separate from the other outputs. |
-| Fill missing landscape from existing terrain LOD | Uses existing terrain tiles where source landscape is unavailable. On by default. The run stops if it still cannot cover the required area. |
+| Fill missing landscape from existing terrain LOD | Uses existing terrain tiles where source landscape is unavailable. On by default. |
+| Fill uncovered land at the default height | Where a tile has neither landscape records nor existing terrain LOD, makes the land flat at the worldspace's default height with the default texture. On by default. Off: the run stops before the first tile and lists those tiles. |
+| Use the default texture for missing landscape textures | Paints layers whose texture is not installed, or whose record cannot be resolved, with the default landscape texture and reports them. On by default. Off: the run stops before the first tile and lists every missing texture. |
 | Generate seasonal terrain from Seasons of Skyrim swaps | Builds seasonal variants from installed swaps. Off by default. This is the same switch as **Seasonal LOD** in Object LOD. |
 | Generate water LOD | Builds distant water surfaces. On by default. |
 | Use generated terrain for object LOD | Makes object LOD use this terrain output, including for hidden-geometry removal. A pipeline that generates both stages passes it on automatically. |

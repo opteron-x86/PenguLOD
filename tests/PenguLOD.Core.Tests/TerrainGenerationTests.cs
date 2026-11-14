@@ -74,8 +74,9 @@ public sealed class TerrainGenerationTests
     public void MissingLandscapeStopsBeforePublishing()
     {
         using var fixture=new TerrainFixture(missingCell:true);
-        var result=GenerationPipeline.Run(new(Terrain:fixture.Request with{UseExistingTerrain=false}),Path.Combine(fixture.Root,"cache"));
-        Assert.False(result.Success);Assert.Equal("terrain",result.FailedStage);Assert.Contains("Missing terrain",result.Error);Assert.False(Directory.Exists(fixture.Output));
+        var result=GenerationPipeline.Run(new(Terrain:fixture.Request with{UseExistingTerrain=false,FillUncoveredLand=false},Preflight:false),Path.Combine(fixture.Root,"cache"));
+        Assert.False(result.Success);Assert.Equal("terrain",result.FailedStage);Assert.False(Directory.Exists(fixture.Output));
+        Assert.Contains("FixtureWorld: 1 cell in 1 tile have neither landscape records nor existing terrain LOD (first cell -1,-1)",result.Error);
     }
     [Fact]
     public void MissingLandCanUseExistingBtrAndItsTextures()

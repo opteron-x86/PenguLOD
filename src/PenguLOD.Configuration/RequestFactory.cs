@@ -80,7 +80,8 @@ public static class RequestFactory
             TextureRepeatsPerCell: (float)s.TerrainRepeats, SkirtDepth: (float)s.TerrainSkirt, Water: s.TerrainWater,
             UseExistingTerrain: s.TerrainFallback, ExportHeightmaps: s.TerrainHeightmaps, HeightmapMaximumSize: Whole(s.TerrainHeightmapSize), Seasons: s.Seasons,
             SeasonsStrict: GenerationOptions.Get<bool>(s, "seasonsStrict"),
-            Materials: new((float)s.TerrainNormalStrength, s.TerrainPbr, s.TerrainPbrTwins, (float)s.TerrainPbrScale, (float)s.TerrainPbrGamma, (float)s.TerrainAo));
+            Materials: new((float)s.TerrainNormalStrength, s.TerrainPbr, s.TerrainPbrTwins, (float)s.TerrainPbrScale, (float)s.TerrainPbrGamma, (float)s.TerrainAo),
+            FillUncoveredLand: s.TerrainFillUncovered, SubstituteMissingTextures: s.TerrainSubstituteTextures);
         TerrainGeneration.Validate(request);
         return request;
     }

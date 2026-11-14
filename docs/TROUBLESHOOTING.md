@@ -11,9 +11,24 @@ Use **Diagnostics** to check missing plugins, source precedence, stale generated
 and runtime requirements. For missing models or textures, inspect which enabled mod or
 archive supplies the named asset. Reinstall or correct the source mod when necessary.
 
-Terrain logs identify the default landscape texture and report missing contributing
-textures with world/cell context. The default is `textures/landscape/dirt02.dds`, subject
+Terrain logs identify the default landscape texture. Before the first tile, and in the
+pipeline preflight, every missing landscape texture and every tile without landscape or
+existing terrain LOD is listed with its worldspace, cell count and first cell. By default
+those use the default texture and the worldspace's default land height; turn the two terrain
+settings off to stop instead. The default texture is `textures/landscape/dirt02.dds`, subject
 to the selected INI's `sDefaultLandDiffuseTexture`. See [terrain settings](TERRAIN.md).
+
+### A file could not be read partway through the run
+
+The storage under a file PenguLOD had open changed or went away. On Linux, a mod manager
+that mounts a virtual file system on the game's `Data` folder does this each time the game
+is started or closed from it; a drive that disconnects does the same. Close the game and
+repeat the same pipeline selection, and do not start or close the game until it finishes.
+Completed stages and finished terrain tiles are reused.
+
+The preflight warns when the game is running (`game-running`) and when `Data` is such a
+mount at that moment (`data-folder-mounted`). It cannot foresee the game being started
+later in the run.
 
 ## Output looks different from nearby terrain or trees
 

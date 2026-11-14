@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using PenguLOD.Core;
 using PenguLOD.Core.Lod;
 using PenguLOD.Core.Pipeline;
@@ -17,7 +16,8 @@ public sealed record TerrainGenerationRequest(GameContextOptions Game, string Ou
     IReadOnlyCollection<string>? Worldspaces = null, IReadOnlyCollection<LodLevel>? Levels = null,
     int TextureSize = 512, float Brightness = 1, float VertexColorStrength = 1, float TextureRepeatsPerCell = 24,
     float SkirtDepth = 512, bool Water = true, bool UseExistingTerrain = true, bool ExportHeightmaps = true,
-    int HeightmapMaximumSize = 8192, bool Seasons = false, TerrainMaterialSettings? Materials = null, bool SeasonsStrict = false);
+    int HeightmapMaximumSize = 8192, bool Seasons = false, TerrainMaterialSettings? Materials = null,
+    bool FillUncoveredLand = true, bool SubstituteMissingTextures = true, bool SeasonsStrict = false);
 public sealed record TerrainTileResult(string Worldspace, int Level, int X, int Y, int Triangles, int WaterCells, string? Season = null);
 public sealed record TerrainWorldResult(string Worldspace, int LandscapeCells, int ExistingTilesUsed, int Tiles, string? Heightmap);
 public sealed record TerrainPerformance(int BuiltTiles, int ReusedTiles, IReadOnlyDictionary<string,double> Timings);
@@ -28,6 +28,9 @@ public sealed record TerrainGenerationResult(string OutputFolder, IReadOnlyList<
 public static class TerrainGeneration
 {
     public const string ManifestName = "PenguLOD.terrain.json";
+    /// <summary>Setting names as the desktop shows them; messages that tell the user which one to change use the same text.</summary>
+    public const string FillUncoveredLandOption = "Fill uncovered land at the default height";
+    public const string SubstituteMissingTexturesOption = "Use the default texture for missing landscape textures";
     public static void Validate(TerrainGenerationRequest r)
     {
         GenerationDestination.Validate(r.Game, r.OutputFolder);
@@ -66,27 +69,32 @@ public static class TerrainGeneration
         var worlds=game.LoadOrder.PriorityOrder.Worldspace().WinningOverrides().Where(w=>!w.IsDeleted && w.EditorID is {} id && (wanted is null||wanted.Contains(id))).ToArray();
         var owned = new OutputSnapshot();
         var reports=new List<TerrainWorldResult>();var tiles=new List<TerrainTileResult>();var warnings=new List<string>(game.Warnings);
+        // Every missing input is found before the first tile, so one run reports them all.
+        progress?.Report("Checking landscape textures and terrain coverage...");
+        var inputIssues=TerrainInputs.Check(game,assets,request,ct);
+        if(inputIssues.Where(i=>i.Blocking).ToArray() is {Length:>0} blocking)throw new InvalidDataException(TerrainInputs.Describe(blocking));
         var materialReports = new HashSet<TerrainMaterialReport>();
         var timings=new Dictionary<string,double>();int built=0,reused=0;
         void Warn(string s){warnings.Add(s);progress?.Report("WARNING: "+s);}
+        foreach(var issue in inputIssues)Warn(issue.Message);
         var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures",request.SeasonsStrict,Warn) : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         using var stage=new StagedOutput(request.OutputFolder,false,progress,ct);
         preparation.Dispose();using var generation=WorkTiming.Measure("generation");
         foreach(var world in worlds)
         {
             ct.ThrowIfCancellationRequested();string name=world.EditorID!;
-            if(!Regex.IsMatch(name,@"^[A-Za-z0-9_]+$"))
+            if(!TerrainInputs.ValidName(name))
             {
                 // An explicitly requested world must not be skipped silently; with all worlds selected, one odd EditorID
                 // must not stop terrain for the others.
                 if(wanted is not null)throw new InvalidDataException("Unsupported worldspace EditorID: "+name);
                 Warn(name+": EditorID contains characters that terrain LOD file names cannot use; worldspace skipped.");continue;
             }
-            if(!assets.TryOpen(LodSettings.RelativePathFor(name),out var s)) {Warn(name+": no LOD settings; worldspace skipped.");continue;}
-            LodSettings settings;using(s){var bytes=new byte[16];s.ReadExactly(bytes);settings=LodSettings.Parse(bytes);}
-            if(settings.Stride is <4 or >4096 || (settings.Stride&(settings.Stride-1))!=0)throw new InvalidDataException(name+": invalid LOD grid bounds.");
+            if(TerrainInputs.ReadLodSettings(assets,name) is not {} settings) {Warn(name+": no LOD settings; worldspace skipped.");continue;}
+            if(!TerrainInputs.ValidStride(settings))throw new InvalidDataException(name+": invalid LOD grid bounds.");
             var levels=(request.Levels??new[]{LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32}).Where(settings.Supports).Distinct().ToArray();
-            var grid=new LodGrid(name,settings);var source=new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,defaultDiffuse:defaultDiffuse,defaultNormal:defaultNormal,materials:request.Materials);
+            var grid=new LodGrid(name,settings);var source=new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,defaultDiffuse:defaultDiffuse,defaultNormal:defaultNormal,materials:request.Materials,
+                fillUncoveredLand:request.FillUncoveredLand,substituteMissingTextures:request.SubstituteMissingTextures);
             var planned=source.Tiles(levels).ToArray();
             if(planned.Length==0){Warn(name+": no landscape or existing terrain in the selected grid/levels; skipped.");continue;}
             if(request.Water && !source.HasLodWater) Warn(name+": no worldspace LOD-water record; water meshes are omitted to avoid invalid engine references.");
@@ -97,7 +105,8 @@ public static class TerrainGeneration
             }
             foreach (var (season, swaps) in seasons)
             {
-                var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season,defaultDiffuse,defaultNormal,request.Materials);
+                var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season,defaultDiffuse,defaultNormal,request.Materials,
+                    request.FillUncoveredLand,request.SubstituteMissingTextures);
                 foreach (var tile in planned)
                 {
                     ct.ThrowIfCancellationRequested();

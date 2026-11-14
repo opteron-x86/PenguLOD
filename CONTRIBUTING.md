@@ -86,8 +86,8 @@ The Avalonia desktop is shared by Linux and Windows.
 
 Build a runtime DLL on Windows with `./skse/build.ps1 -Line 1`, `-Line 17` or `-Line vr`.
 `-Line all` builds all three. These commands write to `dist/runtime` and never install into a game.
-`python tools/package-runtime.py` assembles the FOMOD after all three builds, including licenses
-and matching sources. `bash tools/test-runtime.sh` checks path selection and INI migration
+`python tools/package-runtime.py` assembles the FOMOD after all three builds: the DLLs, the
+installer and license notices. It contains no source archives, which mod sites reject. `bash tools/test-runtime.sh` checks path selection and INI migration
 on Linux without requiring Skyrim.
 
 ## Upstream synchronization
