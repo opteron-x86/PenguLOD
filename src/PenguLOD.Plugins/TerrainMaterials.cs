@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 using PenguLOD.Core;
 using PenguLOD.Core.Pipeline;
@@ -8,24 +9,147 @@ namespace PenguLOD.Plugins;
 
 internal readonly record struct TerrainSample(Vector3 Color, Vector3 Detail, Vector3? ExistingNormal = null);
 
-/// <summary>Linear-light colour mips and unweighted data mips. Alpha is not transparency in landscape textures.</summary>
-internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSettings settings, CancellationToken ct)
+/// <summary>
+/// Linear-light colour mips and unweighted data mips of landscape textures, shared by the workers that bake tiles at the
+/// same time and by every worldspace of a run. A level holds the same pixels however it was reached, so sharing changes
+/// no output. Alpha is not transparency in landscape textures.
+/// </summary>
+internal sealed class TerrainTextures(IAssetSource assets, CancellationToken ct)
 {
-    private sealed record Image(Vector3[] Pixels, int Width, int Height);
-    private sealed record Material(string Diffuse, string? Normal, string? Ao, bool Pbr);
-    private readonly Dictionary<(string, string?, string?), Material> _materials = [];
-    /// <summary>The retained levels of one texture: <see cref="First"/> is the level number of <c>Levels[0]</c>.</summary>
-    private sealed record Chain(int BaseWidth, int First, List<Image> Levels) { internal long Bytes => Levels.Sum(l => l.Pixels.LongLength * 12); }
+    internal sealed record Image(Vector3[] Pixels, int Width, int Height);
+    /// <summary>The retained levels of one texture: <see cref="First"/> is the level number of <c>Levels[0]</c>. Never changed once stored.</summary>
+    private sealed record Chain(int BaseWidth, int First, Image[] Levels) { internal long Bytes => Levels.Sum(l => l.Pixels.LongLength * 12); }
     private const long CacheBytes = 192L * 1024 * 1024;
-    private readonly Dictionary<(string, bool), Chain> _images = [];
+    private readonly ConcurrentDictionary<(string, bool), Chain> _images = new();
+    // One worker decodes a texture while the others that want the same one wait for it.
+    private readonly object[] _gates = [.. Enumerable.Range(0, 64).Select(_ => new object())];
+    private readonly object _account = new();
+    private long _bytes;
+    private int _loads;
+    private static readonly float[] Linear = Enumerable.Range(0,256).Select(i => TerrainSource.SrgbToLinear(new Vector3(i/255f)).X).ToArray();
     /// <summary>How many times a texture file was opened and decoded.</summary>
-    internal int Loads { get; private set; }
-    private readonly Dictionary<(string, bool, float), Image> _samples = [];
+    internal int Loads => Volatile.Read(ref _loads);
+
+    /// <summary>The level of a texture that one pixel of <paramref name="footprint"/> (in texture widths) reads.</summary>
+    internal Image Level(string path, bool color, float footprint)
+    {
+        ct.ThrowIfCancellationRequested();
+        var key = (path, color);
+        if (_images.TryGetValue(key, out var chain) && Ready(chain, footprint) is { } ready) return ready;
+        lock (_gates[(StringComparer.Ordinal.GetHashCode(path) & int.MaxValue) % _gates.Length])
+        {
+            _images.TryGetValue(key, out chain);
+            bool loaded = false, changed = false;
+            // A terrain tile reads a landscape texture far below its own resolution, so only the level asked for and the
+            // coarser ones are kept. Holding the full image for every texture filled the cache within one large tile, and
+            // each refill decoded the source files again.
+            if (chain is null || Lod(footprint, chain.BaseWidth) < chain.First)
+            {
+                var image = Load(path, color);
+                int baseWidth = image.Width, first = 0;
+                for (int lod = Lod(footprint, baseWidth); first < lod && (image.Width > 1 || image.Height > 1); first++) image = Downsample(image);
+                chain = new(baseWidth, first, [image]); loaded = changed = true;
+            }
+            int wanted = Lod(footprint, chain.BaseWidth);
+            if (chain.First + chain.Levels.Length <= wanted && (chain.Levels[^1].Width > 1 || chain.Levels[^1].Height > 1))
+            {
+                var levels = chain.Levels.ToList();
+                while (chain.First + levels.Count <= wanted && (levels[^1].Width > 1 || levels[^1].Height > 1)) levels.Add(Downsample(levels[^1]));
+                chain = chain with { Levels = [.. levels] }; changed = true;
+            }
+            if (changed)
+                lock (_account)
+                {
+                    if (_images.TryGetValue(key, out var previous)) _bytes -= previous.Bytes;
+                    // Workers still sampling a dropped image keep it alive until they finish their tile.
+                    if (loaded && _bytes >= CacheBytes) { _images.Clear(); _bytes = 0; }
+                    _images[key] = chain; _bytes += chain.Bytes;
+                }
+            return chain.Levels[Math.Min(wanted - chain.First, chain.Levels.Length - 1)];
+        }
+    }
+
+    /// <summary>The level for this footprint when the chain already holds it, without taking a lock.</summary>
+    private static Image? Ready(Chain chain, float footprint)
+    {
+        int index = Lod(footprint, chain.BaseWidth) - chain.First;
+        if (index < 0) return null;
+        if (index < chain.Levels.Length) return chain.Levels[index];
+        var last = chain.Levels[^1];
+        return last.Width > 1 || last.Height > 1 ? null : last;
+    }
+
+    private static int Lod(float footprint, int baseWidth) => Math.Max(0, (int)MathF.Floor(MathF.Log2(Math.Max(1, footprint * baseWidth))));
+
+    /// <summary>The source texture reduced to at most 512 pixels a side: level 0 of its chain.</summary>
+    private Image Load(string path, bool color)
+    {
+        if (!assets.TryOpen(path, out var stream)) throw new FileNotFoundException("Missing landscape texture: " + path, path);
+        Interlocked.Increment(ref _loads);
+        TextureImage raw;
+        using (stream) { using var bytes = new MemoryStream(); stream.CopyTo(bytes); raw = TextureImages.Decode(bytes.ToArray()); }
+        int factor=1;
+        while (raw.Width/factor>512 || raw.Height/factor>512) factor*=2;
+        int width=Math.Max(1,raw.Width/factor), height=Math.Max(1,raw.Height/factor);
+        var pixels = new Vector3[width*height];
+        for (int y=0;y<height;y++)
+        {
+            ct.ThrowIfCancellationRequested();
+            for (int x=0;x<width;x++)
+            {
+                Vector3 sum=default; int count=0;
+                for (int sy=y*factor;sy<Math.Min((y+1)*factor,raw.Height);sy++)
+                for (int sx=x*factor;sx<Math.Min((x+1)*factor,raw.Width);sx++)
+                {
+                    int offset=(sy*raw.Width+sx)*4;
+                    byte r=raw.Pixels[offset], g=raw.Pixels[offset+1], b=raw.Pixels[offset+2];
+                    sum+=color ? new Vector3(Linear[r],Linear[g],Linear[b]) : new Vector3(r,g,b)/255;
+                    count++;
+                }
+                pixels[y*width+x]=sum/count;
+            }
+        }
+        return new Image(pixels,width,height);
+    }
+
+    private Image Downsample(Image source)
+    {
+        int w = Math.Max(1, source.Width / 2), h = Math.Max(1, source.Height / 2);
+        var pixels = new Vector3[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            ct.ThrowIfCancellationRequested();
+            for (int x = 0; x < w; x++)
+            {
+                Vector3 sum = default;
+                for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 2; dx++)
+                    sum += source.Pixels[Math.Min(y * 2 + dy, source.Height - 1) * source.Width + Math.Min(x * 2 + dx, source.Width - 1)];
+                pixels[y * w + x] = sum * .25f;
+            }
+        }
+        return new(pixels, w, h);
+    }
+}
+
+/// <summary>
+/// One worker's view of the landscape materials: which files make up a material, and the texture levels the current tile
+/// reads. Not shared between threads; <see cref="Fork"/> gives another worker its own over the same decoded textures.
+/// </summary>
+internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSettings settings, CancellationToken ct, TerrainTextures? textures = null)
+{
+    private sealed record Material(string Diffuse, string? Normal, string? Ao, bool Pbr);
+    private readonly TerrainTextures _textures = textures ?? new(assets, ct);
+    private readonly Dictionary<(string, string?, string?), Material> _materials = [];
+    private readonly Dictionary<(string, bool, float), TerrainTextures.Image> _samples = [];
     private readonly HashSet<string> _missing = new(StringComparer.Ordinal);
     private readonly HashSet<string> _available = new(StringComparer.Ordinal);
     private readonly HashSet<string> _warnings = new(StringComparer.Ordinal);
-    private long _bytes;
-    private static readonly float[] Linear = Enumerable.Range(0,256).Select(i => TerrainSource.SrgbToLinear(new Vector3(i/255f)).X).ToArray();
+    /// <summary>How many times a texture file was opened and decoded, by this view and the others over the same textures.</summary>
+    internal int Loads => _textures.Loads;
+    internal TerrainMaterials Fork() => new(assets, settings, ct, _textures);
+    /// <summary>Forgets what the last tile used, so <see cref="Reports"/> and <see cref="Warnings"/> describe one tile and no
+    /// texture level is held longer than the tile that read it.</summary>
+    internal void Reset() { _materials.Clear(); _samples.Clear(); _missing.Clear(); _available.Clear(); _warnings.Clear(); }
     internal IReadOnlyCollection<string> Warnings => _warnings;
     internal IEnumerable<TerrainMaterialReport> Reports => _materials.Select(p => new TerrainMaterialReport(p.Key.Item1,
         p.Value.Diffuse, p.Value.Normal, p.Value.Ao, p.Value.Pbr));
@@ -68,62 +192,9 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
 
     internal Vector3 Read(string path, float u, float v, float footprint, bool color, bool wrap = true)
     {
-        ct.ThrowIfCancellationRequested();
-        if (_samples.TryGetValue((path,color,footprint),out var selected)) return Sample(selected,u,v,wrap);
-        var key = (path, color);
-        _images.TryGetValue(key, out var mips);
-        // A terrain tile reads a landscape texture far below its own resolution, so only the level asked for and the
-        // coarser ones are kept. Holding the full image for every texture filled the cache within one large tile, and
-        // each refill decoded the source files again.
-        if (mips is null || Lod(footprint, mips.BaseWidth) < mips.First)
-        {
-            var image = Load(path, color);
-            int baseWidth = image.Width, first = 0;
-            for (int lod = Lod(footprint, baseWidth); first < lod && (image.Width > 1 || image.Height > 1); first++) image = Downsample(image);
-            if (mips is not null) { _bytes -= mips.Bytes; Forget(path, color); }
-            if (_bytes >= CacheBytes) { _images.Clear(); _samples.Clear(); _bytes = 0; }
-            mips = new(baseWidth, first, [image]); _images[key] = mips; _bytes += mips.Bytes;
-        }
-        int wanted = Lod(footprint, mips.BaseWidth);
-        while (mips.First + mips.Levels.Count <= wanted && (mips.Levels[^1].Width > 1 || mips.Levels[^1].Height > 1))
-        { var mip = Downsample(mips.Levels[^1]); mips.Levels.Add(mip); _bytes += mip.Pixels.LongLength * 12; }
-        selected=mips.Levels[Math.Min(wanted - mips.First, mips.Levels.Count - 1)];_samples[(path,color,footprint)]=selected;
+        if (!_samples.TryGetValue((path, color, footprint), out var selected))
+            _samples[(path, color, footprint)] = selected = _textures.Level(path, color, footprint);
         return Sample(selected, u, v, wrap);
-    }
-
-    private static int Lod(float footprint, int baseWidth) => Math.Max(0, (int)MathF.Floor(MathF.Log2(Math.Max(1, footprint * baseWidth))));
-    private void Forget(string path, bool color)
-    { foreach (var stale in _samples.Keys.Where(k => k.Item2 == color && k.Item1 == path).ToArray()) _samples.Remove(stale); }
-
-    /// <summary>The source texture reduced to at most 512 pixels a side: level 0 of its chain.</summary>
-    private Image Load(string path, bool color)
-    {
-        if (!assets.TryOpen(path, out var stream)) throw new FileNotFoundException("Missing landscape texture: " + path, path);
-        Loads++;
-        TextureImage raw;
-        using (stream) { using var bytes = new MemoryStream(); stream.CopyTo(bytes); raw = TextureImages.Decode(bytes.ToArray()); }
-        int factor=1;
-        while (raw.Width/factor>512 || raw.Height/factor>512) factor*=2;
-        int width=Math.Max(1,raw.Width/factor), height=Math.Max(1,raw.Height/factor);
-        var pixels = new Vector3[width*height];
-        for (int y=0;y<height;y++)
-        {
-            ct.ThrowIfCancellationRequested();
-            for (int x=0;x<width;x++)
-            {
-                Vector3 sum=default; int count=0;
-                for (int sy=y*factor;sy<Math.Min((y+1)*factor,raw.Height);sy++)
-                for (int sx=x*factor;sx<Math.Min((x+1)*factor,raw.Width);sx++)
-                {
-                    int offset=(sy*raw.Width+sx)*4;
-                    byte r=raw.Pixels[offset], g=raw.Pixels[offset+1], b=raw.Pixels[offset+2];
-                    sum+=color ? new Vector3(Linear[r],Linear[g],Linear[b]) : new Vector3(r,g,b)/255;
-                    count++;
-                }
-                pixels[y*width+x]=sum/count;
-            }
-        }
-        return new Image(pixels,width,height);
     }
 
     internal bool Optional(string? path, string kind, out string found)
@@ -141,24 +212,7 @@ internal sealed class TerrainMaterials(IAssetSource assets, TerrainMaterialSetti
         assets.Exists(diffuse) || settings.PbrTwins && assets.Exists(Twin(diffuse));
     private static string Twin(string path) => path.StartsWith(@"textures\pbr\", StringComparison.OrdinalIgnoreCase)
         ? path : @"textures\pbr\" + path[@"textures\".Length..];
-    private Image Downsample(Image source)
-    {
-        int w = Math.Max(1, source.Width / 2), h = Math.Max(1, source.Height / 2);
-        var pixels = new Vector3[w * h];
-        for (int y = 0; y < h; y++)
-        {
-            ct.ThrowIfCancellationRequested();
-            for (int x = 0; x < w; x++)
-            {
-                Vector3 sum = default;
-                for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 2; dx++)
-                    sum += source.Pixels[Math.Min(y * 2 + dy, source.Height - 1) * source.Width + Math.Min(x * 2 + dx, source.Width - 1)];
-                pixels[y * w + x] = sum * .25f;
-            }
-        }
-        return new(pixels, w, h);
-    }
-    private static Vector3 Sample(Image image, float u, float v, bool wrap)
+    private static Vector3 Sample(TerrainTextures.Image image, float u, float v, bool wrap)
     {
         float x = u * image.Width - .5f, y = v * image.Height - .5f;
         int ix = (int)MathF.Floor(x), iy = (int)MathF.Floor(y); float fx = x - ix, fy = y - iy;

@@ -24,6 +24,13 @@ Terrain
   minutes each. The texture cache kept every texture at 512 pixels although a tile reads a
   much smaller level, so a large tile filled it, emptied it and decoded the same files
   again many times. It now keeps only the levels a tile reads. Output is byte-identical.
+- Terrain uses every worker thread. Tiles were built one at a time on one thread, and the
+  terrain-shadow heightmap likewise; both now run on all workers (**Preferences → Worker
+  threads**). Landscape and cell records are found once for the run, not once per
+  worldspace and season, and decoded landscape textures are shared between worldspaces.
+  Output is byte-identical for any worker count.
+- The heightmap export no longer re-reads existing terrain meshes for every row. It kept 16
+  of them, fewer than one row of a large worldspace crosses.
 
 - 16-bit DDS textures are read: R5G6B5, which the Creation Kit writes for terrain LOD normal
   maps, plus X1R5G5B5, A1R5G5B5 and A4R4G4B4 and their DXGI equivalents. A worldspace whose
