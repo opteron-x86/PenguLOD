@@ -11,7 +11,11 @@ namespace PenguLOD.Plugins;
 
 public sealed record PipelineInputSnapshot(string Fingerprint, int Files, long Bytes, double Seconds, bool FullContentHashes);
 
-/// <summary>Conservative input inventory. Plugins/configs are content-hashed; large assets can use metadata or strict hashes.</summary>
+/// <summary>
+/// Conservative input inventory. Plugins/configs are content-hashed; large assets can use metadata or strict hashes.
+/// Files no stage reads are left out (<see cref="Unread"/>), so playing the game or running an animation tool between
+/// runs does not discard finished work.
+/// </summary>
 public static class PipelineInputs
 {
     private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -21,6 +25,31 @@ public static class PipelineInputs
         { ".esp", ".esm", ".esl", ".ini", ".json", ".txt", ".toml", ".lod", ".ccc" };
     private static readonly HashSet<string> ProfileFiles = new(StringComparer.OrdinalIgnoreCase)
         { "plugins.txt", "loadorder.txt", "modlist.txt", "archives.txt", "lockedorder.txt" };
+    // Havok animation and behaviour files, face morphs, and what tools leave behind.
+    private static readonly HashSet<string> UnreadExtensions = new(StringComparer.OrdinalIgnoreCase) { ".hkx", ".tri", ".log", ".bak", ".tmp" };
+    // The settings under SKSE\Plugins that a stage reads: grass (NGIO), seasons, and whether editor IDs are loaded.
+    // A stage that starts reading another one must add it here, or a change to it will not rebuild that stage.
+    private static readonly HashSet<string> SkseSettings = new(StringComparer.OrdinalIgnoreCase) { "GrassControl.ini", "po3_SeasonsOfSkyrim.ini", "po3_Tweaks.ini" };
+    private static readonly HashSet<string> AnimationData = new(StringComparer.OrdinalIgnoreCase) { "animationdatasinglefile.txt", "animationsetdatasinglefile.txt" };
+
+    /// <summary>
+    /// True for a file in a game or mod folder that no stage reads: the mod manager's own <c>meta.ini</c>, animation data,
+    /// logs, and everything under <c>SKSE</c> except the DLLs directly in <c>SKSE\Plugins</c> (their presence changes
+    /// what is generated) and the grass and season settings there. SKSE plugins write logs, caches, menu state and
+    /// their own settings below that folder while the game runs.
+    /// </summary>
+    /// <param name="relative">The path below the Data or mod folder.</param>
+    internal static bool Unread(string relative)
+    {
+        string[] parts = relative.Split('/', '\\');
+        string name = parts[^1], extension = Path.GetExtension(name);
+        if (UnreadExtensions.Contains(extension)) return true;
+        if (parts.Length == 1) return name.Equals("meta.ini", StringComparison.OrdinalIgnoreCase);
+        if (parts[0].Equals("skse", StringComparison.OrdinalIgnoreCase))
+            return parts.Length != 3 || !parts[1].Equals("plugins", StringComparison.OrdinalIgnoreCase)
+                || !(extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) || SkseSettings.Contains(name));
+        return parts[0].Equals("meshes", StringComparison.OrdinalIgnoreCase) && AnimationData.Contains(name);
+    }
 
     public static string ExternalFingerprint(IEnumerable<string?> paths, bool strict, CancellationToken ct)
     {
@@ -60,7 +89,7 @@ public static class PipelineInputs
         bool Excluded(string path) => exclusions.Any(e => path.Equals(e, comparison) || path.StartsWith(e + Path.DirectorySeparatorChar, comparison));
         var roots = new List<(string Path, int Mode)>();
         var singles = new List<string>();
-        string data, gameFolder;
+        string data, gameFolder; string? mo2 = null;
         if (game.Mode == GameSourceMode.Mo2Instance)
         {
             var locations = (game.Mo2Locations ?? new()) with { WinePrefix = game.WinePrefix ?? game.Mo2Locations?.WinePrefix };
@@ -68,7 +97,9 @@ public static class PipelineInputs
             var profile = instance.OpenProfile(game.Mo2Profile);
             data = instance.GameDataFolder; gameFolder = instance.GamePath;
             roots.Add((data, 1)); roots.AddRange(profile.EnabledModFolders().Select(p => (p, 1)));
-            roots.Add((profile.Folder, 0)); singles.Add(Path.Combine(instance.InstanceFolder, "ModOrganizer.ini"));
+            roots.Add((profile.Folder, 0));
+            // Mod Organizer rewrites ModOrganizer.ini whenever it runs. Only the folders it resolves to matter here.
+            mo2 = string.Join('|', new[] { instance.GamePath, instance.ModsFolder, instance.ProfilesFolder, instance.OverwriteFolder, profile.Folder }.Select(Path.GetFullPath));
         }
         else
         {
@@ -98,7 +129,8 @@ public static class PipelineInputs
             if (message.Elapsed.TotalSeconds >= 1)
             { progress?.Report($"Inspecting pipeline inputs: {files:N0} files ({timer.Elapsed.TotalSeconds:F1}s)..."); message.Restart(); }
         }
-        Add("pipeline-inputs-v1"); Add(JsonSerializer.Serialize(game));
+        Add("pipeline-inputs-v2"); Add(JsonSerializer.Serialize(game));
+        if (mo2 is not null) Add("mo2:" + mo2);
         foreach (var (root, mode) in roots)
         {
             ct.ThrowIfCancellationRequested(); Add("layer:" + Path.GetFullPath(root));
@@ -118,9 +150,14 @@ public static class PipelineInputs
                     {
                         if (mode == 2 || mode == 1 && (!item.Top || AssetRoots.Contains(Path.GetFileName(path)))) pending.Push((path, false));
                     }
-                    else if (!path.EndsWith(".mohidden", StringComparison.OrdinalIgnoreCase)
-                        && (mode != 0 || ProfileFiles.Contains(Path.GetFileName(path))
-                            || Path.GetExtension(path).ToLowerInvariant() is ".ini" or ".toml")) FileEntry(path);
+                    else if (!path.EndsWith(".mohidden", StringComparison.OrdinalIgnoreCase) && mode switch
+                    {
+                        // The game rewrites its preferences file on exit, and no stage reads it.
+                        0 => ProfileFiles.Contains(Path.GetFileName(path)) || Path.GetExtension(path).ToLowerInvariant() is ".ini" or ".toml"
+                            && !Path.GetFileName(path).Equals("skyrimprefs.ini", StringComparison.OrdinalIgnoreCase),
+                        1 => !Unread(Path.GetRelativePath(root, path)),
+                        _ => true,
+                    }) FileEntry(path);
                 }
             }
         }
