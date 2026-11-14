@@ -58,10 +58,5 @@ internal static class TreeMaterials
         return true;
     }
 
-    private static LodMeshPart WithMaterial(LodMeshPart p, LodMaterial material) => new()
-    {
-        Name = p.Name, TexGenScale = p.TexGenScale, Tier = p.Tier, Material = material,
-        Positions = p.Positions, UVs = p.UVs, Normals = p.Normals, Tangents = p.Tangents,
-        Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles
-    };
+    private static LodMeshPart WithMaterial(LodMeshPart p, LodMaterial material) => p with { Material = material };
 }

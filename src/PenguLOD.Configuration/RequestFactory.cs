@@ -79,6 +79,7 @@ public static class RequestFactory
             TextureSize: Whole(s.TerrainTextureSize), Brightness: (float)s.TerrainBrightness, VertexColorStrength: (float)s.TerrainVertexColor,
             TextureRepeatsPerCell: (float)s.TerrainRepeats, SkirtDepth: (float)s.TerrainSkirt, Water: s.TerrainWater,
             UseExistingTerrain: s.TerrainFallback, ExportHeightmaps: s.TerrainHeightmaps, HeightmapMaximumSize: Whole(s.TerrainHeightmapSize), Seasons: s.Seasons,
+            SeasonsStrict: GenerationOptions.Get<bool>(s, "seasonsStrict"),
             Materials: new((float)s.TerrainNormalStrength, s.TerrainPbr, s.TerrainPbrTwins, (float)s.TerrainPbrScale, (float)s.TerrainPbrGamma, (float)s.TerrainAo),
             FillUncoveredLand: s.TerrainFillUncovered, SubstituteMissingTextures: s.TerrainSubstituteTextures);
         TerrainGeneration.Validate(request);
@@ -165,7 +166,7 @@ public static class RequestFactory
             CustomRulesFile: Optional(s.CustomRulesFile) is { } r ? PathValue(r, s) : null,
             Preset: Enum.Parse<LodPreset>(C("preset")), RemoveBuried: B("removeBuried"), RemoveUnderwater: B("removeUnderwater"),
             GrassLod: B("grass"), GrassDensity: F("grassDensity"), GrassSize: F("grassSize"), GrassTop: F("grassTop"), GrassBottom: F("grassBottom"),
-            TreeBrightness: F("treeBrightness"), ObjectBrightness: F("objectBrightness"), WaterStandIns: B("water"), Seasons: B("seasons"), ChildWorlds: B("childWorlds"),
+            TreeBrightness: F("treeBrightness"), ObjectBrightness: F("objectBrightness"), WaterStandIns: B("water"), Seasons: B("seasons"), SeasonsStrict: B("seasonsStrict"), ChildWorlds: B("childWorlds"),
             SkseDll: C("skse") switch { "Auto" => SkseDllChoice.Auto, "1.5.97–1.6.1170" => SkseDllChoice.UpTo1170, "1.7.x" => SkseDllChoice.Newer, "VR" => SkseDllChoice.Vr, _ => SkseDllChoice.None },
             Underside: B("underside"), UndersideStep: int.Parse(C("undersideStep")), EslRange: C("esl") == "Auto" ? 0 : int.Parse(C("esl")),
             NativeEffects: B("nativeEffects"), NativeGridObjects: B("nativeGrid"), PbrLod: B("pbr"), PbrLodBrightness: F("pbrBrightness"), PbrLodSize: int.Parse(C("pbrSize")),

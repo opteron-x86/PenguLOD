@@ -13,8 +13,9 @@ public class MaterialBakeTests
         Path = "card", Parts = [new() { Material = material ?? Material,
             Positions = [new(0,0,0), new(100,0,0), new(0,0,100), new(100,0,100)],
             UVs = [new(0,1), new(1,1), new(0,0), new(1,0)],
-            Normals = Enumerable.Repeat(-Vector3.UnitY,4).ToArray(), Tangents = Enumerable.Repeat(Vector3.UnitX,4).ToArray(),
-            Bitangents = Enumerable.Repeat(-Vector3.UnitZ,4).ToArray(), Triangles = [0,1,2,1,3,2] }]
+            // NIF tangent frame: tangent along +V (down the card), bitangent along +U (+X).
+            Normals = Enumerable.Repeat(-Vector3.UnitY,4).ToArray(), Tangents = Enumerable.Repeat(-Vector3.UnitZ,4).ToArray(),
+            Bitangents = Enumerable.Repeat(Vector3.UnitX,4).ToArray(), Triangles = [0,1,2,1,3,2] }]
     };
     private static (byte[],int,int)? Texture(string path) => path switch
     { "normal" => (new byte[]{218,128,218,0},1,1), "rmaos" => (new byte[]{128,0,128,255},1,1), _ => (new byte[]{200,200,200,255},1,1) };

@@ -3,7 +3,11 @@
 PenguLOD uses its own semantic version, independent of AnvilLOD’s game plugin version.
 Pre-release versions are marked alpha or beta until the supported workflows have broader validation.
 
-## Unreleased
+## [0.6.0-beta.1] - 2026-11-13
+
+The first beta. A full run of grass, textures, terrain and object LOD over 85 worldspaces
+of a 2,044-plugin load order now takes about 35 minutes on a 32-thread machine with NVMe
+storage; terrain alone went from 70 minutes to under 7.
 
 Terrain
 
@@ -24,7 +28,13 @@ Terrain
   minutes each. The texture cache kept every texture at 512 pixels although a tile reads a
   much smaller level, so a large tile filled it, emptied it and decoded the same files
   again many times. It now keeps only the levels a tile reads. Output is byte-identical.
-
+- Terrain uses every worker thread. Tiles were built one at a time on one thread, and the
+  terrain-shadow heightmap likewise; both now run on all workers (**Preferences → Worker
+  threads**). Landscape and cell records are found once for the run, not once per
+  worldspace and season, and decoded landscape textures are shared between worldspaces.
+  Output is byte-identical for any worker count.
+- The heightmap export no longer re-reads existing terrain meshes for every row. It kept 16
+  of them, fewer than one row of a large worldspace crosses.
 - 16-bit DDS textures are read: R5G6B5, which the Creation Kit writes for terrain LOD normal
   maps, plus X1R5G5B5, A1R5G5B5 and A4R4G4B4 and their DXGI equivalents. A worldspace whose
   existing terrain LOD used one stopped terrain generation with "DDS pixel format (16-bit,
@@ -40,6 +50,48 @@ Running alongside the game
   such a mod manager during a run changes `Data` underneath PenguLOD.
 - A read that fails because its storage changed or went away now stops the pipeline with a
   plain explanation and what to do, in place of a stack trace ending in "Input/output error".
+
+Visual correctness
+
+- Generated tangents follow the convention of Skyrim meshes and nifly: the NIF tangent
+  runs along V and the bitangent along U. Shapes without stored tangents (most Skyrim LE
+  meshes and some SE ones), tree and hybrid trunk cards, water stand-ins and rendered
+  billboards used the opposite, which mirrored normal-map lighting.
+- Simplified parts keep their shape name, tier and TexGen scale, so automatic object LOD
+  again matches alternate textures and recipes.
+- Seasons of Skyrim INIs are applied in the game's order: `MainFormSwap_<SEASON>.ini`
+  first, then the others in case-sensitive name order. A line for a record that is not in
+  the load order is skipped and reported, as in game; **Strict seasonal swaps**
+  (`--seasons-strict`) restores the stop. Seasons that change nothing get no seasonal files.
+- BC7: blocks whose texels share the same channel sum (red beside green) no longer encode
+  as one flat colour, and opaque blocks decode to alpha 255. The Vulkan encoder matches.
+- Block-compressed output always has a top level that is a multiple of four, which
+  Direct3D 11 requires; authored mips that are not are left unsliced. Recipe tiles of
+  another aspect keep the resolution of their long axis. Opaque copies of sRGB textures
+  stay sRGB.
+
+Regenerate object LOD, tree LOD and textures to pick up these changes: block hashes,
+billboard, hybrid trunk, automatic object, PBR and opaque-copy caches rebuild once. The
+result has had a general in-game look on one large load order; normal-mapped billboards and
+converted Skyrim LE meshes were not checked one by one.
+
+Reusing finished work
+
+- Playing the game or running an animation tool between runs no longer rebuilds every
+  stage. The check for changed inputs counted files no stage reads: `ModOrganizer.ini`,
+  each mod's `meta.ini`, `SkyrimPrefs.ini`, animation files, logs, and the settings, caches
+  and menu state SKSE plugins write under `SKSE/Plugins`. Those are now left out; the
+  grass, season and po3 Tweaks settings there still count. Enabling, disabling or updating
+  a mod still rebuilds. The first run with this version rebuilds once.
+
+Choosing worldspaces
+
+- **Choose…** beside every worldspace field lists the worldspaces in the load order with
+  their ID, in-game name, plugin, parent worldspace and LOD grid size, to tick instead of
+  typing IDs. A filter narrows the list by any of those; **Select shown** takes what is
+  left, which picks all worldspaces of one mod. Worldspaces without LOD settings, which
+  terrain and object LOD skip, cannot be ticked there.
+- New `PenguLOD worldspaces` command prints the same list.
 
 ## [0.6.0-alpha.5] - 2026-11-12
 

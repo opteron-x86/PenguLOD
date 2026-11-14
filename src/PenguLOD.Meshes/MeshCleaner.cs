@@ -65,9 +65,9 @@ public static class MeshCleaner
         }
         // The vertices that were merged away no longer count as removed vertices if they were orphaned anyway; report what the part lost.
         int verticesGone = vertexCount - pos.Count;
-        var cleaned = new LodMeshPart
+        var cleaned = p with
         {
-            Name = p.Name, Material = p.Material, Positions = pos.ToArray(), UVs = uv.ToArray(), Normals = nrm.ToArray(),
+            Positions = pos.ToArray(), UVs = uv.ToArray(), Normals = nrm.ToArray(),
             Tangents = tan.ToArray(), Bitangents = bit.ToArray(), Colors = col?.ToArray(), Triangles = tris,
         };
         return new Result(cleaned, dropped, verticesGone);

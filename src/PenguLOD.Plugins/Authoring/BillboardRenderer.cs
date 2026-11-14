@@ -32,11 +32,10 @@ public static class BillboardRenderer
             // Side camera looks from +X, with +Y across the image and +Z up. Rotate the
             // entire normal/tangent basis with positions so the generated side card lights correctly.
             static Vector3 Project(Vector3 p) => new(p.Y, -p.X, p.Z);
-            model = new LodMesh { Path = model.Path, Parts = model.Parts.Select(p => new LodMeshPart
+            model = new LodMesh { Path = model.Path, Parts = model.Parts.Select(p => p with
             {
-                Name = p.Name, Material = p.Material, Positions = p.Positions.Select(Project).ToArray(),
-                Normals = p.Normals.Select(Project).ToArray(), Tangents = p.Tangents.Select(Project).ToArray(),
-                Bitangents = p.Bitangents.Select(Project).ToArray(), UVs = p.UVs, Colors = p.Colors, Triangles = p.Triangles
+                Positions = p.Positions.Select(Project).ToArray(), Normals = p.Normals.Select(Project).ToArray(),
+                Tangents = p.Tangents.Select(Project).ToArray(), Bitangents = p.Bitangents.Select(Project).ToArray(),
             }).ToArray() };
         }
         materials ??= new();
@@ -143,15 +142,17 @@ public static class BillboardRenderer
                     if (normalTexture is not null)
                     {
                         var ns = Sample(normalTexture, uv, part.Material.ClampMode);
-                        var tangent = part.Tangents[i0] * w0 + part.Tangents[i1] * w1 + part.Tangents[i2] * w2;
-                        tangent -= n * Vector3.Dot(tangent, n);
-                        if (tangent.LengthSquared() > 1e-8f)
+                        // NIF convention (LodMeshPart.Tangents): the bitangent field runs along +U and the tangent field along +V.
+                        // Red follows U and green follows V.
+                        var alongU = part.Bitangents[i0] * w0 + part.Bitangents[i1] * w1 + part.Bitangents[i2] * w2;
+                        alongU -= n * Vector3.Dot(alongU, n);
+                        if (alongU.LengthSquared() > 1e-8f)
                         {
-                            tangent = Vector3.Normalize(tangent);
-                            var rawB = part.Bitangents[i0] * w0 + part.Bitangents[i1] * w1 + part.Bitangents[i2] * w2;
-                            var bitangent = Vector3.Cross(n, tangent);
-                            if (Vector3.Dot(bitangent, rawB) < 0) bitangent = -bitangent;
-                            var mapped = tangent * ((ns.R - 128) / 127) + bitangent * ((ns.G - 128) / 127) + n * ((ns.B - 128) / 127);
+                            alongU = Vector3.Normalize(alongU);
+                            var rawV = part.Tangents[i0] * w0 + part.Tangents[i1] * w1 + part.Tangents[i2] * w2;
+                            var alongV = Vector3.Cross(n, alongU);
+                            if (Vector3.Dot(alongV, rawV) < 0) alongV = -alongV;
+                            var mapped = alongU * ((ns.R - 128) / 127) + alongV * ((ns.G - 128) / 127) + n * ((ns.B - 128) / 127);
                             if (mapped.LengthSquared() > 1e-8f) n = Vector3.Normalize(mapped);
                         }
                     }

@@ -1,7 +1,7 @@
 # Maintaining releases
 
 `main` is the integration branch; use short-lived feature/fix branches and reviewed pull requests.
-PenguLOD uses SemVer with pre-release identifiers while in alpha. `VERSION` controls the .NET
+PenguLOD uses SemVer with pre-release identifiers (alpha, beta, rc) until a stable version. `VERSION` controls the .NET
 application, package and SKSE runtime version. `UPSTREAM_VERSION` records AnvilLOD ancestry;
 do not bump it simply to release PenguLOD.
 

@@ -31,7 +31,7 @@ internal sealed class HybridTreeAuthor(AssetIndex assets, Tree3DSettings setting
             { reason = "Hybrid authoring needs separate opaque trunk and alpha-tested crown shapes, without blended/effect parts."; return null; }
             var trunk = new LodMesh { Path = source.Path, Parts = bark };
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            hash.AppendData(Encoding.UTF8.GetBytes(FormattableString.Invariant($"hybrid1|{source.Path}|{settings.TrunkTextureSize}|{settings.TrunkUnitsPerPixel:R}")));
+            hash.AppendData(Encoding.UTF8.GetBytes(FormattableString.Invariant($"hybrid2|{source.Path}|{settings.TrunkTextureSize}|{settings.TrunkUnitsPerPixel:R}")));
             hash.AppendData(Read(source.Path) ?? throw new FileNotFoundException(source.Path));
             foreach (var part in bark) hash.AppendData(Encoding.UTF8.GetBytes(part.Material.Key));
             foreach (var texture in bark.SelectMany(p => p.Material.Textures).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
@@ -108,7 +108,7 @@ internal sealed class HybridTreeAuthor(AssetIndex assets, Tree3DSettings setting
         try { File.WriteAllBytes(temp, bytes); File.Move(temp, path, true); }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
-    private static LodMeshPart Card(Entry entry, bool side)
+    internal static LodMeshPart Card(Entry entry, bool side)
     {
         var f = side ? entry.Side : entry.Front; string stem = entry.Stem + (side ? "_2" : "_1");
         var across = side ? Vector3.UnitY : Vector3.UnitX; var normal = side ? Vector3.UnitX : -Vector3.UnitY;
@@ -119,8 +119,9 @@ internal sealed class HybridTreeAuthor(AssetIndex assets, Tree3DSettings setting
             Material = new([stem + ".dds", stem + "_n.dds", "", "", "", "", "", "", ""], 0x80000300, 0x15, 3,
                 true, GrassPatchBuilder.AlphaTestFlags, GrassPatchBuilder.AlphaThreshold, Vector3.Zero, 1),
             Positions = [bottom - half, bottom + half, top + half, top - half], UVs = [new(0, 1), new(1, 1), new(1, 0), new(0, 0)],
-            Normals = [normal, normal, normal, normal], Tangents = [across, across, across, across],
-            Bitangents = [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ], Triangles = [0, 1, 2, 0, 2, 3]
+            // NIF tangent frame: tangent along +V (down the card), bitangent along +U (across it).
+            Normals = [normal, normal, normal, normal], Tangents = [-Vector3.UnitZ, -Vector3.UnitZ, -Vector3.UnitZ, -Vector3.UnitZ],
+            Bitangents = [across, across, across, across], Triangles = [0, 1, 2, 0, 2, 3]
         };
     }
 }

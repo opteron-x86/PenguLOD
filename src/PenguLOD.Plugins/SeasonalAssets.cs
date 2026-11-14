@@ -8,25 +8,43 @@ namespace PenguLOD.Plugins;
 /// <summary>Winning named seasonal INIs. Replacement lookups are single-step, like the game plugin.</summary>
 internal static class SeasonalAssets
 {
-    public static IReadOnlyDictionary<string, Dictionary<FormKey, FormKey>> Read(GameContext game, AssetIndex assets, string section)
+    /// <summary>Season INI paths in the order Seasons of Skyrim applies them (see <see cref="SeasonSwaps.LoadOrder"/>).</summary>
+    internal static IReadOnlyList<string> SeasonFiles(AssetIndex assets) =>
+        SeasonSwaps.LoadOrder(assets.EnumeratePaths(@"seasons\").Where(p => SeasonSwaps.SeasonOf(GamePath.GetFileName(p)) is not null),
+            assets.FileNameOf);
+
+    /// <param name="strict">Throw on a line naming a form that is not in the load order. Off, the line is skipped and reported,
+    /// as Seasons of Skyrim skips it in game.</param>
+    /// <returns>Swaps per season. A season appears only when it changes at least one form, so stages do not rebuild an
+    /// identical seasonal set; the game falls back to the normal LOD for it.</returns>
+    public static IReadOnlyDictionary<string, Dictionary<FormKey, FormKey>> Read(GameContext game, AssetIndex assets, string section,
+        bool strict = false, Action<string>? warn = null)
     {
         var result = new Dictionary<string, Dictionary<FormKey, FormKey>>();
-        foreach (var path in assets.EnumeratePaths(@"seasons\").Order(StringComparer.OrdinalIgnoreCase))
+        foreach (var path in SeasonFiles(assets))
         {
             if (SeasonSwaps.SeasonOf(GamePath.GetFileName(path)) is not { } season || !assets.TryOpen(path, out var stream)) continue;
             using var reader = new StreamReader(stream);
-            if (!result.TryGetValue(season, out var swaps)) result[season] = swaps = [];
             foreach (var swap in SeasonSwaps.Parse(reader.ReadToEnd()).Where(s => s.Section.Equals(section, StringComparison.OrdinalIgnoreCase)))
             {
                 var from = SeasonalCoverage.Resolve(game,section,swap.Base); var to = SeasonalCoverage.Resolve(game,section,swap.Swap);
-                if (from is null || to is null) throw new InvalidDataException($"{path}: unresolved {section} swap {swap.Base} → {swap.Swap}.");
+                if (from is null || to is null)
+                {
+                    string message = $"{assets.FileNameOf(path)}: unresolved [{section}] swap {Label(swap.Base)} → {Label(swap.Swap)}; skipped, as in game.";
+                    if (strict) throw new InvalidDataException(message.Replace("; skipped, as in game.", ". Strict seasonal swaps are on."));
+                    warn?.Invoke(message);
+                    continue;
+                }
+                if (!result.TryGetValue(season, out var swaps)) result[season] = swaps = [];
                 // Identity entries deliberately cancel an earlier file's replacement.
                 swaps[from.Value] = to.Value;
             }
         }
+        foreach (var season in result.Where(p => p.Value.All(s => s.Key == s.Value)).Select(p => p.Key).ToArray()) result.Remove(season);
         return result;
-
     }
+
+    internal static string Label(SeasonFormRef form) => form.EditorId ?? $"0x{form.LocalId:X}~{form.Plugin}";
 
     public static TreeReference SwapTree(GameContext game, AssetIndex assets, TreeReference tree, IReadOnlyDictionary<FormKey,FormKey> swaps, Tree3DSettings settings)
     {

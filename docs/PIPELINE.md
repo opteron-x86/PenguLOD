@@ -10,6 +10,15 @@ size and filesystem timestamps; enable **Verify all source files** when sources
 may have been replaced while preserving metadata. Published outputs are always content
 hashed before reuse. Generated output folders are excluded from the source inventory.
 
+The source inventory is the game's Data folder, every enabled mod, Overwrite and the
+profile. Enabling, disabling or updating any mod therefore rebuilds every selected stage.
+Files no stage reads are left out, so these do not: Mod Organizer's `ModOrganizer.ini` and
+each mod's `meta.ini`, the game's `SkyrimPrefs.ini`, animation files (`.hkx`, the animation
+data lists) and face morphs (`.tri`), logs, and everything under `SKSE` except the `.dll`
+files directly in `SKSE/Plugins` and, beside them, `GrassControl.ini`,
+`po3_SeasonsOfSkyrim.ini` and `po3_Tweaks.ini`. Playing the game or running Pandora,
+Nemesis or FNIS between runs keeps finished stages and terrain tiles reusable.
+
 Jobs live under `<cache>/jobs/<plan-id>/`: `job.json` records state, timings and owned files;
 `request.json` contains the reusable configuration; scan reports and logs survive failed
 LOD attempts. These local files contain paths from your computer. Review them before sharing.
@@ -67,7 +76,9 @@ original build's measurements in the journal.
 
 Terrain reports split mesh building, material sampling, DDS encoding, file writing,
 heightmap export, tile verification and cache writing. They count newly built and restored
-tiles separately. A reused whole stage shows its current verification time; its saved
+tiles separately. Tiles and heightmap rows are built on every worker thread at once, so a
+phase's time is the sum over the workers and can exceed the stage's elapsed time. Output does
+not depend on the worker count. A reused whole stage shows its current verification time; its saved
 result still describes the original generation. Keep the cache outside game files, input
 mods and generated output folders. Deleting a job's `terrain-tiles` directory while no job
 is running frees its tile cache; the next incomplete terrain stage rebuilds those tiles.

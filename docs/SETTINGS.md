@@ -44,6 +44,14 @@ object LOD** worldspace field accepts comma-separated editor IDs, such as
 `Tamriel, DLC2SolstheimWorld`; blank or `*` includes all worlds with LOD settings.
 **Grass cache** has an independent worldspace selection. Textures use the load order.
 
+**Choose…** beside a worldspace field reads the selected game source and lists its
+worldspaces with their ID, in-game name, plugin, parent worldspace and LOD grid size. Tick
+the ones to generate, or the box for every worldspace. The filter matches any of those
+columns, so typing a plugin name such as `arnima` and pressing **Select shown** picks one
+mod's worldspaces. Worldspaces without LOD settings are listed last and cannot be ticked
+for terrain and object LOD; the grass cache can take any worldspace. The list is read
+again each time, so it follows the enabled mods.
+
 **Check setup** checks the selected stages. **Run selected stages** starts them,
 or resumes a matching saved run. The run button is disabled when no stages are
 selected. Individual stage pages have their own generation button at the bottom
@@ -361,6 +369,7 @@ the grass included in this LOD output.
 | Glow effect rules | Loads additional supplied fire and light-glow rules. Off by default; needs the corresponding resources. |
 | Water stand-ins | Includes lit replacement surfaces for supported streams and ponds. Off by default. Separate from Terrain's water LOD. |
 | Seasonal LOD | Builds variants using installed Seasons of Skyrim swaps. Off by default. Shared with Terrain's seasonal switch; grass-cache seasons are selected separately. |
+| Strict seasonal swaps | Stops generation when a seasonal INI names a record that is not in the load order. Off by default: such lines are skipped and reported, as the game does. |
 | Include initially disabled objects | Includes objects initially disabled by plugins. Off by default. Enabling it can bake unwanted removed objects into LOD. |
 | Include enable-parented objects | Includes objects whose visibility is controlled by another reference. On by default. |
 | SKSE DLL installation | **None** means install the matching DLL separately; it does not disable runtime features. **Auto** or an explicit runtime selects a supplied compatible DLL when available. PenguLOD packages do not bundle that DLL. |

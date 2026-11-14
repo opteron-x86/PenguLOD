@@ -103,9 +103,18 @@ public static class PipelineDiagnostics
                 foreach(var row in seasons)
                 {
                     Add("Info","seasonal-swaps",$"{row.Season} {row.Category}: {row.Resolved}/{row.Entries} entries resolve.","Later INI entries win; identity entries restore the original record.");
+                    // Generation skips unresolved lines, as the game does, unless strict seasonal swaps are on. Seasonal grass
+                    // caching stays strict: the grass backend's handling of such lines is not verified.
+                    bool strict=row.Category switch
+                    {
+                        "grasses"=>true,
+                        "landtextures"=>seasonalGrass || request.Terrain?.SeasonsStrict==true,
+                        _=>request.Lod?.SeasonsStrict==true
+                    };
                     foreach(string problem in row.Problems)
-                        Add(SeasonalCoverage.Affects(request,row.Category,seasonalGrass)?"Error":"Warning","unresolved-seasonal-swap",problem,
-                            "Correct the seasonal INI or restore its required plugin. Runtime-generated swaps must first be saved as INIs.");
+                        Add(SeasonalCoverage.Affects(request,row.Category,seasonalGrass) && strict?"Error":"Warning","unresolved-seasonal-swap",problem,
+                            "Correct the seasonal INI or restore its required plugin. Runtime-generated swaps must first be saved as INIs. "
+                            + "Generation skips this line, as the game does, unless strict seasonal swaps are on.");
                 }
                 if(seasons.Count==0)Add("Warning","no-seasonal-swaps","No supported written seasonal swaps were found.",
                     "Make the Seasons of Skyrim INIs available to this profile. Runtime automatic snow is not generated here.");

@@ -87,10 +87,16 @@ public class SeasonalPipelineTests
     {
         using var f=Fixture();
         TextureFixture.Put(f.Textures.Data,@"seasons\Z_WIN.ini",Encoding.UTF8.GetBytes("[Statics]\nFixtureObject|MissingObject\n[Trees]\nFixtureTree|FixtureObject\n"));
-        var request=Request(f,true);var report=PipelineDiagnostics.Run(request);
-        Assert.False(report.CanGenerate);Assert.Equal(2,report.Seasons!.Sum(s=>s.Unresolved));
-        Assert.Equal(2,report.Issues.Count(i=>i.Code=="unresolved-seasonal-swap"&&i.Severity=="Error"));
+        var request=Request(f,true);
+        // Strict seasonal swaps block generation before anything is written.
+        var strict=PipelineDiagnostics.Run(request with {Lod=request.Lod! with {SeasonsStrict=true}});
+        Assert.False(strict.CanGenerate);Assert.Equal(2,strict.Seasons!.Sum(s=>s.Unresolved));
+        Assert.Equal(2,strict.Issues.Count(i=>i.Code=="unresolved-seasonal-swap"&&i.Severity=="Error"));
         Assert.False(Directory.Exists(f.Output));
+        // By default they are reported and skipped, as Seasons of Skyrim skips them in game.
+        var report=PipelineDiagnostics.Run(request);
+        Assert.True(report.CanGenerate);
+        Assert.Equal(2,report.Issues.Count(i=>i.Code=="unresolved-seasonal-swap"&&i.Severity=="Warning"));
     }
 
     private static TerrainFixture Fixture()

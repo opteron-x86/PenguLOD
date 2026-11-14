@@ -23,15 +23,16 @@ public static class SeasonalLod
     public static Result Build(
         GameContext game, IAssetSource assets, Func<string, IEnumerable<string>> enumerate, LodMeshResolver resolver,
         IReadOnlyDictionary<QuadKey, IReadOnlyList<LodReference>> quads, LodGenerator generator, string outputFolder,
-        IProgress<string>? progress, CancellationToken ct, GrassLodSource? grass = null, IReadOnlyList<TreeReference>? trees = null, Tree3DSource? tree3d = null, Tree3DSettings? treeSettings = null, IDictionary<string,TextureVariant>? textureVariants = null)
+        IProgress<string>? progress, CancellationToken ct, GrassLodSource? grass = null, IReadOnlyList<TreeReference>? trees = null, Tree3DSource? tree3d = null, Tree3DSettings? treeSettings = null, IDictionary<string,TextureVariant>? textureVariants = null,
+        bool strict = false, Action<string>? warn = null)
     {
         var messages = new List<string>();
-        var files = enumerate("seasons\\")
-            .Where(p => p.EndsWith(".ini", StringComparison.Ordinal) && SeasonSwaps.SeasonOf(GamePath.GetFileName(p)) is not null)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase) // Seasons of Skyrim reads the folder in name order; later wins
-            .ToList();
+        var index = (AssetIndex)assets;
+        // MainFormSwap first, then the other INIs in case-sensitive name order; later files win, as in Seasons of Skyrim.
+        var files = SeasonSwaps.LoadOrder(enumerate("seasons\\")
+            .Where(p => p.EndsWith(".ini", StringComparison.Ordinal) && SeasonSwaps.SeasonOf(GamePath.GetFileName(p)) is not null), index.FileNameOf).ToList();
         var scopes = Scopes(quads.Keys);
-        var seasonalTrees = SeasonalAssets.Read(game, (AssetIndex)assets, "Trees");
+        var seasonalTrees = SeasonalAssets.Read(game, index, "Trees", strict, warn);
         var treeLookup = (trees ?? []).GroupBy(t=>(t.Worldspace,t.FormKey)).ToDictionary(g=>g.Key,g=>g.First());
         var settings = treeSettings ?? Tree3DSettings.Off;
         int seasons = 0, rebuilt = 0, linked = 0;
@@ -57,7 +58,12 @@ public static class SeasonalLod
                     if (!SeasonSwaps.ObjectSections.Contains(s.Section)) continue;
                     var baseKey = SeasonalCoverage.Resolve(game, s.Section, s.Base);
                     var swapKey = SeasonalCoverage.Resolve(game, s.Section, s.Swap);
-                    if (baseKey is null || swapKey is null) throw new InvalidDataException($"{f}: unresolved [{s.Section}] seasonal object swap. Correct the INI or restore its required plugin.");
+                    if (baseKey is null || swapKey is null)
+                    {
+                        if (strict) throw new InvalidDataException($"{index.FileNameOf(f)}: unresolved [{s.Section}] seasonal object swap {SeasonalAssets.Label(s.Base)} → {SeasonalAssets.Label(s.Swap)}. Strict seasonal swaps are on: correct the INI or restore its required plugin.");
+                        warn?.Invoke($"{index.FileNameOf(f)}: unresolved [{s.Section}] swap {SeasonalAssets.Label(s.Base)} → {SeasonalAssets.Label(s.Swap)}; skipped, as in game.");
+                        continue;
+                    }
                     // Identity entries cancel earlier swaps.
                     if(baseKey==swapKey) {swaps.Remove(baseKey.Value.ToString());continue;}
                     swaps[baseKey.Value.ToString()] = ReplacementFor(swapKey.Value);
@@ -94,6 +100,12 @@ public static class SeasonalLod
                     else seasonal.Add(r);
                 }
                 if (any) changed[quad] = seasonal;
+            }
+            // Nothing differs this season: without seasonal files the game uses the normal LOD, which is the same.
+            if (changed.Count == 0)
+            {
+                messages.Add($"Seasons ({name}): no object LOD block changes; no seasonal object LOD written");
+                continue;
             }
 
             var gen = generator.Generate(changed, changed.Keys.ToList(), outputFolder, progress, ct, suffix);

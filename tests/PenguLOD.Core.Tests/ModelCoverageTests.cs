@@ -68,7 +68,10 @@ public class ModelCoverageTests
         Assert.Equal(new Vector3(125, 5, 0), p.Positions[0]);
         Assert.Equal(new Vector3(125, -395, 800), p.Positions[3]);
         Assert.InRange(Vector3.Distance(-Vector3.UnitX, p.Normals[0]), 0, .02f);
-        Assert.InRange(Vector3.Distance(-Vector3.UnitY, p.Tangents[0]), 0, .02f);
+        // The fixture's U runs along +X before the bones turn it. Shapes with stored tangents keep the fixture's own tangent
+        // field (written along X); generated frames follow the NIF convention, which puts the U direction in the bitangent.
+        var alongU = geometry == ModelNifFixture.Geometry.Triangles ? p.Bitangents[0] : p.Tangents[0];
+        Assert.InRange(Vector3.Distance(-Vector3.UnitY, alongU), 0, .02f);
         Assert.All(p.Normals, n => Assert.InRange(n.Length(), .999f, 1.001f));
     }
 

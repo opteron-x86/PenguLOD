@@ -197,11 +197,7 @@ public static partial class TextureGeneration
         };
     }
 
-    private static LodMeshPart CopyPart(LodMeshPart p, LodMaterial material) => new()
-    {
-        Name = p.Name, TexGenScale = p.TexGenScale, Material = material, Positions = p.Positions, UVs = p.UVs, Normals = p.Normals,
-        Tangents = p.Tangents, Bitangents = p.Bitangents, Triangles = p.Triangles, Colors = p.Colors, Tier = p.Tier
-    };
+    private static LodMeshPart CopyPart(LodMeshPart p, LodMaterial material) => p with { Material = material };
 
     private static void RenderObjects(TextureGenerationRequest request, AssetIndex assets, ResourceCatalog resources,
         Func<string, byte[]?> read, Action<string, byte[]> write, List<TextureGenerationItem> items,

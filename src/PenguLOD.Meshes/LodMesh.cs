@@ -55,9 +55,10 @@ public sealed record LodShaderPassthru(
 
 /// <summary>
 /// One shape of a LOD mesh, already baked into mesh space (all node transforms applied).
-/// Directions are unit vectors; Bitangent follows the NIF's own naming.
+/// Directions are unit vectors. Derive changed copies with <c>part with { ... }</c>, which keeps every other field
+/// (name, material, tier, TexGen scale); a hand-written copy silently loses fields added later.
 /// </summary>
-public sealed class LodMeshPart
+public sealed record LodMeshPart
 {
     /// <summary>The shape's name in the source mesh. LODGen reads instructions from it (crown, trunk, flattrunk, spherenormals…).</summary>
     public string? Name { get; init; }
@@ -67,7 +68,12 @@ public sealed class LodMeshPart
     public required Vector3[] Positions { get; init; }
     public required Vector2[] UVs { get; init; }
     public required Vector3[] Normals { get; init; }
+    /// <summary>
+    /// The NIF "tangent" field: the direction of increasing V (dP/dv). Bethesda meshes and nifly store the tangent frame this
+    /// way round; it is not the textbook tangent along U.
+    /// </summary>
     public required Vector3[] Tangents { get; init; }
+    /// <summary>The NIF "bitangent" field: the direction of increasing U (dP/du). Normal-map red follows this axis.</summary>
     public required Vector3[] Bitangents { get; init; }
     public uint[]? Colors { get; init; }          // RGBA packed little-endian, or null
     public required ushort[] Triangles { get; init; } // 3 indices per triangle

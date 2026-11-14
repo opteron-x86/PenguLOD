@@ -17,7 +17,7 @@ public sealed record TerrainGenerationRequest(GameContextOptions Game, string Ou
     int TextureSize = 512, float Brightness = 1, float VertexColorStrength = 1, float TextureRepeatsPerCell = 24,
     float SkirtDepth = 512, bool Water = true, bool UseExistingTerrain = true, bool ExportHeightmaps = true,
     int HeightmapMaximumSize = 8192, bool Seasons = false, TerrainMaterialSettings? Materials = null,
-    bool FillUncoveredLand = true, bool SubstituteMissingTextures = true);
+    bool FillUncoveredLand = true, bool SubstituteMissingTextures = true, bool SeasonsStrict = false);
 public sealed record TerrainTileResult(string Worldspace, int Level, int X, int Y, int Triangles, int WaterCells, string? Season = null);
 public sealed record TerrainWorldResult(string Worldspace, int LandscapeCells, int ExistingTilesUsed, int Tiles, string? Heightmap);
 public sealed record TerrainPerformance(int BuiltTiles, int ReusedTiles, IReadOnlyDictionary<string,double> Timings);
@@ -65,7 +65,6 @@ public static class TerrainGeneration
         string defaultDiffuse = TerrainDefaultTexture.Resolve(request.Game, game.DataFolder);
         string defaultNormal = TerrainDefaultTexture.Resolve(request.Game, game.DataFolder, normal: true);
         progress?.Report("Default landscape diffuse: " + defaultDiffuse);
-        var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures") : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         var wanted=request.Worldspaces is {Count:>0}?new HashSet<string>(request.Worldspaces,StringComparer.OrdinalIgnoreCase):null;
         var worlds=game.LoadOrder.PriorityOrder.Worldspace().WinningOverrides().Where(w=>!w.IsDeleted && w.EditorID is {} id && (wanted is null||wanted.Contains(id))).ToArray();
         var owned = new OutputSnapshot();
@@ -76,8 +75,14 @@ public static class TerrainGeneration
         if(inputIssues.Where(i=>i.Blocking).ToArray() is {Length:>0} blocking)throw new InvalidDataException(TerrainInputs.Describe(blocking));
         var materialReports = new HashSet<TerrainMaterialReport>();
         var timings=new Dictionary<string,double>();int built=0,reused=0;
+        // Decoded once for the run: worldspaces share most of their landscape textures.
+        var textures=new TerrainTextures(assets,ct);
+        // Found once for the run, not once per worldspace and season.
+        progress?.Report("Reading landscape and cell records...");
+        var records=TerrainRecords.Read(game,ct,worlds.Select(w=>w.FormKey).ToHashSet());
         void Warn(string s){warnings.Add(s);progress?.Report("WARNING: "+s);}
         foreach(var issue in inputIssues)Warn(issue.Message);
+        var seasons = request.Seasons ? SeasonalAssets.Read(game,assets,"LandTextures",request.SeasonsStrict,Warn) : new Dictionary<string,Dictionary<Mutagen.Bethesda.Plugins.FormKey,Mutagen.Bethesda.Plugins.FormKey>>();
         using var stage=new StagedOutput(request.OutputFolder,false,progress,ct);
         preparation.Dispose();using var generation=WorkTiming.Measure("generation");
         foreach(var world in worlds)
@@ -94,40 +99,32 @@ public static class TerrainGeneration
             if(!TerrainInputs.ValidStride(settings))throw new InvalidDataException(name+": invalid LOD grid bounds.");
             var levels=(request.Levels??new[]{LodLevel.Lod4,LodLevel.Lod8,LodLevel.Lod16,LodLevel.Lod32}).Where(settings.Supports).Distinct().ToArray();
             var grid=new LodGrid(name,settings);var source=new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,defaultDiffuse:defaultDiffuse,defaultNormal:defaultNormal,materials:request.Materials,
-                fillUncoveredLand:request.FillUncoveredLand,substituteMissingTextures:request.SubstituteMissingTextures);
+                fillUncoveredLand:request.FillUncoveredLand,substituteMissingTextures:request.SubstituteMissingTextures,sharedTextures:textures,records:records);
             var planned=source.Tiles(levels).ToArray();
             if(planned.Length==0){Warn(name+": no landscape or existing terrain in the selected grid/levels; skipped.");continue;}
             if(request.Water && !source.HasLodWater) Warn(name+": no worldspace LOD-water record; water meshes are omitted to avoid invalid engine references.");
-            for(int index=0;index<planned.Length;index++)
-            {
-                ct.ThrowIfCancellationRequested();var tile=planned[index];progress?.Report($"Terrain {name}: {index+1}/{planned.Length} — LOD{(int)tile.Level} ({tile.X},{tile.Y})");
-                GenerateTile(tile,source,null);
-            }
+            var fallbackUsed=GenerateTiles(planned,source,null);
             foreach (var (season, swaps) in seasons)
             {
                 var seasonal = new TerrainSource(game,assets,world,grid,request.UseExistingTerrain,ct,swaps,season,defaultDiffuse,defaultNormal,request.Materials,
-                    request.FillUncoveredLand,request.SubstituteMissingTextures);
-                foreach (var tile in planned)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    progress?.Report($"Terrain {name} {season}: LOD{(int)tile.Level} ({tile.X},{tile.Y})");
-                    GenerateTile(tile,seasonal,season);
-                }
-                if (seasonal.FallbackUsed.Count>0) Warn($"{name} {season}: missing LAND uses installed seasonal terrain textures where present, otherwise the installed default terrain. Check these areas in game.");
-                Collect(seasonal);
+                    request.FillUncoveredLand,request.SubstituteMissingTextures,textures,records);
+                if (GenerateTiles(planned,seasonal,season).Count>0) Warn($"{name} {season}: missing LAND uses installed seasonal terrain textures where present, otherwise the installed default terrain. Check these areas in game.");
             }
             string? heightmap=null;
             if(request.ExportHeightmaps)
             {
                 progress?.Report("Exporting terrain-shadow heightmap: "+name);
                 int minX=planned.Min(t=>t.X),minY=planned.Min(t=>t.Y),maxX=planned.Max(t=>t.X+(int)t.Level)-1,maxY=planned.Max(t=>t.Y+(int)t.Level)-1;
-                var export=Measure("terrain-heightmap",()=>TerrainHeightmap.Export(name,minX,minY,maxX,maxY,request.HeightmapMaximumSize,source.Height,ct));
+                // Each worker samples heights through its own view of the landscape.
+                var samplers=new System.Collections.Concurrent.ConcurrentBag<TerrainSource>();
+                var export=Measure("terrain-heightmap",()=>TerrainHeightmap.Export(name,minX,minY,maxX,maxY,request.HeightmapMaximumSize,source.Height,ct,
+                    ()=>{var fork=source.Fork();samplers.Add(fork);return fork.Height;}));
+                foreach(var fork in samplers)fallbackUsed.UnionWith(fork.FallbackUsed);
                 heightmap=export.Path;Write(heightmap,export.Bytes);
             }
-            reports.Add(new(name,source.Cells.Count,source.FallbackUsed.Count,planned.Length*(1+seasons.Count),heightmap));
-            if(source.FallbackUsed.Count>0)Warn($"{name}: sampled {source.FallbackUsed.Count} existing terrain tiles for missing LAND. Those areas retain the source terrain's detail.");
+            reports.Add(new(name,source.Cells.Count,fallbackUsed.Count,planned.Length*(1+seasons.Count),heightmap));
+            if(fallbackUsed.Count>0)Warn($"{name}: sampled {fallbackUsed.Count} existing terrain tiles for missing LAND. Those areas retain the source terrain's detail.");
             Write(LodSettings.RelativePathFor(name),settings.ToBytes());
-            Collect(source);
         }
         if(tiles.Count==0)throw new InvalidDataException("No terrain tiles were generated. Check worldspace selection, LOD settings and landscape coverage.");
         if(wanted is not null && wanted.Except(reports.Select(r=>r.Worldspace),StringComparer.OrdinalIgnoreCase).Any())
@@ -142,45 +139,68 @@ public static class TerrainGeneration
         beforePublish?.Invoke(stage.Payload,output);
         stage.Commit(progress);
         return new(request.OutputFolder,reports,tiles,warnings,watch.Elapsed.TotalSeconds,stage.PreviousOutput,output,materials,performance);
-        void Collect(TerrainSource source) { materialReports.UnionWith(source.MaterialReports); foreach(string warning in source.MaterialWarnings) if(!warnings.Contains(warning)) Warn(warning); }
-        void Write(string relative,byte[] bytes) => Measure("terrain-writing",()=>
+        void Write(string relative,byte[] bytes) { var (file,hash)=Put(relative,bytes);owned.Files[file]=hash; }
+        // Safe from any worker: every tile has its own files, and the caller records the hash.
+        (string File,string Hash) Put(string relative,byte[] bytes) => Measure("terrain-writing",()=>
         {
             ct.ThrowIfCancellationRequested();using var timing=WorkTiming.Measure("file-write-worker");
             string path=GamePath.ToFileSystemPath(stage.Payload,relative);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,bytes);
             // Hash the bytes just written rather than reading the file back; the staged scope reuses it when capturing.
-            owned.Files[Path.GetRelativePath(stage.Payload,path).Replace('\\','/')]=WrittenOutputHashes.RecordAndHash(path,bytes);return true;
+            return (Path.GetRelativePath(stage.Payload,path).Replace('\\','/'),WrittenOutputHashes.RecordAndHash(path,bytes));
         });
+        // With several workers a phase's time is the sum over them, so it can exceed the time on the clock.
         T Measure<T>(string phase,Func<T> action)
         {
             using var timing=WorkTiming.Measure(phase);var timer=Stopwatch.StartNew();
-            try {return action();}finally {timings[phase]=timings.GetValueOrDefault(phase)+timer.Elapsed.TotalSeconds;}
+            try {return action();}finally {lock(timings)timings[phase]=timings.GetValueOrDefault(phase)+timer.Elapsed.TotalSeconds;}
         }
-        void GenerateTile(QuadKey tile,TerrainSource source,string? season)
+        // Tiles are independent, so they are built on every worker at once. Results are recorded in tile order
+        // afterwards, which keeps the manifest and the warnings the same from run to run.
+        HashSet<QuadKey> GenerateTiles(QuadKey[] planned,TerrainSource source,string? season)
         {
+            var receipts=new TerrainTileReceipt?[planned.Length];var restored=new bool[planned.Length];int done=0;
+            string label="Terrain "+planned[0].Worldspace+(season is null?"":" "+season);
+            OrderedParallel.For(planned.Length,source.Fork,(index,fork)=>
+            {
+                var tile=planned[index];
+                (receipts[index],restored[index])=GenerateTile(tile,fork,season);
+                progress?.Report($"{label}: {Interlocked.Increment(ref done)}/{planned.Length} — LOD{(int)tile.Level} ({tile.X},{tile.Y})");
+            },ct);
+            var fallback=new HashSet<QuadKey>();
+            for(int index=0;index<planned.Length;index++)
+            {
+                var receipt=receipts[index]!;
+                foreach(var file in receipt.Output.Files)owned.Files[file.Key]=file.Value;
+                fallback.UnionWith(receipt.FallbackTiles);materialReports.UnionWith(receipt.Materials);
+                foreach(string warning in receipt.Warnings)if(!warnings.Contains(warning))Warn(warning);
+                tiles.Add(receipt.Tile);if(restored[index])reused++;else built++;
+            }
+            return fallback;
+        }
+        (TerrainTileReceipt Receipt,bool Restored) GenerateTile(QuadKey tile,TerrainSource source,string? season)
+        {
+            ct.ThrowIfCancellationRequested();
             string stem=$"{tile.Worldspace}.{(int)tile.Level}.{tile.X}.{tile.Y}"+(season is null?"":"."+season);
             string[] files=[$"meshes/terrain/{tile.Worldspace}/{stem}.btr",$"textures/terrain/{tile.Worldspace}/{stem}.dds",$"textures/terrain/{tile.Worldspace}/{stem}_n.dds"];
             var identity=new TerrainTileResult(tile.Worldspace,(int)tile.Level,tile.X,tile.Y,0,0,season);
             var saved=cache is null?null:Measure("terrain-cache-verification",()=>cache.Restore(identity,files,stage.Payload));
             if(saved is not null)
             {
-                foreach(var file in saved.Output.Files)owned.Files[file.Key]=file.Value;
-                source.RestoreFallbackTiles(saved.FallbackTiles);materialReports.UnionWith(saved.Materials);
-                foreach(string warning in saved.Warnings)if(!warnings.Contains(warning))Warn(warning);
-                tiles.Add(saved.Tile);reused++;
-                progress?.Report($"Reused terrain tile {stem}: mesh and both textures verified.");return;
+                progress?.Report($"Reused terrain tile {stem}: mesh and both textures verified.");return (saved,true);
             }
+            source.BeginTile();
+            var written=new Dictionary<string,string>();
+            void Add(string relative,byte[] bytes) { var (file,hash)=Put(relative,bytes);written[file]=hash; }
             var mesh=Measure("terrain-mesh",()=>TerrainTileBuilder.Build(tile,source.Height,(x,y)=>request.Water&&source.HasLodWater?source.Water(x,y):null,request.SkirtDepth,ct,season));
-            Write(files[0],mesh.Bytes);
+            Add(files[0],mesh.Bytes);
             var (diffuse,normal)=Measure("terrain-sampling",()=>Bake(tile,source,request,ct));
-            Write(files[1],Measure("terrain-encoding",()=>TextureImages.Encode(diffuse)));
-            Write(files[2],Measure("terrain-encoding",()=>TextureImages.Encode(normal,normal:true)));
-            var result=identity with {Triangles=mesh.Land.Indices.Length/3,WaterCells=mesh.WaterCells};
-            if(cache is not null)Measure("terrain-cache-writing",()=>
-            {
-                cache.Store(new(result,new OutputSnapshot {Files=files.ToDictionary(f=>f,f=>owned.Files[f])},
-                    source.FallbackUsed.ToArray(),source.MaterialReports.ToArray(),source.MaterialWarnings.ToArray()),stage.Payload);return true;
-            });
-            tiles.Add(result);built++;progress?.Report("Completed terrain tile "+stem);
+            Add(files[1],Measure("terrain-encoding",()=>TextureImages.Encode(diffuse)));
+            Add(files[2],Measure("terrain-encoding",()=>TextureImages.Encode(normal,normal:true)));
+            var receipt=new TerrainTileReceipt(identity with {Triangles=mesh.Land.Indices.Length/3,WaterCells=mesh.WaterCells},
+                new OutputSnapshot {Files=files.ToDictionary(f=>f,f=>written[f])},source.FallbackUsed.ToArray(),source.MaterialReports.ToArray(),source.MaterialWarnings.ToArray());
+            if(cache is not null)Measure("terrain-cache-writing",()=>{cache.Store(receipt,stage.Payload);return true;});
+            progress?.Report("Completed terrain tile "+stem);
+            return (receipt,false);
         }
 
     }

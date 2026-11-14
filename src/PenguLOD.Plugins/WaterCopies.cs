@@ -282,8 +282,9 @@ public static class WaterCopies
             Material = template.Material,
             Positions = [.. pos], UVs = [.. uv],
             Normals = Enumerable.Repeat(Vector3.UnitZ, n).ToArray(),
-            Tangents = Enumerable.Repeat(Vector3.UnitX, n).ToArray(),
-            Bitangents = Enumerable.Repeat(Vector3.UnitY, n).ToArray(),
+            // NIF tangent frame: tangent along +V (fv), bitangent along +U (the flow direction fu).
+            Tangents = Enumerable.Repeat(new Vector3(fv.X, fv.Y, 0), n).ToArray(),
+            Bitangents = Enumerable.Repeat(new Vector3(fu.X, fu.Y, 0), n).ToArray(),
             Colors = colors ? Enumerable.Repeat(color, n).ToArray() : null,
             Triangles = [.. tris],
         };

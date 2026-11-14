@@ -10,15 +10,20 @@ vec4 px[16];
 void endpoints(out vec4 low,out vec4 high) {
     vec4 mean=vec4(0);for(int i=0;i<16;i++)mean+=px[i]/16;
     mat4 cov=mat4(0);for(int i=0;i<16;i++){vec4 d=px[i]-mean;cov+=outerProduct(d,d);}
-    vec4 axis=vec4(1);
+    // Seed with the covariance row of the widest channel, then the bounding-box diagonal (see Bc7Encoder.PrincipalEndpoints).
+    int widest=0;for(int c=1;c<4;c++)if(cov[c][c]>cov[widest][widest])widest=c;
+    vec4 axis=cov[widest];
+    if(dot(axis,axis)<1e-12){vec4 lo=px[0],hi=px[0];for(int i=1;i<16;i++){lo=min(lo,px[i]);hi=max(hi,px[i]);}axis=hi-lo;}
+    axis=dot(axis,axis)<1e-12?vec4(.5):normalize(axis);
     for(int j=0;j<8;j++){vec4 n=cov*axis;float len=dot(n,n);if(len<1e-12)break;axis=n/sqrt(len);}
     float a=3.4e38,b=-3.4e38;
     for(int i=0;i<16;i++){float t=dot(px[i]-mean,axis);a=min(a,t);b=max(b,t);}
     low=clamp(mean+a*axis,0,255);high=clamp(mean+b*axis,0,255);
 }
+// Every block here is opaque: only p-bit 1 can store alpha 255 (see Bc7Encoder.Quantize).
 void quantize(vec4 endpoint,out ivec4 q,out int bit) {
-    float best=3.4e38;bit=0;q=ivec4(0);
-    for(int p=0;p<2;p++){ivec4 candidate=ivec4(clamp(roundEven((endpoint-p)/2),0,127));
+    float best=3.4e38;bit=1;q=ivec4(0);
+    for(int p=1;p<2;p++){ivec4 candidate=ivec4(clamp(roundEven((endpoint-p)/2),0,127));
         vec4 d=vec4(candidate*2+p)-endpoint;float error=dot(d,d);if(error<best){best=error;q=candidate;bit=p;}}
 }
 float assign(ivec4 q0,int p0,ivec4 q1,int p1,out int indices[16]) {

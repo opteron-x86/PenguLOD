@@ -42,7 +42,7 @@ public static class OpaqueLodStage
         {
             var (rel, src) = (kv.Key, kv.Value);
             var dest = GamePath.ToFileSystemPath(output, rel);
-            var stamp = "v1|" + (assets.Fingerprint(src) ?? "?");
+            var stamp = "v2|" + (assets.Fingerprint(src) ?? "?");
             if (File.Exists(dest) && known.TryGetValue(rel, out var prev) && prev == stamp) { Interlocked.Increment(ref unchanged); return; }
             try
             {

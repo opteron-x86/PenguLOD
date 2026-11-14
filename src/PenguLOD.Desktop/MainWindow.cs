@@ -275,7 +275,7 @@ public sealed partial class MainWindow : Window
         return Scroll(Stack(16, Heading("Object LOD"),
             Card("Output", Stack(12,
                 PathField("Object LOD output", nameof(DesktopSettings.OutputFolder)),
-                Field("Worldspaces", nameof(DesktopSettings.Worldspaces), "Shared with terrain. Use comma-separated worldspace IDs, or * for all worlds."),
+                WorldspaceField("Worldspaces", nameof(DesktopSettings.Worldspaces), false, "Shared with terrain. Use comma-separated worldspace IDs, or * for all worlds. Choose… lists the worldspaces in the load order."),
                 Help(Check("Clear previous output before generation", nameof(DesktopSettings.CleanOutput)), "Rebuilds the entire object LOD output. Leave this off to reuse unchanged blocks."),
                 Row(Button("Open object output", () => Open(_settings.OutputFolder)), Button("View scan results", () => SelectPage("Scan results"))))),
             Row(Button("Balanced preset", () => ApplyPreset("Balanced")), Button("High quality", () => ApplyPreset("High")), Button("Objects only", () => ApplyPreset("Objects"))),

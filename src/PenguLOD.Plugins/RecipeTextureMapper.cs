@@ -235,9 +235,5 @@ public sealed class RecipeTextureMapper
         SaveReport(); var failures = Report.Where(r => r.Status == "Failed").ToArray();
         if (failures.Length > 0) throw new InvalidDataException("Recipe texture mapping failed: " + string.Join("; ", failures.Take(5).Select(r => r.Shape + ": " + r.Detail)));
     }
-    public static LodMeshPart Copy(LodMeshPart p, LodMaterial material, Vector2[] uvs) => new()
-    {
-        Name = p.Name, TexGenScale = p.TexGenScale, Tier = p.Tier, Material = material, Positions = p.Positions, UVs = uvs,
-        Normals = p.Normals, Tangents = p.Tangents, Bitangents = p.Bitangents, Colors = p.Colors, Triangles = p.Triangles
-    };
+    public static LodMeshPart Copy(LodMeshPart p, LodMaterial material, Vector2[] uvs) => p with { Material = material, UVs = uvs };
 }

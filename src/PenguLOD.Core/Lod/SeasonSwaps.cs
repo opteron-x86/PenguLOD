@@ -48,6 +48,17 @@ public static class SeasonSwaps
         return Seasons.Any(s => s.Suffix == suffix) ? suffix : null;
     }
 
+    /// <summary>
+    /// The order Seasons of Skyrim applies its INIs in, later files overriding earlier ones: <c>MainFormSwap_&lt;SEASON&gt;.ini</c>
+    /// first, then every other file in case-sensitive (ordinal) name order. <paramref name="fileName"/> must give the real
+    /// file name, not a lower-cased lookup key.
+    /// </summary>
+    public static IReadOnlyList<T> LoadOrder<T>(IEnumerable<T> files, Func<T, string> fileName) =>
+        files.OrderBy(f => IsMain(fileName(f)) ? 0 : 1).ThenBy(fileName, StringComparer.Ordinal).ToArray();
+
+    private static bool IsMain(string fileName) =>
+        SeasonOf(fileName) is { } season && fileName.Equals($"MainFormSwap_{season}.ini", StringComparison.OrdinalIgnoreCase);
+
     public static List<SeasonSwap> Parse(string content)
     {
         var list = new List<SeasonSwap>();

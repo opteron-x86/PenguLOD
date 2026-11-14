@@ -14,7 +14,7 @@ public sealed partial class MainWindow
         Heading("Grass cache"),
         Card("Output", Stack(12,
             PathField("Grass cache output", nameof(DesktopSettings.GrassOutput)),
-            Field("Worldspaces", nameof(DesktopSettings.GrassWorldspaces), "Use all, or comma-separated worldspace IDs. This selection only affects the grass cache."),
+            WorldspaceField("Worldspaces", nameof(DesktopSettings.GrassWorldspaces), true, "Use all, or comma-separated worldspace IDs. This selection only affects the grass cache. Choose… lists the worldspaces in the load order."),
             Check("Use generated grass cache for LOD", nameof(DesktopSettings.UseGeneratedGrass)),
             Button("Open grass output", () => Open(RequestFactory.RequiredPath(_settings.GrassOutput, "a grass output folder", _settings))))),
         Card("Placement", Stack(12,
