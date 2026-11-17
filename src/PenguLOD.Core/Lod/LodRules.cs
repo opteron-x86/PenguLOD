@@ -313,14 +313,22 @@ public sealed class LodRules
     public void AddFile(string sourceName, string content, string? plugin = null)
     {
         var lines = new List<(int N, string Value)>();
-        bool settings = false;
+        bool settings = false, presetChoices = false, noLod32 = false;
         foreach (var raw in content.Split('\n'))
         {
             var line = raw.Trim();
             if (line.Length == 0 || line[0] is ';' or '/') continue;
-            if (line[0] == '[') { settings = line.TrimEnd(']').EndsWith("Settings", StringComparison.OrdinalIgnoreCase); continue; }
+            if (line[0] == '[')
+            {
+                settings = line.TrimEnd(']').EndsWith("Settings", StringComparison.OrdinalIgnoreCase);
+                presetChoices = line.Equals("[DynDOLOD]", StringComparison.OrdinalIgnoreCase);
+                continue;
+            }
             int eq = line.IndexOf('=');
             if (eq < 0) continue;
+            // A preset saved by DynDOLOD lists every rule with a LOD32 column, filled in for rules whose own file has none, and says
+            // in its [DynDOLOD] section whether LOD32 is generated at all. With "Level32=0" DynDOLOD makes no LOD32 from these rules.
+            if (presetChoices && line[..eq].Trim().Equals("Level32", StringComparison.OrdinalIgnoreCase) && line[(eq + 1)..].Trim() == "0") noLod32 = true;
             if (settings)
             {
                 // "[Skyrim Settings] IgnoreWorlds=RiftenWorld": this plugin's references in those worlds get no LOD.
@@ -337,6 +345,7 @@ public sealed class LodRules
         {
             var rule = ParseRule(value, sourceName);
             if (rule is null) continue;
+            if (noLod32) rule = rule with { Lod32 = LodChoice.None, Lod32Explicit = false };
             if (rule.FormId is null && rule.Mask == "\\") { _catchAll ??= rule; continue; }
             if (rule.FormId is not null)
             {

@@ -132,4 +132,32 @@ public class CustomRulesTests : IDisposable
         Assert.Equal("DynDOLOD_SSE_fxglow_high.ini", entries[2].Source);
         Assert.Empty(LodRules.DefaultEntries(null, LodPreset.High));
     }
+
+    [Theory]
+    [InlineData("0", false)]
+    [InlineData("1", true)]
+    public void APresetSavedByDynDolodGivesLod32OnlyWhenItsLevel32IsTicked(string level32, bool expected)
+    {
+        var rules = InstallRules();
+        // DynDOLOD writes every rule with a LOD32 column, also the ones whose rule file has none.
+        var preset = Write("Mine_SSE_Preset.ini", $"""
+            [DynDOLOD]
+            Preset=High
+            Level32={level32}
+            Tamriel=1
+
+            [Skyrim LODGen]
+            LODGen1=tree,Level0,Billboard1,Billboard1,Level0,FarLOD,Unchanged,17,Z:\DynDOLOD\Rules\DynDOLOD_SSE_High.ini
+            LODGen2=\,Level0,Level1,Level2,Level0,FarLOD,Unchanged,1,Z:\DynDOLOD\Rules\DynDOLOD_SSE_High.ini
+            """);
+        var r = Load(rules, new LodRuleOptions(CustomFile: preset));
+        foreach (string model in new[] { "meshes\\landscape\\trees\\tree01.nif", "meshes\\rock.nif" })
+        {
+            var rule = r.Match(null, null, model);
+            Assert.StartsWith("custom:", rule.SourceFile);
+            Assert.Equal(LodChoiceKind.Level, rule.Lod4.Kind);
+            Assert.Equal(expected, rule.Lod32.Kind == LodChoiceKind.Level);
+            Assert.Equal(expected, rule.Lod32Explicit);
+        }
+    }
 }

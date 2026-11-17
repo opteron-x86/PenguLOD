@@ -4,6 +4,7 @@ Versions follow SemVer. Alpha and beta versions are pre-releases.
 
 ## [Unreleased]
 
+- Fixed a DynDOLOD preset used as the custom rule file giving every object its most detailed LOD mesh at LOD 32. Its LOD 32 rules are used only when the preset has Level32 ticked.
 - Fixed buildings and other statics without object bounds disappearing in loaded cells while `Occlusion.esp` is active. `Occlusion.esp` gives them their model's bounds. Regenerate it.
 - Changed `Occlusion.esp` to keep each cell's own max-height data. Cells without any get the bare landscape.
 - Fixed every stage stopping with "Invalid stitching dimensions or colour settings" on a texture rule file it cannot read, such as DynDOLOD's Majestic Mountains rules. The rule is skipped with a warning.
