@@ -81,7 +81,7 @@ public class SeasonalPipelineTests
     [Fact]
     public void AnUnreadableModelOfAnUnswappedObjectDoesNotStopASeason()
     {
-        // user01-logs7: a rain barrel no season swaps had a LOD model that could not be read. The normal LOD left it out with a
+        // A rain barrel no season swaps had a LOD model that could not be read. The normal LOD left it out with a
         // warning; winter rebuilt its block for another object's swap and stopped the run with "required LOD models failed".
         using var f=Fixture(mod=>
         {
