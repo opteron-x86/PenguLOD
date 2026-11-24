@@ -59,10 +59,46 @@ public class SeasonalPipelineTests
         var changed=GenerationPipeline.Run(request,cache);Assert.True(changed.Success,changed.Error);Assert.All(changed.Journal.Stages,s=>Assert.False(s.Reused));
         string bto=GamePath.ToFileSystemPath(request.Lod.OutputFolder!,@"meshes\terrain\FixtureWorld\objects\FixtureWorld.4.-4.-4.WIN.bto");
         string before=OutputSnapshot.HashFile(bto);
+        // A swap to a LOD model that cannot be read stops a strict run, and the output already there stays as it was.
         TextureFixture.Put(f.Textures.Data,@"meshes\fixture\seasonobject_lod_0.nif",[1,2,3]);
-        var failed=GenerationPipeline.Run(request with {Preflight=false},cache);
+        var failed=GenerationPipeline.Run(request with {Preflight=false,Lod=request.Lod with {SeasonsStrict=true}},cache);
         Assert.False(failed.Success);Assert.Equal("lod",failed.FailedStage);Assert.Contains("Season",failed.Error);
+        Assert.Contains("seasonobject_lod_0.nif",failed.Error,StringComparison.OrdinalIgnoreCase);Assert.Contains("Strict seasonal swaps are on",failed.Error);
         Assert.Equal(before,OutputSnapshot.HashFile(bto));
+        // Otherwise the object has no LOD in that season, as an object with such a model has none in the normal LOD, and the run goes on.
+        var skipped=GenerationPipeline.Run(request with {Preflight=false},cache);
+        Assert.True(skipped.Success,skipped.Error);
+        var warnings=skipped.LodReceipt!.Warnings.Where(w=>w.Contains("seasonobject_lod_0.nif",StringComparison.OrdinalIgnoreCase)).ToArray();
+        Assert.Equal(4,warnings.Length);Assert.All(warnings,w=>Assert.Contains("have no LOD in this season",w));
+        foreach(var (season,_) in SeasonSwaps.Seasons)
+        {
+            var mesh=Read("."+season,request.Lod.OutputFolder!);
+            Assert.DoesNotContain(mesh.Parts,p=>p.Material.Textures[0].EndsWith("object.dds",StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(mesh.Parts,p=>p.Material.Textures[0].Equals(GrassLodSource.AtlasDiffuse,StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public void AnUnreadableModelOfAnUnswappedObjectDoesNotStopASeason()
+    {
+        // A rain barrel no season swaps had a LOD model that could not be read. The normal LOD left it out with a
+        // warning; winter rebuilt its block for another object's swap and stopped the run with "required LOD models failed".
+        using var f=Fixture(mod=>
+        {
+            var c=mod.Statics.AddNew();c.EditorID="Neighbour";c.Model=new Model {File=@"fixture\neighbour.nif"};c.MajorFlags|=Static.MajorFlag.HasDistantLOD;
+            var placed=new PlacedObject(mod.GetNextFormKey(),SkyrimRelease.SkyrimSE) {Placement=new Placement {Position=new P3Float(-9000,-9000,0)}};
+            placed.Base.SetTo(c);mod.Worldspaces.Single().SubCells[0].Items[0].Items[0].Temporary.Add(placed);
+        });
+        TextureFixture.Put(f.Textures.Data,@"meshes\fixture\neighbour.nif",LodNifWriter.Write("object",[TextureFixture.Card("object",@"textures\object.dds")]));
+        TextureFixture.Put(f.Textures.Data,@"meshes\fixture\neighbour_lod_0.nif",[1,2,3]);
+        var request=Request(f,native:false);
+        // Strict seasonal swaps are about the swaps; this model is in none of them.
+        var result=GenerationPipeline.Run(request with {Preflight=false,Lod=request.Lod! with {SeasonsStrict=true}},Path.Combine(f.Root,"cache"));
+        Assert.True(result.Success,result.Error);
+        Assert.Contains(result.LodReceipt!.Warnings,w=>w.Contains("LOD meshes could not be used"));
+        Assert.DoesNotContain(result.LodReceipt.Warnings,w=>w.Contains("in this season"));
+        foreach(var (season,_) in SeasonSwaps.Seasons)
+            Assert.Contains(Read("."+season,request.Lod.OutputFolder!).Parts,p=>p.Material.Textures[0].EndsWith("seasonobject.dds",StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

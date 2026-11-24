@@ -82,10 +82,14 @@ public static class SeasonalLod
             }
             // Which blocks change this season.
             var changed = new Dictionary<QuadKey, IReadOnlyList<LodReference>>();
+            // The models this season puts in place of the normal ones. A rebuilt block also holds its unswapped objects; a model
+            // of theirs that cannot be read is the normal pass's to report, and is no reason to stop the season.
+            var swappedIn = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (quad, refs) in quads)
             {
                 bool any = false;
                 var seasonal = new List<LodReference>(refs.Count);
+                void Swap(LodReference r) { seasonal.Add(r); any = true; if (r.Meshes.For(quad.Level) is { } swapped) swappedIn.Add(swapped); }
                 foreach (var r in refs)
                 {
                     if (r.Meshes.Lod4 is { } model && (model.StartsWith(TreeCardSource.Prefix) || model.StartsWith(Tree3DSource.Prefix))
@@ -100,14 +104,14 @@ public static class SeasonalLod
                             meshes = tree3d.ToReferences([replacement],settings).Single().Meshes;
                         else meshes = new(r.Meshes.Lod4 is null ? null : near,r.Meshes.Lod8 is null ? null : card,
                             r.Meshes.Lod16 is null ? null : card,r.Meshes.Lod32 is null ? null : card);
-                        seasonal.Add(r with {Meshes=meshes});any=true;
+                        Swap(r with {Meshes=meshes});
                     }
                     else if (swaps.TryGetValue(r.BaseFormKey, out var m))
                     {
                         any = true;
-                        if (m.Meshes is not null) seasonal.Add(r with { BaseFormKey=m.Key.ToString(),Meshes=m.Meshes,TextureVariant=m.Variant,Shader=m.Shader });   // swap without LOD: left out
+                        if (m.Meshes is not null) Swap(r with { BaseFormKey=m.Key.ToString(),Meshes=m.Meshes,TextureVariant=m.Variant,Shader=m.Shader });   // swap without LOD: left out
                     }
-                    else if (seasonalGrass && grass!.SeasonalVariant(r, suffix) is { } g) { any = true; seasonal.Add(g); }
+                    else if (seasonalGrass && grass!.SeasonalVariant(r, suffix) is { } g) Swap(g);
                     else seasonal.Add(r);
                 }
                 if (any) changed[quad] = seasonal;
@@ -121,9 +125,15 @@ public static class SeasonalLod
 
             var gen = generator.Generate(changed, changed.Keys.ToList(), outputFolder, progress, ct, suffix);
             if (gen.BlocksFailed > 0) throw new InvalidDataException($"Season {suffix}: {gen.BlocksFailed} object blocks failed. " + string.Join("; ",gen.BlockErrors.Values.Take(5)));
-            var requiredModels=changed.SelectMany(p=>p.Value.Select(r=>r.Meshes.For(p.Key.Level))).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var failures=gen.MeshErrors.Where(p=>requiredModels.Contains(p.Key)).ToArray();
-            if(failures.Length>0)throw new InvalidDataException($"Season {suffix}: required LOD models failed. " + string.Join("; ",failures.Take(5).Select(p=>p.Key+": "+p.Value)));
+            // The generator is the normal pass's too, so its errors include models no season asked for.
+            var failures = gen.MeshErrors.Where(p => swappedIn.Contains(p.Key)).OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase).ToArray();
+            if (failures.Length > 0)
+            {
+                string first = string.Join("; ", failures.Take(5).Select(p => p.Key + ": " + p.Value));
+                if (strict) throw new InvalidDataException($"Season {suffix}: {failures.Length:N0} seasonal LOD model(s) could not be used. {first}. Strict seasonal swaps are on: correct the model or remove its swap.");
+                warn?.Invoke($"{suffix}: {failures.Length:N0} seasonal LOD model(s) could not be used, so the objects swapped to them have no LOD in this season. "
+                    + (failures.Length > 5 ? "First: " : "") + first);
+            }
             rebuilt += gen.BlocksWritten;
 
             // Everything else: the normal block under the seasonal name.

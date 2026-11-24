@@ -54,6 +54,17 @@ A swap to a tree that has no billboard is reported as a warning, and those trees
 their normal LOD in that season. Generate tree billboards with the same profile to add
 it. **Strict seasonal swaps** stops the run instead.
 
+## Swaps to a model that cannot be read
+
+When the LOD model of a swapped-in object cannot be read, a warning names the model and
+the reason, and the objects swapped to it have no LOD in that season. **Strict seasonal
+swaps** stops the run instead. To clear the warning, correct the model, remove its line
+from the season's swap file, or give the model no LOD with a custom rule.
+
+A model that no season swaps in never stops seasonal LOD. If it cannot be read, the object
+is left out of the normal and the seasonal LOD alike, and it is listed with the other
+models that could not be used.
+
 ## Check the result
 
 - `seasonal-output.json` in the run folder counts the terrain tiles, object blocks, tree

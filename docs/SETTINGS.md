@@ -507,7 +507,7 @@ the grass included in this LOD output.
 | Water stand-ins | Includes lit replacement surfaces for supported streams and ponds. Off by default. Separate from Terrain's water LOD. |
 | Seasonal LOD | Builds variants using installed Seasons of Skyrim swaps. Off by default. Shared with Terrain's seasonal switch; grass-cache seasons are selected separately. |
 | Seasonal LOD: winter / spring / summer / autumn | With Seasonal LOD on, the seasons to generate. All on by default. A season left out gets no seasonal terrain, object, tree or grass LOD and shows the normal LOD in game. Shared with the Terrain page; the grass cache stage is not affected. See [seasons](SEASONS.md#generate-only-some-seasons). |
-| Strict seasonal swaps | Stops generation when a seasonal INI names a record that is not in the load order. Off by default: such lines are skipped and reported, as the game does. |
+| Strict seasonal swaps | Stops generation when a seasonal INI names a record that is not in the load order, or swaps to a tree without a billboard or a LOD model that cannot be read. Off by default: such swaps are skipped and reported. |
 | Include initially disabled objects | Includes objects initially disabled by plugins. Off by default. Enabling it can bake unwanted removed objects into LOD. |
 | Include enable-parented objects | Includes objects whose visibility is controlled by another reference. On by default. |
 | SKSE DLL installation | **None** means you install the SKSE plugin yourself; it does not turn off runtime features. **Auto** or a named version copies a matching DLL into the output when one is available. The generator packages do not include the DLL. |
