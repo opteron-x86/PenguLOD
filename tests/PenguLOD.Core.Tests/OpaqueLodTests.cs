@@ -38,6 +38,7 @@ public class OpaqueLodTests
     {
         var dds = Dxt5(40, 200);
         Assert.True(DdsAlpha.IsTranslucent(dds));
+        Assert.False(DdsAlpha.IsCutout(dds));
         var copy = DdsAlpha.MakeOpaque(dds, 1024);
         Assert.False(DdsAlpha.IsTranslucent(copy));
         Assert.Equal(dds.Length, copy.Length);
@@ -46,6 +47,17 @@ public class OpaqueLodTests
         // colours are untouched
         var (before, _, _, _) = DdsFile.DecodeTopMip(dds);
         for (int i = 0; i < rgba.Length; i += 4) { Assert.Equal(before[i], rgba[i]); Assert.Equal(before[i + 1], rgba[i + 1]); Assert.Equal(before[i + 2], rgba[i + 2]); }
+    }
+
+    [Fact]
+    public void A_dxt5_cutout_mask_is_not_translucent()
+    {
+        // two blocks fully cut out, two fully kept: a 0 / 255 mask like DLC01IceSnow's lake patches
+        var dds = Dxt5(0, 0);
+        for (int b = 2; b < 4; b++) { dds[128 + b * 16] = 255; dds[128 + b * 16 + 1] = 255; }
+        Assert.True(DdsAlpha.IsTranslucent(dds));
+        Assert.False(DdsAlpha.NeedsOpaqueCopy(dds));
+        Assert.True(DdsAlpha.IsCutout(dds));
     }
 
     [Fact]

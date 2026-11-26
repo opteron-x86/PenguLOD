@@ -1,12 +1,15 @@
 using PenguLOD.Core.Pipeline;
 using PenguLOD.Core.World;
 using PenguLOD.Meshes;
+using PenguLOD.Textures;
 
 namespace PenguLOD.Plugins;
 
 /// <summary>Reads staged conversions before source assets, preserving Linux filename case.</summary>
 internal sealed class ObjectTextureAssets(IAssetSource assets, string output)
 {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _cutouts = new(StringComparer.OrdinalIgnoreCase);
+
     public byte[] Read(string path)
     {
         path = GamePath.NormalizeTexture(path);
@@ -15,6 +18,14 @@ internal sealed class ObjectTextureAssets(IAssetSource assets, string output)
         if (!assets.TryOpen(path, out var stream)) throw new FileNotFoundException("Texture not available: " + path);
         using (stream) { using var bytes = new MemoryStream(); stream.CopyTo(bytes); return bytes.ToArray(); }
     }
+
+    public bool KeepsAlpha(LodMaterial material, string diffuse) => material.HasAlpha || _cutouts.GetOrAdd(GamePath.NormalizeTexture(diffuse), p =>
+    {
+        try { return DdsAlpha.IsCutout(Read(p)); }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or ArgumentException) { return false; }
+    });
+
+    public int? CoverageCutoff(LodMaterial material, string diffuse) => AlphaCutoff(material) ?? (!material.HasAlpha && KeepsAlpha(material, diffuse) ? 128 : null);
 
     public static bool IsLodTexture(LodMaterial material) => material.Textures.Count > 0
         && GamePath.NormalizeTexture(material.Textures[0]).StartsWith(@"textures\lod\", StringComparison.OrdinalIgnoreCase);

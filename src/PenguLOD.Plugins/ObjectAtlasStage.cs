@@ -15,7 +15,7 @@ namespace PenguLOD.Plugins;
 /// <summary>Packs shader-compatible object surfaces; unsupported materials retain their original sampling.</summary>
 public static class ObjectAtlasStage
 {
-    public const int Version = 7; // Skyline variable-aspect packing up to 8192 + incremental layout slot cache
+    public const int Version = 8; // cutouts on shapes without an alpha property keep their alpha
     public const int PageSize = 4096;
     public const string LayoutFileName = "PenguLOD.atlas-layout.json";
 
@@ -344,11 +344,13 @@ public static class ObjectAtlasStage
         {
             var m = candidate.Material;
             var slots = ShaderGuard.TextureSlots(m.Textures);
+            bool alpha = source.KeepsAlpha(m, slots[0]);
+            int? cutoff = source.CoverageCutoff(m, slots[0]);
             TextureImage Load(string path, int slot) => LodTextureEncoding.Limit(LodTextureEncoding.Decode(source.Read(path)), cellSize,
-                slot == 0 ? m.HasAlpha ? LodTextureEncoding.Channels.Color : LodTextureEncoding.Channels.OpaqueColor : slot == 1 ? LodTextureEncoding.Channels.Normal : LodTextureEncoding.Channels.Data,
-                LodTextureEncoding.IsSrgb(info[path].Info), slot == 0 ? ObjectTextureAssets.AlphaCutoff(m) : null);
-            return new(key, Load(slots[0], 0), slots[1].Length > 0 ? Load(slots[1], 1) : null, m.HasAlpha, m.ClampMode,
-                ObjectTextureAssets.AlphaCutoff(m) ?? 128,
+                slot == 0 ? alpha ? LodTextureEncoding.Channels.Color : LodTextureEncoding.Channels.OpaqueColor : slot == 1 ? LodTextureEncoding.Channels.Normal : LodTextureEncoding.Channels.Data,
+                LodTextureEncoding.IsSrgb(info[path].Info), slot == 0 ? cutoff : null);
+            return new(key, Load(slots[0], 0), slots[1].Length > 0 ? Load(slots[1], 1) : null, alpha, m.ClampMode,
+                cutoff ?? 128,
                 ExtraSlots.Where(i => slots[i].Length > 0).ToDictionary(i => i, i => Load(slots[i], i)),
                 slots.Select((p, i) => (p, i)).Where(t => t.i != 4 && t.p.Length > 0 && LodTextureEncoding.IsSrgb(info[t.p].Info)).Select(t => t.i).ToHashSet());
         }

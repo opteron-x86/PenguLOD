@@ -20,7 +20,7 @@ public static class OpaqueLodStage
     public sealed record Result(int Written, int Unchanged, int Failed, TimeSpan Elapsed, IReadOnlyList<string> Errors);
 
     /// <summary>The test <see cref="OpaqueLodTextures"/> uses to decide whether a texture's alpha channel is translucent.</summary>
-    public static bool IsTranslucent(byte[] dds) => DdsAlpha.IsTranslucent(dds);
+    public static bool IsTranslucent(byte[] dds) => DdsAlpha.NeedsOpaqueCopy(dds);
 
     public static Result Run(IAssetSource assets, OpaqueLodTextures opaque, string output, IProgress<string>? progress, CancellationToken ct)
     {

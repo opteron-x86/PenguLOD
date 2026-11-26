@@ -13,6 +13,26 @@ public static class DdsAlpha
     /// <summary>Alpha below this counts as translucent. A few texels at 250+ are rounding noise from a lossy encoder.</summary>
     public const byte OpaqueAbove = 250;
 
+    public const byte CutoutLow = 15, CutoutHigh = 240;
+
+    public static bool NeedsOpaqueCopy(byte[] dds) => IsTranslucent(dds) && !IsCutoutMask(dds);
+
+    public static bool IsCutout(byte[] dds) => IsTranslucent(dds) && IsCutoutMask(dds);
+
+    private static bool IsCutoutMask(byte[] dds)
+    {
+        var (rgba, _, _, _) = DdsFile.DecodeTopMip(dds);
+        int below = 0, between = 0;
+        for (int i = 3; i < rgba.Length; i += 4)
+        {
+            var a = rgba[i];
+            if (a >= OpaqueAbove) continue;
+            below++;
+            if (a > CutoutLow && a < CutoutHigh) between++;
+        }
+        return between * 2 < below;
+    }
+
     /// <summary>True when the top mip has any texel with alpha below <see cref="OpaqueAbove"/>. Formats without alpha say no.</summary>
     public static bool IsTranslucent(byte[] dds)
     {

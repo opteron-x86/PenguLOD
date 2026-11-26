@@ -333,6 +333,33 @@ public class ExpandedObjectAtlasTests
     }
 
     [Fact]
+    public void A_cutout_keeps_its_alpha_on_a_shape_without_an_alpha_property_and_a_gloss_alpha_is_dropped()
+    {
+        // No alpha property, yet the LOD shader alpha-tests the shape: a 0 / 255 mask is its cutout (DLC01IceSnow's lake
+        // patches); a gloss channel is not, and stays flattened so it cannot punch holes.
+        using var f = new TextureFixture();
+        TextureFixture.Put(f.Data, @"textures\cutout.dds", ObjectTextureOptimizationTests.Raw(64, 64, (x, _) => (200, 200, 200, (byte)(x < 32 ? 0 : 255))));
+        TextureFixture.Put(f.Data, @"textures\gloss.dds", ObjectTextureOptimizationTests.Raw(64, 64, (x, _) => (90, 90, 90, (byte)(x < 32 ? 90 : 160))));
+        using var game = GameContext.Open(f.Game); var assets = game.BuildAssets(_ => true);
+        var mesh = new LodMesh { Path = "fixture", Parts = [TextureFixture.Card("cutout", @"textures\cutout.dds"), TextureFixture.Card("gloss", @"textures\gloss.dds")] };
+        var atlas = ObjectAtlasStage.Build([mesh], assets, f.Output, 64);
+        Assert.Equal(2, atlas.Report.PackedMaterials);
+        var mapped = atlas.Transform(mesh);
+        byte MinAlpha(LodMeshPart p)
+        {
+            var page = TextureImages.Decode(File.ReadAllBytes(PenguLOD.Core.World.GamePath.ToFileSystemPath(f.Output, p.Material.Textures[0])));
+            float u0 = p.UVs.Min(v => v.X), u1 = p.UVs.Max(v => v.X), v0 = p.UVs.Min(v => v.Y), v1 = p.UVs.Max(v => v.Y);
+            byte min = 255;
+            for (int y = (int)(v0 * page.Height); y < (int)(v1 * page.Height); y++)
+                for (int x = (int)(u0 * page.Width); x < (int)(u1 * page.Width); x++)
+                    min = Math.Min(min, page.Pixels[(y * page.Width + x) * 4 + 3]);
+            return min;
+        }
+        Assert.True(MinAlpha(mapped.Parts[0]) < 16);
+        Assert.Equal(255, MinAlpha(mapped.Parts[1]));
+    }
+
+    [Fact]
     public void UnsupportedTextureDoesNotPreventOtherMaterialsFromPackingOrDeleteRetainedPages()
     {
         using var f = new TextureFixture();
